@@ -900,51 +900,64 @@
     if (!sheet || !window.html2canvas || !window.jspdf) return;
     const saveButton = document.getElementById("save-sheet");
     if (saveButton) saveButton.textContent = "Saving...";
-    const canvas = await window.html2canvas(sheet, {
-      scale: 2,
-      backgroundColor: "#f7f2e7",
-      useCORS: true,
-      onclone: (doc) => {
-        doc.body.classList.add("pdf-export");
-        const clonedTableBody = doc.querySelector(".table-body");
-        const clonedRadioBody = doc.querySelector(".radio-body");
-        while (clonedTableBody && clonedTableBody.children.length < 8) {
-          clonedTableBody.insertAdjacentHTML("beforeend", renderLegRow(createBlankLeg(""), 0));
-        }
-        while (clonedRadioBody && clonedRadioBody.children.length < 5) {
-          clonedRadioBody.insertAdjacentHTML("beforeend", renderRadioRow(createBlankRadioRow(), 0));
-        }
-        doc.querySelectorAll(".route-cell input, .location-cell input").forEach((input) => {
-          const wrapped = doc.createElement("div");
-          wrapped.className = "pdf-wrap-value";
-          wrapped.textContent = input.value;
-          input.replaceWith(wrapped);
-        });
-        doc.querySelectorAll("input").forEach((input) => {
-          input.placeholder = "";
-        });
-      },
-    });
-    const image = canvas.toDataURL("image/png");
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF("p", "mm", "a4");
-    const pageWidth = 210;
-    const pageHeight = 297;
-    const margin = 32;
-    const usableWidth = pageWidth - margin * 2;
-    const imageHeight = (canvas.height * usableWidth) / canvas.width;
-    let remaining = imageHeight;
-    let y = margin;
-    pdf.addImage(image, "PNG", margin, y, usableWidth, imageHeight);
-    remaining -= (pageHeight - margin * 2);
-    while (remaining > 0) {
-      pdf.addPage();
-      y = margin - (imageHeight - remaining);
+    const pdfViewportWidth = 1366;
+    const pdfViewportHeight = 1024;
+
+    try {
+      const canvas = await window.html2canvas(sheet, {
+        scale: 2,
+        backgroundColor: "#f7f2e7",
+        useCORS: true,
+        windowWidth: pdfViewportWidth,
+        windowHeight: pdfViewportHeight,
+        onclone: (doc) => {
+          doc.body.classList.add("pdf-export");
+
+          // Force a desktop-like render box so mobile/tablet exports match desktop proportions.
+          doc.documentElement.style.width = `${pdfViewportWidth}px`;
+          doc.body.style.width = `${pdfViewportWidth}px`;
+
+          const clonedTableBody = doc.querySelector(".table-body");
+          const clonedRadioBody = doc.querySelector(".radio-body");
+          while (clonedTableBody && clonedTableBody.children.length < 8) {
+            clonedTableBody.insertAdjacentHTML("beforeend", renderLegRow(createBlankLeg(""), 0));
+          }
+          while (clonedRadioBody && clonedRadioBody.children.length < 5) {
+            clonedRadioBody.insertAdjacentHTML("beforeend", renderRadioRow(createBlankRadioRow(), 0));
+          }
+          doc.querySelectorAll(".route-cell input, .location-cell input").forEach((input) => {
+            const wrapped = doc.createElement("div");
+            wrapped.className = "pdf-wrap-value";
+            wrapped.textContent = input.value;
+            input.replaceWith(wrapped);
+          });
+          doc.querySelectorAll("input").forEach((input) => {
+            input.placeholder = "";
+          });
+        },
+      });
+      const image = canvas.toDataURL("image/png");
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageWidth = 210;
+      const pageHeight = 297;
+      const margin = 32;
+      const usableWidth = pageWidth - margin * 2;
+      const imageHeight = (canvas.height * usableWidth) / canvas.width;
+      let remaining = imageHeight;
+      let y = margin;
       pdf.addImage(image, "PNG", margin, y, usableWidth, imageHeight);
       remaining -= (pageHeight - margin * 2);
+      while (remaining > 0) {
+        pdf.addPage();
+        y = margin - (imageHeight - remaining);
+        pdf.addImage(image, "PNG", margin, y, usableWidth, imageHeight);
+        remaining -= (pageHeight - margin * 2);
+      }
+      pdf.save("vfr-navlog.pdf");
+    } finally {
+      if (saveButton) saveButton.textContent = "Save";
     }
-    pdf.save("vfr-navlog.pdf");
-    if (saveButton) saveButton.textContent = "Save";
   }
 
   function escapeAttr(value) {
