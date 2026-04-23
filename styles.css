@@ -371,7 +371,7 @@ select { font: inherit; }
   font-size: 0.94rem;
 }
 
-.field.calculated input {
+.field.derived input {
   background: transparent;
   font-weight: 700;
 }
@@ -555,8 +555,8 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     gap: 12px;
   }
 
-  .top-side.right,
   .top-side { justify-content: flex-start; }
+  .top-side.right { justify-content: flex-end; }
 
   .swap-button {
     width: 42px;
