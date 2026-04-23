@@ -122,7 +122,7 @@
       <main class="entry-page">
         <section class="entry-hero entry-hero-centered">
           <div class="top-center">
-            <h1>Navlog1</h1>
+            <h1>Navlog</h1>
             <div class="utc-pill" id="utc-clock">UTC ${formatUtcNow()}</div>
             <p class="setup-caption">Enter your DEP and ARR aerodrome.</p>
           </div>
