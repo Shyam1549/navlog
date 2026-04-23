@@ -43,6 +43,7 @@
     navlog: createBlankNavlog(),
     meta: {
       hasOpenedSheet: false,
+      usingPresetRoute: false,
     },
   };
   let utcTimer = null;
@@ -383,6 +384,7 @@
       if (!window.confirm("Clear this navlog?")) return;
       state.navlog = createBlankNavlog();
       state.meta.hasOpenedSheet = false;
+      state.meta.usingPresetRoute = false;
       render();
     });
     document.getElementById("save-sheet").addEventListener("click", downloadPdf);
@@ -397,7 +399,17 @@
 
     document.querySelectorAll("[data-remove-leg]").forEach((button) => {
       button.addEventListener("click", () => {
-        state.navlog.legs.splice(Number(button.dataset.removeLeg), 1);
+        const removeIndex = Number(button.dataset.removeLeg);
+        const shouldResetSuccessorTc = state.meta.usingPresetRoute;
+        state.navlog.legs.splice(removeIndex, 1);
+        if (shouldResetSuccessorTc && state.navlog.legs[removeIndex]) {
+          const successorLeg = state.navlog.legs[removeIndex];
+          successorLeg.tc = "";
+          successorLeg._manual = successorLeg._manual || {};
+          successorLeg._manual.tc = false;
+          successorLeg._derived = successorLeg._derived || {};
+          delete successorLeg._derived.tc;
+        }
         render();
       });
     });
@@ -509,6 +521,7 @@
     const departure = normalizeCode(state.navlog.setup.departure);
     const destination = normalizeCode(state.navlog.setup.destination);
     const presetLegs = getPresetLegs(departure, destination);
+    state.meta.usingPresetRoute = Boolean(presetLegs);
     state.navlog.legs = presetLegs || [
       createBlankLeg(state.navlog.setup.departure),
       createBlankLeg(""),
@@ -1053,13 +1066,12 @@
       const image = canvas.toDataURL("image/png");
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF("p", "mm", "a4");
-      const pageWidth = 210;
       const pageHeight = 297;
       const marginLeft = 8;
       const marginTop = 8;
-      const rightPadding = 12;
       const bottomPadding = 10;
-      const usableWidth = pageWidth - marginLeft - rightPadding;
+      const exportWidth = 108;
+      const usableWidth = exportWidth;
       const usableHeight = pageHeight - marginTop - bottomPadding;
       const imageHeight = (canvas.height * usableWidth) / canvas.width;
       let remaining = imageHeight;
