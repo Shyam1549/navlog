@@ -376,6 +376,11 @@ select { font: inherit; }
   font-weight: 700;
 }
 
+.field.error input {
+  color: #b33a2b;
+  font-weight: 700;
+}
+
 .route-cell,
 .location-cell {
   display: grid;
