@@ -46,7 +46,6 @@
       usingPresetRoute: false,
     },
   };
-  const TRIG_TOLERANCE = 1e-6;
   let utcTimer = null;
 
   function createBlankLeg(route) {
@@ -67,7 +66,6 @@
       at: "",
       _manual: route ? { route: true } : {},
       _derived: {},
-      _errors: {},
     };
   }
 
@@ -235,15 +233,7 @@
     const classes = ["field"];
     if (extraClasses) classes.push(...extraClasses.split(" "));
     if (leg._derived && leg._derived[field]) classes.push("derived");
-    if (leg._errors && leg._errors[field]) classes.push("error");
     return classes.join(" ");
-  }
-
-  function legFieldValue(leg, field) {
-    if (leg._errors && leg._errors[field] && !(leg._manual && leg._manual[field])) {
-      return leg._errors[field];
-    }
-    return leg[field];
   }
 
   function renderLegRow(leg, index) {
@@ -254,19 +244,19 @@
           <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" />
           ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
         </div>
-        <div class="${legFieldClass(leg, "cas")}"><input data-leg-field="${index}:cas" value="${escapeAttr(legFieldValue(leg, "cas"))}" /></div>
-        <div class="${legFieldClass(leg, "alt")}"><input data-leg-field="${index}:alt" placeholder="${index === 0 ? "enter airport elevation" : ""}" value="${escapeAttr(legFieldValue(leg, "alt"))}" /></div>
-        <div class="${legFieldClass(leg, "temp")}"><input data-leg-field="${index}:temp" value="${escapeAttr(legFieldValue(leg, "temp"))}" /></div>
-        <div class="${legFieldClass(leg, "windDir")}"><input data-leg-field="${index}:windDir" value="${escapeAttr(legFieldValue(leg, "windDir"))}" /></div>
-        <div class="${legFieldClass(leg, "windSpd")}"><input data-leg-field="${index}:windSpd" value="${escapeAttr(legFieldValue(leg, "windSpd"))}" /></div>
-        <div class="${legFieldClass(leg, "tc")}"><input data-leg-field="${index}:tc" value="${escapeAttr(legFieldValue(leg, "tc"))}" /></div>
-        <div class="${legFieldClass(leg, "wca")}"><input data-leg-field="${index}:wca" value="${escapeAttr(legFieldValue(leg, "wca"))}" /></div>
-        <div class="${legFieldClass(leg, "ta")}"><input data-leg-field="${index}:ta" value="${escapeAttr(legFieldValue(leg, "ta"))}" /></div>
-        <div class="${legFieldClass(leg, "gs")}"><input data-leg-field="${index}:gs" value="${escapeAttr(legFieldValue(leg, "gs"))}" /></div>
-        <div class="${legFieldClass(leg, "distance")}"><input data-leg-field="${index}:distance" value="${escapeAttr(legFieldValue(leg, "distance"))}" /></div>
-        <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(legFieldValue(leg, "ee"))}" /></div>
-        <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(legFieldValue(leg, "et"))}" /></div>
-        <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" /></div>
+        <div class="${legFieldClass(leg, "cas")}"><input data-leg-field="${index}:cas" value="${escapeAttr(leg.cas)}" /></div>
+        <div class="${legFieldClass(leg, "alt")}"><input data-leg-field="${index}:alt" value="${escapeAttr(leg.alt)}" /></div>
+        <div class="${legFieldClass(leg, "temp")}"><input data-leg-field="${index}:temp" value="${escapeAttr(leg.temp)}" /></div>
+        <div class="${legFieldClass(leg, "windDir")}"><input data-leg-field="${index}:windDir" value="${escapeAttr(leg.windDir)}" /></div>
+        <div class="${legFieldClass(leg, "windSpd")}"><input data-leg-field="${index}:windSpd" value="${escapeAttr(leg.windSpd)}" /></div>
+        <div class="${legFieldClass(leg, "tc")}"><input data-leg-field="${index}:tc" value="${escapeAttr(leg.tc)}" /></div>
+        <div class="${legFieldClass(leg, "wca")}"><input data-leg-field="${index}:wca" value="${escapeAttr(leg.wca)}" /></div>
+        <div class="${legFieldClass(leg, "ta")}"><input data-leg-field="${index}:ta" value="${escapeAttr(leg.ta)}" /></div>
+        <div class="${legFieldClass(leg, "gs")}"><input data-leg-field="${index}:gs" value="${escapeAttr(leg.gs)}" /></div>
+        <div class="${legFieldClass(leg, "distance")}"><input data-leg-field="${index}:distance" value="${escapeAttr(leg.distance)}" /></div>
+        <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(leg.ee)}" /></div>
+        <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(leg.et)}" /></div>
+        <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(leg.at)}" /></div>
       </div>
     `;
   }
@@ -470,17 +460,9 @@
         const [indexText, field] = event.target.dataset.legField.split(":");
         const index = Number(indexText);
         const leg = state.navlog.legs[index];
-        let nextValue = event.target.value;
-        if (isDegreeField(field)) {
-          const parsed = num(nextValue);
-          if (parsed != null) {
-            nextValue = String(roundHalfUp(parsed));
-            event.target.value = nextValue;
-          }
-        }
-        leg[field] = nextValue;
+        leg[field] = event.target.value;
         leg._manual = leg._manual || {};
-        leg._manual[field] = nextValue.trim() !== "";
+        leg._manual[field] = event.target.value.trim() !== "";
         computeRouteMath({ index, field });
         updateComputedCells({ index, field });
       });
@@ -613,7 +595,6 @@
     const leg = createBlankLeg(fields.route || "");
     leg._manual = leg._manual || {};
     leg._derived = {};
-    leg._errors = {};
     Object.entries(fields).forEach(([field, value]) => {
       leg[field] = String(value);
       leg._manual[field] = true;
@@ -656,20 +637,18 @@
       ta: manual.ta ? num(leg.ta) : null,
       gs: manual.gs ? num(leg.gs) : null,
       distance: manual.distance ? num(leg.distance) : null,
-      ee: manual.ee ? parseMinutes(leg.ee) : null,
+      ee: manual.ee ? militaryToMinutes(leg.ee) : null,
     };
     const derived = {};
-    const errors = {};
     const canDerive = (field) => !manual[field] && lockedField !== field;
     const assignDerived = (field, nextValue) => {
       if (!canDerive(field)) return;
-      if (values[field] != null && values[field] !== "") return;
       if (nextValue == null || !Number.isFinite(nextValue)) return;
       values[field] = nextValue;
       derived[field] = true;
     };
 
-    for (let pass = 0; pass < 8; pass += 1) {
+    for (let pass = 0; pass < 6; pass += 1) {
       const factorFromAltTemp = tasFactor(values.temp, values.alt);
       if (factorFromAltTemp != null && factorFromAltTemp !== 0) {
         if (values.ta != null) assignDerived("cas", values.ta / factorFromAltTemp);
@@ -692,61 +671,56 @@
       const relativeRad = relative != null ? toRadians(relative) : null;
       const wcaRad = values.wca != null ? toRadians(values.wca) : null;
 
-      const sinRel = relativeRad == null ? null : Math.sin(relativeRad);
-      const cosRel = relativeRad == null ? null : Math.cos(relativeRad);
-      const sinWca = wcaRad == null ? null : Math.sin(wcaRad);
-      const cosWca = wcaRad == null ? null : Math.cos(wcaRad);
-
-      if (canDerive("wca") && values.ta != null && values.ta > TRIG_TOLERANCE && relativeRad != null && values.windSpd != null) {
-        const ratio = (values.windSpd * sinRel) / values.ta;
-        if (Math.abs(ratio) > 1 + TRIG_TOLERANCE) {
-          errors.wca = "Wind too strong";
-        } else {
-          assignDerived("wca", toDegrees(Math.asin(clamp(ratio, -1, 1))));
-          delete errors.wca;
+      if (values.ta != null && values.ta > 0 && relativeRad != null && values.windSpd != null) {
+        const ratio = (values.windSpd * Math.sin(relativeRad)) / values.ta;
+        if (Math.abs(ratio) <= 1) {
+          assignDerived("wca", toDegrees(Math.asin(ratio)));
         }
-      } else {
-        delete errors.wca;
       }
 
-      // TAS reverse: cosine-based first, sine-based fallback.
-      if (values.gs != null && values.windSpd != null && cosRel != null && cosWca != null && Math.abs(cosWca) > TRIG_TOLERANCE) {
-        assignDerived("ta", (values.gs + (values.windSpd * cosRel)) / cosWca);
-      }
-      if (values.windSpd != null && sinRel != null && sinWca != null && Math.abs(sinWca) > TRIG_TOLERANCE) {
-        assignDerived("ta", (values.windSpd * sinRel) / sinWca);
-      }
-
-      if (values.ta != null && values.wca != null && values.windSpd != null && cosRel != null) {
-        assignDerived("gs", (values.ta * cosWca) - (values.windSpd * cosRel));
+      if (values.ta != null && values.ta > 0 && wcaRad != null && relativeRad != null) {
+        const sideComponent = Math.sin(relativeRad);
+        if (Math.abs(sideComponent) > 1e-6) {
+          assignDerived("windSpd", (values.ta * Math.sin(wcaRad)) / sideComponent);
+        }
       }
 
-      // WIND_SPD reverse: cosine-based first, sine-based fallback.
-      if (values.ta != null && values.wca != null && values.gs != null && cosRel != null && Math.abs(cosRel) > TRIG_TOLERANCE) {
-        assignDerived("windSpd", ((values.ta * cosWca) - values.gs) / cosRel);
-      }
-      if (values.ta != null && values.wca != null && sinRel != null && Math.abs(sinRel) > TRIG_TOLERANCE) {
-        assignDerived("windSpd", (values.ta * sinWca) / sinRel);
+      if (values.windSpd != null && wcaRad != null && relativeRad != null) {
+        const wcaSine = Math.sin(wcaRad);
+        if (Math.abs(wcaSine) > 1e-6) {
+          assignDerived("ta", (values.windSpd * Math.sin(relativeRad)) / wcaSine);
+        }
       }
 
-      if (values.distance != null && values.gs != null && values.gs > TRIG_TOLERANCE) {
+      if (values.ta != null && values.wca != null && values.windSpd != null && relativeRad != null) {
+        const alongTrack = values.ta * Math.cos(toRadians(values.wca));
+        const headwind = values.windSpd * Math.cos(relativeRad);
+        assignDerived("gs", alongTrack - headwind);
+      }
+
+      if (values.gs != null && values.wca != null && values.windSpd != null && relativeRad != null) {
+        const cosWca = Math.cos(toRadians(values.wca));
+        if (Math.abs(cosWca) > 1e-6) {
+          assignDerived("ta", (values.gs + (values.windSpd * Math.cos(relativeRad))) / cosWca);
+        }
+      }
+
+      if (values.gs != null && values.ta != null && values.wca != null && relativeRad != null) {
+        const cosRelative = Math.cos(relativeRad);
+        if (Math.abs(cosRelative) > 1e-6) {
+          assignDerived("windSpd", ((values.ta * Math.cos(toRadians(values.wca))) - values.gs) / cosRelative);
+        }
+      }
+
+      if (values.distance != null && values.gs != null && values.gs > 0) {
         assignDerived("ee", (values.distance / values.gs) * 60);
       }
-      if (values.ee != null && values.ee > TRIG_TOLERANCE && values.gs != null) {
+      if (values.ee != null && values.ee > 0 && values.gs != null) {
         assignDerived("distance", (values.gs * values.ee) / 60);
       }
-      if (values.distance != null && values.ee != null && values.ee > TRIG_TOLERANCE) {
+      if (values.distance != null && values.ee != null && values.ee > 0) {
         assignDerived("gs", values.distance / (values.ee / 60));
       }
-
-      if (values.windDir != null && isDegreeField("windDir")) values.windDir = roundHalfUp(values.windDir);
-      if (values.tc != null && isDegreeField("tc")) values.tc = roundHalfUp(values.tc);
-      if (values.wca != null && isDegreeField("wca")) values.wca = roundHalfUp(values.wca);
-    }
-
-    if (errors.wca && canDerive("wca")) {
-      values.wca = null;
-      delete derived.wca;
     }
 
     Object.keys(derived).forEach((field) => {
@@ -757,31 +731,25 @@
       ...leg,
       _manual: manual,
       _derived: derived,
-      _errors: errors,
       cas: resolveDisplayField(leg, manual, lockedField, "cas", values.cas, maybeFormat),
       alt: resolveDisplayField(leg, manual, lockedField, "alt", values.alt, maybeFormat),
       temp: resolveDisplayField(leg, manual, lockedField, "temp", values.temp, maybeFormat),
-      windDir: resolveDisplayField(leg, manual, lockedField, "windDir", values.windDir, maybeDegrees),
       windSpd: resolveDisplayField(leg, manual, lockedField, "windSpd", values.windSpd, maybeFormat),
-      tc: resolveDisplayField(leg, manual, lockedField, "tc", values.tc, maybeDegrees),
-      wca: resolveDisplayField(leg, manual, lockedField, "wca", values.wca, maybeSignedDegrees),
+      wca: resolveDisplayField(leg, manual, lockedField, "wca", values.wca, maybeSigned),
       ta: resolveDisplayField(leg, manual, lockedField, "ta", values.ta, maybeFormat),
       gs: resolveDisplayField(leg, manual, lockedField, "gs", values.gs, maybeFormat),
       distance: resolveDisplayField(leg, manual, lockedField, "distance", values.distance, maybeFormat),
-      ee: resolveDisplayField(leg, manual, lockedField, "ee", values.ee, formatMinutes),
+      ee: resolveDisplayField(leg, manual, lockedField, "ee", values.ee, minutesToMilitary),
     };
   }
 
   function computeTocTod() {
-    const firstLeg = state.navlog.legs[0];
-    const secondLeg = state.navlog.legs[1];
     const last = state.navlog.legs[state.navlog.legs.length - 1];
     const secondLast = state.navlog.legs[state.navlog.legs.length - 2];
     const roc = num(state.navlog.tocTod.roc);
     const rod = num(state.navlog.tocTod.rod);
 
-    const firstAlt = num(firstLeg?.alt);
-    const secondAlt = num(secondLeg?.alt);
+    const firstAlt = firstAvailableValue("alt");
     const firstGs = firstAvailableValue("gs");
     const lastAlt = num(last?.alt);
     const secondLastAlt = num(secondLast?.alt);
@@ -792,11 +760,10 @@
     state.navlog.tocTod.todDistance = "";
     state.navlog.tocTod.todTime = "";
 
-    if (!state.navlog.tocTod.tocEditing && roc != null && roc > 0 && firstAlt != null && secondAlt != null && firstGs != null) {
-      const altitudeToGain = secondAlt - firstAlt;
-      const tocTime = altitudeToGain / roc;
+    if (!state.navlog.tocTod.tocEditing && roc != null && roc > 0 && firstAlt != null && firstGs != null) {
+      const tocTime = firstAlt / roc;
       const tocDistance = tocTime * (firstGs / 60);
-      state.navlog.tocTod.tocTime = formatMinutes(tocTime);
+      state.navlog.tocTod.tocTime = minutesToMilitary(tocTime);
       state.navlog.tocTod.tocDistance = maybeFormat(tocDistance);
     }
 
@@ -804,7 +771,7 @@
       const altitudeToLose = Math.max(0, secondLastAlt - lastAlt);
       const todTime = altitudeToLose / rod;
       const todDistance = todTime * (lastGs / 60);
-      state.navlog.tocTod.todTime = formatMinutes(todTime);
+      state.navlog.tocTod.todTime = minutesToMilitary(todTime);
       state.navlog.tocTod.todDistance = maybeFormat(todDistance);
     }
   }
@@ -820,17 +787,15 @@
 
   function updateComputedCells(activeEdit) {
     state.navlog.legs.forEach((leg, index) => {
-      syncLegField(index, "cas", leg.cas, activeEdit, leg);
-      syncLegField(index, "alt", leg.alt, activeEdit, leg);
-      syncLegField(index, "temp", leg.temp, activeEdit, leg);
-      syncLegField(index, "windDir", leg.windDir, activeEdit, leg);
-      syncLegField(index, "windSpd", leg.windSpd, activeEdit, leg);
-      syncLegField(index, "tc", leg.tc, activeEdit, leg);
-      syncLegField(index, "wca", leg.wca, activeEdit, leg);
-      syncLegField(index, "ta", leg.ta, activeEdit, leg);
-      syncLegField(index, "gs", leg.gs, activeEdit, leg);
-      syncLegField(index, "distance", leg.distance, activeEdit, leg);
-      syncLegField(index, "ee", leg.ee, activeEdit, leg);
+      syncLegField(index, "cas", leg.cas, activeEdit);
+      syncLegField(index, "alt", leg.alt, activeEdit);
+      syncLegField(index, "temp", leg.temp, activeEdit);
+      syncLegField(index, "windSpd", leg.windSpd, activeEdit);
+      syncLegField(index, "wca", leg.wca, activeEdit);
+      syncLegField(index, "ta", leg.ta, activeEdit);
+      syncLegField(index, "gs", leg.gs, activeEdit);
+      syncLegField(index, "distance", leg.distance, activeEdit);
+      syncLegField(index, "ee", leg.ee, activeEdit);
 
       syncLegDerived(index, "cas", Boolean(leg._derived && leg._derived.cas));
       syncLegDerived(index, "alt", Boolean(leg._derived && leg._derived.alt));
@@ -843,8 +808,6 @@
       syncLegDerived(index, "gs", Boolean(leg._derived && leg._derived.gs));
       syncLegDerived(index, "distance", Boolean(leg._derived && leg._derived.distance));
       syncLegDerived(index, "ee", Boolean(leg._derived && leg._derived.ee));
-
-      syncLegError(index, "wca", Boolean(leg._errors && leg._errors.wca));
     });
 
     const tocDistance = document.querySelector('[data-toc="tocDistance"]');
@@ -857,27 +820,16 @@
     if (todTime) todTime.value = state.navlog.tocTod.todTime;
   }
 
-  function syncLegField(index, field, value, activeEdit, leg) {
+  function syncLegField(index, field, value, activeEdit) {
     if (activeEdit && activeEdit.index === index && activeEdit.field === field) return;
     const node = document.querySelector(`[data-leg-field="${index}:${field}"]`);
-    if (!node) return;
-    const displayValue =
-      field === "wca" && leg && leg._errors && leg._errors.wca && !(leg._manual && leg._manual.wca)
-        ? leg._errors.wca
-        : value;
-    node.value = displayValue;
+    if (node) node.value = value;
   }
 
   function syncLegDerived(index, field, isDerived) {
     const node = document.querySelector(`[data-leg-field="${index}:${field}"]`);
     const wrapper = node && node.closest(".field");
     if (wrapper) wrapper.classList.toggle("derived", Boolean(isDerived));
-  }
-
-  function syncLegError(index, field, hasError) {
-    const node = document.querySelector(`[data-leg-field="${index}:${field}"]`);
-    const wrapper = node && node.closest(".field");
-    if (wrapper) wrapper.classList.toggle("error", Boolean(hasError));
   }
 
   function resolveDisplayField(leg, manual, lockedField, field, derivedValue, formatter) {
@@ -888,28 +840,21 @@
 
   function tasFactor(tempC, pressureAltitude) {
     if (tempC == null || pressureAltitude == null) return null;
-    const h = 0.3048 * pressureAltitude;
-    const lapseTerm = 1 - ((0.0065 * h) / 288.15);
-    if (lapseTerm <= 0) return null;
-    const pressure = 101325 * (lapseTerm ** 5.2558797);
-    const kelvin = tempC + 273.15;
-    if (kelvin <= 0) return null;
-    const density = pressure / (287.05 * kelvin);
-    if (!Number.isFinite(density) || density <= 0) return null;
-    return Math.sqrt(1.225 / density);
+    const actualKelvin = tempC + 273.15;
+    const standardKelvin = 273.15 + (15 - ((2 * pressureAltitude) / 1000));
+    if (standardKelvin <= 0) return null;
+    return Math.sqrt(actualKelvin / standardKelvin) * (1 + ((0.02 * pressureAltitude) / 1000));
   }
 
   function tempFromTasFactor(factor, pressureAltitude) {
     if (factor == null || pressureAltitude == null || factor <= 0) return null;
-    const h = 0.3048 * pressureAltitude;
-    const lapseTerm = 1 - ((0.0065 * h) / 288.15);
-    if (lapseTerm <= 0) return null;
-    const pressure = 101325 * (lapseTerm ** 5.2558797);
-    const density = 1.225 / (factor ** 2);
-    if (!Number.isFinite(density) || density <= 0) return null;
-    const kelvin = pressure / (287.05 * density);
-    if (!Number.isFinite(kelvin) || kelvin <= 0) return null;
-    return kelvin - 273.15;
+    const standardKelvin = 273.15 + (15 - ((2 * pressureAltitude) / 1000));
+    if (standardKelvin <= 0) return null;
+    const altitudeCorrection = 1 + ((0.02 * pressureAltitude) / 1000);
+    if (altitudeCorrection === 0) return null;
+    const actualKelvin = standardKelvin * ((factor / altitudeCorrection) ** 2);
+    if (!Number.isFinite(actualKelvin) || actualKelvin <= 0) return null;
+    return actualKelvin - 273.15;
   }
 
   function altitudeFromTasFactor(factor, tempC, seedAltitude) {
@@ -964,43 +909,6 @@
     return value == null || !Number.isFinite(value) ? "" : String(Math.round(value));
   }
 
-  function roundHalfUp(value) {
-    if (!Number.isFinite(value)) return value;
-    const sign = value < 0 ? -1 : 1;
-    return sign * Math.floor((Math.abs(value) + 0.5));
-  }
-
-  function isDegreeField(field) {
-    return field === "tc" || field === "wca" || field === "windDir";
-  }
-
-  function maybeDegrees(value) {
-    if (value == null || !Number.isFinite(value)) return "";
-    return String(roundHalfUp(value));
-  }
-
-  function maybeSignedDegrees(value) {
-    if (value == null || !Number.isFinite(value)) return "";
-    const rounded = roundHalfUp(value);
-    return rounded > 0 ? `+${rounded}` : String(rounded);
-  }
-
-  function formatMinutes(minutesFloat) {
-    if (!Number.isFinite(minutesFloat)) return "";
-    const rounded = Math.round(minutesFloat * 10) / 10;
-    const label = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
-    return `${label} min`;
-  }
-
-  function parseMinutes(value) {
-    const text = String(value || "").trim();
-    if (!text) return null;
-    const match = text.match(/-?(?:\d+\.?\d*|\.\d+)/);
-    if (!match) return null;
-    const parsed = Number(match[0]);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
   function normalizeCode(value) {
     return String(value || "").trim().toUpperCase();
   }
@@ -1040,6 +948,32 @@
       state.navlog.header.gphPph = "";
       if (fuelInput) fuelInput.value = "";
     }
+  }
+
+  function maybeSigned(value) {
+    if (value == null || !Number.isFinite(value)) return "";
+    const rounded = Math.round(value);
+    return rounded > 0 ? `+${rounded}` : String(rounded);
+  }
+
+  function minutesToMilitary(minutesFloat) {
+    if (!Number.isFinite(minutesFloat)) return "";
+    const wholeMinutes = Math.floor(minutesFloat);
+    const seconds = Math.round((minutesFloat - wholeMinutes) * 60);
+    const roundedMinutes = wholeMinutes + (seconds > 5 ? 1 : 0);
+    const hours = Math.floor(roundedMinutes / 60);
+    const minutes = roundedMinutes % 60;
+    return `${String(hours).padStart(2, "0")}${String(minutes).padStart(2, "0")}`;
+  }
+
+  function militaryToMinutes(value) {
+    const text = String(value || "").replace(/[^\d]/g, "");
+    if (!text) return null;
+    const padded = text.padStart(4, "0");
+    const hours = Number(padded.slice(0, 2));
+    const minutes = Number(padded.slice(2, 4));
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+    return (hours * 60) + minutes;
   }
 
   function normalizeAngle(angle) {
@@ -1136,7 +1070,7 @@
       const marginLeft = 8;
       const marginTop = 8;
       const bottomPadding = 10;
-      const exportWidth = 96;
+      const exportWidth = 108;
       const usableWidth = exportWidth;
       const usableHeight = pageHeight - marginTop - bottomPadding;
       const imageHeight = (canvas.height * usableWidth) / canvas.width;
