@@ -589,17 +589,133 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   .entry-hero,
   .topbar { border-radius: 14px; }
 
+  .sheet-wrap {
+    overflow-x: visible;
+    padding-bottom: 0;
+  }
+
   .sheet {
-    min-width: 860px;
+    min-width: 0;
     padding: 10px;
   }
+
+  .sheet-header { grid-template-columns: 1fr; }
+  .aircraft-box,
+  .planning-box,
+  .rpc-box,
+  .date-box,
+  .gph-box,
+  .navlog-box,
+  .utc-box {
+    grid-column: 1;
+    border-right: 0;
+    border-bottom: 2px solid var(--line);
+  }
+  .utc-box { border-bottom: 0; }
+  .header-box.static.navlog-box {
+    border-right: 0;
+    font-size: 1.32rem;
+  }
+  .header-box-label { font-size: 0.74rem; }
+  .header-box input,
+  .header-box select {
+    min-height: 48px;
+    padding: 6px 10px 10px;
+    font-size: 0.86rem;
+  }
+
+  .nav-head-grid,
+  .radio-head { display: none; }
+
+  .nav-table,
+  .radio-block { border-top: 2px solid var(--line); }
+
+  .leg-row,
+  .radio-row {
+    display: grid;
+    gap: 8px;
+    padding: 8px;
+    min-height: 0;
+    border-bottom: 2px solid var(--line);
+  }
+  .leg-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .radio-row { grid-template-columns: 1fr; }
+  .radio-row:last-child { border-bottom: 0; }
+
+  .leg-row > div,
+  .radio-row > div {
+    border-right: 0 !important;
+    border: 1.5px solid var(--line);
+    border-radius: 8px;
+    position: relative;
+    padding-top: 16px;
+    background: rgba(255, 255, 255, 0.48);
+    min-width: 0;
+  }
+
+  .leg-row > div::before,
+  .radio-row > div::before {
+    position: absolute;
+    left: 8px;
+    top: 4px;
+    font-size: 0.62rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .leg-row > div:nth-child(1)::before { content: "Route"; }
+  .leg-row > div:nth-child(2)::before { content: "CAS"; }
+  .leg-row > div:nth-child(3)::before { content: "Alt"; }
+  .leg-row > div:nth-child(4)::before { content: "Temp"; }
+  .leg-row > div:nth-child(5)::before { content: "Wind Dir"; }
+  .leg-row > div:nth-child(6)::before { content: "Wind Spd"; }
+  .leg-row > div:nth-child(7)::before { content: "TC"; }
+  .leg-row > div:nth-child(8)::before { content: "WCA"; }
+  .leg-row > div:nth-child(9)::before { content: "TA"; }
+  .leg-row > div:nth-child(10)::before { content: "GS"; }
+  .leg-row > div:nth-child(11)::before { content: "Dis"; }
+  .leg-row > div:nth-child(12)::before { content: "EE"; }
+  .leg-row > div:nth-child(13)::before { content: "ET"; }
+  .leg-row > div:nth-child(14)::before { content: "AT"; }
+
+  .radio-row > div:nth-child(1)::before { content: "Location"; }
+  .radio-row > div:nth-child(2)::before { content: "CPT/ATIS"; }
+  .radio-row > div:nth-child(3)::before { content: "DEP/AAP"; }
+  .radio-row > div:nth-child(4)::before { content: "TWR"; }
+  .radio-row > div:nth-child(5)::before { content: "GND"; }
+  .radio-row > div:nth-child(6)::before { content: "FSS"; }
+  .radio-row > div:nth-child(7)::before { content: "Remarks"; }
+
+  .field input,
+  .radio-row input {
+    min-height: 44px;
+    padding: 18px 8px 8px;
+    font-size: 0.82rem;
+  }
+
+  .route-cell,
+  .location-cell { grid-template-columns: minmax(0, 1fr) 28px; }
+
+  .toc-tod-card { grid-template-columns: 56px 1fr 1fr; }
+  .toc-tod-title,
+  .toc-tod-card input { min-height: 56px; }
 
   .atis-block { grid-template-columns: 1fr; }
   .atis-cell {
     border-right: 0;
     border-bottom: 2px solid var(--line);
+    grid-template-columns: 148px 1fr;
   }
   .atis-cell:last-child { border-bottom: 0; }
+  .atis-cell span {
+    min-height: 44px;
+    font-size: 0.74rem;
+  }
+  .atis-cell input {
+    min-height: 44px;
+    padding: 10px 8px;
+  }
 }
 
 @media print {
