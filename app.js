@@ -41,16 +41,7 @@
   const state = {
     view: "setup",
     navlog: createBlankNavlog(),
-    settings: {
-      open: false,
-      altitudeUnit: "ft",
-      speedUnit: "kts",
-      temperatureUnit: "c",
-      roundTimeValues: true,
-      roundDistanceValues: true,
-      showDistanceToGo: false,
-      pdfLayout: "default",
-    },
+    settings: createDefaultSettings(),
     meta: {
       hasOpenedSheet: false,
       usingPresetRoute: false,
@@ -135,6 +126,19 @@
     else if (state.view === "manual") wireManual();
     else wireNavlog();
     if (state.view === "manual") typesetManualMath();
+  }
+
+  function createDefaultSettings() {
+    return {
+      open: false,
+      altitudeUnit: "ft",
+      speedUnit: "kts",
+      temperatureUnit: "c",
+      roundTimeValues: true,
+      roundDistanceValues: true,
+      showDistanceToGo: false,
+      pdfLayout: "default",
+    };
   }
 
   function renderSetupScreen() {
@@ -619,7 +623,7 @@
     });
     document.getElementById("open-sheet").addEventListener("click", () => {
       seedLegs();
-      state.settings.open = false;
+      state.settings = createDefaultSettings();
       state.meta.hasOpenedSheet = true;
       state.view = "navlog";
       render();
@@ -661,7 +665,7 @@
     document.getElementById("new-sheet").addEventListener("click", () => {
       if (!window.confirm("Clear this navlog?")) return;
       state.navlog = createBlankNavlog();
-      state.settings.open = false;
+      state.settings = createDefaultSettings();
       state.meta.hasOpenedSheet = false;
       state.meta.usingPresetRoute = false;
       render();
