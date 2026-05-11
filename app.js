@@ -370,27 +370,30 @@
   function getDistanceToGoDisplay(index) {
     if (!state.settings.showDistanceToGo) return "";
     if (!Array.isArray(state.navlog.legs) || index < 0 || index >= state.navlog.legs.length) return "";
-    let startIndex = -1;
-    let startDistance = null;
-    for (let legIndex = 0; legIndex < state.navlog.legs.length; legIndex += 1) {
-      const parsedDistance = parseDistanceInput(state.navlog.legs[legIndex]?.distance);
-      if (parsedDistance == null || !Number.isFinite(parsedDistance)) continue;
-      startIndex = legIndex;
-      startDistance = Math.max(0, parsedDistance);
-      break;
-    }
-    if (startIndex < 0 || startDistance == null) return "";
-    if (index < startIndex) return "";
-    if (index === startIndex) return formatDistanceDisplay(startDistance);
+    // DTG sequence:
+    // Row 1: total of all leg distances (rows after the first route row).
+    // Row N: previous DTG minus the distance on that row.
+    const firstLegIndex = 1;
+    if (state.navlog.legs.length <= firstLegIndex) return "";
 
-    let subtractDistance = 0;
-    for (let legIndex = startIndex + 1; legIndex <= index; legIndex += 1) {
+    let totalDistance = 0;
+    let hasDistance = false;
+    for (let legIndex = firstLegIndex; legIndex < state.navlog.legs.length; legIndex += 1) {
       const parsedDistance = parseDistanceInput(state.navlog.legs[legIndex]?.distance);
       if (parsedDistance == null || !Number.isFinite(parsedDistance)) continue;
-      subtractDistance += Math.max(0, parsedDistance);
+      totalDistance += Math.max(0, parsedDistance);
+      hasDistance = true;
     }
-    const distanceToGo = Math.max(0, startDistance - subtractDistance);
-    return formatDistanceDisplay(distanceToGo);
+    if (!hasDistance) return "";
+    if (index === 0) return formatDistanceDisplay(totalDistance);
+
+    let distanceToGo = totalDistance;
+    for (let legIndex = firstLegIndex; legIndex <= index && legIndex < state.navlog.legs.length; legIndex += 1) {
+      const parsedDistance = parseDistanceInput(state.navlog.legs[legIndex]?.distance);
+      if (parsedDistance == null || !Number.isFinite(parsedDistance)) continue;
+      distanceToGo -= Math.max(0, parsedDistance);
+    }
+    return formatDistanceDisplay(Math.max(0, distanceToGo));
   }
 
   function renderLegRow(leg, index) {
