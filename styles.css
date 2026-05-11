@@ -130,6 +130,18 @@ select { font: inherit; }
 
 .manual-vars p {
   margin: 0 !important;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+}
+
+.manual-vars strong {
+  display: inline-block;
+}
+
+.manual-vars span {
+  color: var(--muted);
 }
 
 .manual-row {
@@ -281,25 +293,15 @@ select { font: inherit; }
 .date-input-wrap {
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
-  gap: 6px;
+  gap: 0;
   position: relative;
 }
 
 .header-box .date-input-wrap input[data-header="date"] {
   min-width: 0;
   padding-right: 8px;
-}
-
-.date-picker-btn {
-  border: 1.5px solid rgba(46, 41, 35, 0.34);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.75);
-  min-height: 34px;
-  padding: 2px 8px;
-  font-size: 0.72rem;
-  letter-spacing: 0.03em;
 }
 
 .date-picker-proxy {
@@ -691,18 +693,20 @@ select { font: inherit; }
   z-index: 4;
   top: 7px;
   right: 8px;
+  cursor: default;
 }
 
 .field.first-alt.show-alt-hint .alt-info-badge {
-  width: 14px;
-  height: 14px;
+  display: inline-flex;
+  width: 13px;
+  height: 13px;
   border: 1px solid rgba(46, 41, 35, 0.26);
   border-radius: 999px;
   align-items: center;
   justify-content: center;
   background: rgba(255, 255, 255, 0.82);
   color: rgba(46, 41, 35, 0.62);
-  font-size: 0.64rem;
+  font-size: 0.6rem;
   line-height: 1;
   padding: 0;
 }
@@ -712,6 +716,7 @@ select { font: inherit; }
 }
 
 .field.first-alt.show-alt-hint .alt-info-text {
+  display: none;
   position: absolute;
   z-index: 4;
   right: 0;
@@ -730,16 +735,31 @@ select { font: inherit; }
   pointer-events: none;
 }
 
-.route-cell,
+.route-cell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) auto;
+}
+
+.route-main,
 .location-cell {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 30px;
 }
 
-.route-cell input,
+.route-main input,
 .location-cell input {
   text-align: left;
   min-width: 0;
+}
+
+.route-dtg {
+  min-height: 16px;
+  padding: 0 8px 8px;
+  text-align: center;
+  font-size: 0.74rem;
+  color: var(--muted);
+  line-height: 1.1;
 }
 
 .remove-chip {

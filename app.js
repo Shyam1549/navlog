@@ -48,6 +48,7 @@
       temperatureUnit: "c",
       roundTimeValues: true,
       roundDistanceValues: true,
+      showDistanceToGo: true,
       pdfLayout: "default",
     },
     meta: {
@@ -165,7 +166,6 @@
           <div id="preset-status-slot">${presetStatus}</div>
           <div class="entry-actions">
             <button class="action primary" id="open-sheet">Open navlog</button>
-            <button class="action" id="open-manual" type="button">User manual</button>
             ${showResume ? `<button class="action" id="resume-sheet">Resume current sheet</button>` : ""}
           </div>
         </section>
@@ -182,7 +182,7 @@
           <div class="top-side"><button class="back-link" id="back-from-manual">Back</button></div>
           <div class="top-center">
             <h1>User Manual</h1>
-            <p class="setup-caption">Simple formulas and behavior guide</p>
+            <p class="setup-caption">Formulas, features, limits</p>
           </div>
           <div class="top-side right"></div>
         </section>
@@ -190,58 +190,52 @@
           <div class="manual-section">
             <h3>Variables</h3>
             <div class="manual-vars">
-              <p><strong>h</strong> altitude</p>
-              <p><strong>T</strong> temperature (C)</p>
-              <p><strong>P</strong> pressure</p>
-              <p><strong>rho</strong> air density</p>
-              <p><strong>F</strong> TAS factor</p>
-              <p><strong>Vcas</strong> calibrated airspeed</p>
-              <p><strong>Vtas</strong> true airspeed</p>
-              <p><strong>Vgs</strong> groundspeed</p>
-              <p><strong>W</strong> wind speed</p>
-              <p><strong>Delta</strong> relative wind angle</p>
-              <p><strong>WCA</strong> wind correction angle</p>
-              <p><strong>d</strong> distance (NM)</p>
-              <p><strong>t</strong> time (min)</p>
+              <p><strong>h</strong><span>altitude</span></p>
+              <p><strong>T</strong><span>temperature</span></p>
+              <p><strong>P</strong><span>pressure</span></p>
+              <p><strong>rho</strong><span>air density</span></p>
+              <p><strong>F</strong><span>TAS factor</span></p>
+              <p><strong>Vcas</strong><span>calibrated airspeed</span></p>
+              <p><strong>Vtas</strong><span>true airspeed</span></p>
+              <p><strong>Vgs</strong><span>groundspeed</span></p>
+              <p><strong>W</strong><span>wind speed</span></p>
+              <p><strong>Delta</strong><span>relative wind angle</span></p>
+              <p><strong>WCA</strong><span>wind correction angle</span></p>
+              <p><strong>d</strong><span>distance</span></p>
+              <p><strong>t</strong><span>time</span></p>
             </div>
           </div>
           <div class="manual-section">
             <h3>Density / TAS Factor</h3>
-            <div class="manual-row"><p class="manual-formula">\\( P = 101325\\left(1 - \\frac{0.0065h}{288.15}\\right)^{5.2558797} \\)</p><p class="manual-note">Pressure at altitude.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( \\rho = \\frac{P}{287.05\\,(T+273.15)} \\)</p><p class="manual-note">Air density from pressure + temperature.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( F = \\sqrt{\\frac{1.225}{\\rho}} \\)</p><p class="manual-note">Density factor.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( V_{tas}=V_{cas}\\,F \\quad\\text{and}\\quad V_{cas}=\\frac{V_{tas}}{F} \\)</p><p class="manual-note">Convert CAS and TAS both ways.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( P_{Pa} = 101325\\left(1 - \\frac{0.0065h_{m}}{288.15}\\right)^{5.2558797} \\)</p><p class="manual-note">Pressure at altitude.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( \\rho_{kg/m^3} = \\frac{P_{Pa}}{287.05\\,(T_{C}+273.15)} \\)</p><p class="manual-note">Air density from pressure + temperature.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( F = \\sqrt{\\frac{1.225}{\\rho_{kg/m^3}}} \\)</p><p class="manual-note">Density factor.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( V_{tas,kts}=V_{cas,kts}\\,F \\quad\\text{and}\\quad V_{cas,kts}=\\frac{V_{tas,kts}}{F} \\)</p><p class="manual-note">Convert CAS and TAS both ways.</p></div>
           </div>
           <div class="manual-section">
             <h3>Wind Triangle</h3>
-            <div class="manual-row"><p class="manual-formula">\\( \\Delta = \\theta_{wind}-\\theta_{course} \\)</p><p class="manual-note">Relative wind angle.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( WCA=\\arcsin\\!\\left(\\frac{W\\sin\\Delta}{V_{tas}}\\right) \\)</p><p class="manual-note">Wind correction angle.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( V_{gs}=V_{tas}\\cos(WCA)-W\\cos\\Delta \\)</p><p class="manual-note">Track speed over ground.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( W=\\frac{V_{tas}\\cos(WCA)-V_{gs}}{\\cos\\Delta} \\)</p><p class="manual-note">Reverse wind (priority formula).</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( W=\\frac{V_{tas}\\sin(WCA)}{\\sin\\Delta} \\)</p><p class="manual-note">Fallback wind formula.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( V_{tas}=\\frac{V_{gs}+W\\cos\\Delta}{\\cos(WCA)} \\)</p><p class="manual-note">Reverse TAS (priority formula).</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( V_{tas}=\\frac{W\\sin\\Delta}{\\sin(WCA)} \\)</p><p class="manual-note">Fallback TAS formula.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( \\Delta_{deg} = \\theta_{wind,deg}-\\theta_{course,deg} \\)</p><p class="manual-note">Relative wind angle.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( WCA_{deg}=\\arcsin\\!\\left(\\frac{W_{kts}\\sin\\Delta_{deg}}{V_{tas,kts}}\\right) \\)</p><p class="manual-note">Wind correction angle.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( V_{gs,kts}=V_{tas,kts}\\cos(WCA_{deg})-W_{kts}\\cos\\Delta_{deg} \\)</p><p class="manual-note">Track speed over ground.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( W_{kts}=\\frac{V_{tas,kts}\\cos(WCA_{deg})-V_{gs,kts}}{\\cos\\Delta_{deg}} \\)</p><p class="manual-note">Reverse wind (priority formula).</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( W_{kts}=\\frac{V_{tas,kts}\\sin(WCA_{deg})}{\\sin\\Delta_{deg}} \\)</p><p class="manual-note">Fallback wind formula.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( V_{tas,kts}=\\frac{V_{gs,kts}+W_{kts}\\cos\\Delta_{deg}}{\\cos(WCA_{deg})} \\)</p><p class="manual-note">Reverse TAS (priority formula).</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( V_{tas,kts}=\\frac{W_{kts}\\sin\\Delta_{deg}}{\\sin(WCA_{deg})} \\)</p><p class="manual-note">Fallback TAS formula.</p></div>
           </div>
           <div class="manual-section">
             <h3>Leg Time / Distance</h3>
-            <div class="manual-row"><p class="manual-formula">\\( t=\\frac{d}{V_{gs}}\\times 60 \\)</p><p class="manual-note">Time from distance and groundspeed.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( d=\\frac{V_{gs}\\,t}{60} \\)</p><p class="manual-note">Distance from speed and time.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( V_{gs}=\\frac{d}{t/60} \\)</p><p class="manual-note">Groundspeed from distance and time.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( t_{min}=\\frac{d_{NM}}{V_{gs,kts}}\\times 60 \\)</p><p class="manual-note">Time from distance and groundspeed.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( d_{NM}=\\frac{V_{gs,kts}\\,t_{min}}{60} \\)</p><p class="manual-note">Distance from speed and time.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( V_{gs,kts}=\\frac{d_{NM}}{t_{min}/60} \\)</p><p class="manual-note">Groundspeed from distance and time.</p></div>
           </div>
           <div class="manual-section">
             <h3>TOC / TOD</h3>
-            <div class="manual-row"><p class="manual-formula">\\( \\Delta h_{toc}=h_2-h_1 \\)</p><p class="manual-note">Altitude to gain for climb.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( t_{toc}=\\frac{\\Delta h_{toc}}{ROC} \\)</p><p class="manual-note">TOC time.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( d_{toc}=t_{toc}\\cdot\\frac{V_{gs}}{60} \\)</p><p class="manual-note">TOC distance.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( \\Delta h_{tod}=h_{secondLast}-h_{last} \\)</p><p class="manual-note">Altitude to lose for descent.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( t_{tod}=\\frac{\\Delta h_{tod}}{ROD} \\)</p><p class="manual-note">TOD time.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( d_{tod}=t_{tod}\\cdot\\frac{V_{gs}}{60} \\)</p><p class="manual-note">TOD distance.</p></div>
-          </div>
-          <div class="manual-section">
-            <h3>Math Flow</h3>
-            <div class="manual-row"><p class="manual-formula">Input priority</p><p class="manual-note">User-entered values stay fixed. Empty values are solved from available equations.</p></div>
-            <div class="manual-row"><p class="manual-formula">Reverse solving</p><p class="manual-note">When multiple reverse equations exist, cosine-based wind/TAS equations are used first, then sine fallback.</p></div>
-            <div class="manual-row"><p class="manual-formula">Multi-pass solve</p><p class="manual-note">Solver iterates several passes so newly derived values can unlock other fields.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( \\Delta h_{toc,ft}=h_{2,ft}-h_{1,ft} \\)</p><p class="manual-note">Altitude to gain for climb.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( t_{toc,min}=\\frac{\\Delta h_{toc,ft}}{ROC_{ft/min}} \\)</p><p class="manual-note">TOC time.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( d_{toc,NM}=t_{toc,min}\\cdot\\frac{V_{gs,kts}}{60} \\)</p><p class="manual-note">TOC distance.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( \\Delta h_{tod,ft}=h_{secondLast,ft}-h_{last,ft} \\)</p><p class="manual-note">Altitude to lose for descent.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( t_{tod,min}=\\frac{\\Delta h_{tod,ft}}{ROD_{ft/min}} \\)</p><p class="manual-note">TOD time.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( d_{tod,NM}=t_{tod,min}\\cdot\\frac{V_{gs,kts}}{60} \\)</p><p class="manual-note">TOD distance.</p></div>
           </div>
           <div class="manual-section">
             <h3>Limits / Guards</h3>
@@ -253,12 +247,8 @@
           <div class="manual-section">
             <h3>Data Behaviors</h3>
             <div class="manual-row"><p class="manual-formula">Preset route delete</p><p class="manual-note">If a preset leg is removed, the next leg TC is cleared for manual entry.</p></div>
-            <div class="manual-row"><p class="manual-formula">Airport autofill</p><p class="manual-note">In LOCATION, type airport code and press Enter to auto-fill frequency/remarks.</p></div>
-            <div class="manual-row"><p class="manual-formula">Date entry</p><p class="manual-note">Date uses calendar picker and displays as \\(YY/MM/DD\\).</p></div>
-          </div>
-          <div class="manual-section">
-            <h3>Settings</h3>
-            <p>Settings controls units, rounding for time/distance outputs, and PDF export mode (Default vs Printable).</p>
+            <div class="manual-row"><p class="manual-formula">Airport autofill</p><p class="manual-note">Type airport code and press Enter to auto-fill frequency/remarks.</p></div>
+            <div class="manual-row"><p class="manual-formula">Distance to go</p><p class="manual-note">If enabled, a remaining-distance value is shown below each waypoint route field.</p></div>
           </div>
         </section>
       </main>
@@ -279,6 +269,7 @@
             <div class="utc-pill" id="utc-clock">UTC ${formatUtcNow()}</div>
           </div>
           <div class="top-side right">
+            <button class="action" id="open-manual-inline" type="button">User manual</button>
             <button class="action" id="open-settings">Settings</button>
             <button class="action" id="new-sheet">New</button>
             <button class="action primary" id="save-sheet">Save</button>
@@ -377,21 +368,41 @@
     return leg[field];
   }
 
+  function getDistanceToGoDisplay(index) {
+    if (!state.settings.showDistanceToGo) return "";
+    if (!Array.isArray(state.navlog.legs) || index < 0 || index >= state.navlog.legs.length) return "";
+    let runningDistance = 0;
+    let hasAnyDistance = false;
+    for (let legIndex = state.navlog.legs.length - 1; legIndex >= index; legIndex -= 1) {
+      const rawDistance = state.navlog.legs[legIndex]?.distance;
+      const parsedDistance = parseDistanceInput(rawDistance);
+      if (parsedDistance == null || !Number.isFinite(parsedDistance)) continue;
+      runningDistance += Math.max(0, parsedDistance);
+      hasAnyDistance = true;
+    }
+    if (!hasAnyDistance) return "";
+    return formatDistanceDisplay(runningDistance);
+  }
+
   function renderLegRow(leg, index) {
     const removable = index > 0 && index < state.navlog.legs.length - 1;
     const altExtra = index === 0 ? "first-alt" : "";
+    const distanceToGo = getDistanceToGoDisplay(index);
     return `
       <div class="leg-row">
         <div class="${legFieldClass(leg, "route", "route route-cell")}">
-          <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" />
-          ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
+          <div class="route-main">
+            <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" />
+            ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
+          </div>
+          ${state.settings.showDistanceToGo ? `<span class="route-dtg">${distanceToGo ? `(${escapeAttr(distanceToGo)})` : ""}</span>` : ""}
         </div>
         <div class="${legFieldClass(leg, "cas")}"><input data-leg-field="${index}:cas" value="${escapeAttr(legFieldValue(leg, "cas"))}" /></div>
         <div class="${legFieldClass(leg, "alt", altExtra)}">
           <input data-leg-field="${index}:alt" value="${escapeAttr(legFieldValue(leg, "alt"))}" />
           ${
             index === 0
-              ? '<span class="alt-departure-hint" aria-hidden="true"><span>enter departure</span><span>elevation</span></span><span class="alt-info-wrap" aria-hidden="true"><span class="alt-info-badge">i</span><span class="alt-info-text">The Differential of Departure elevation and Altitude of first way point is used for TOC calculation. Default=0</span></span>'
+              ? '<span class="alt-departure-hint" aria-hidden="true"><span>enter departure</span><span>elevation</span></span><span class="alt-info-wrap" aria-hidden="true"><span class="alt-info-badge">i</span><span class="alt-info-text">Differential (DEP elevation, WPT 1 ALT) is used for TOC calculation. Default=0</span></span>'
               : ""
           }
         </div>
@@ -451,7 +462,7 @@
           </div>
         </div>
         <div class="settings-group">
-          <h4>Rounding</h4>
+          <h4>Rounding Toggle</h4>
           <div class="settings-grid settings-grid-rounding">
             <label class="settings-item settings-item-check">
               <input type="checkbox" id="setting-round-time" ${s.roundTimeValues ? "checked" : ""} />
@@ -460,6 +471,15 @@
             <label class="settings-item settings-item-check">
               <input type="checkbox" id="setting-round-distance" ${s.roundDistanceValues ? "checked" : ""} />
               <span>Distance (DIS and TOC/TOD)</span>
+            </label>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4>Features</h4>
+          <div class="settings-grid settings-grid-rounding">
+            <label class="settings-item settings-item-check">
+              <input type="checkbox" id="setting-distance-to-go" ${s.showDistanceToGo ? "checked" : ""} />
+              <span>Show distance-to-go under route waypoints</span>
             </label>
           </div>
         </div>
@@ -587,17 +607,22 @@
     });
     document.getElementById("open-sheet").addEventListener("click", () => {
       seedLegs();
+      state.settings.open = false;
       state.meta.hasOpenedSheet = true;
       state.view = "navlog";
       render();
     });
-    document.getElementById("open-manual").addEventListener("click", () => {
-      state.view = "manual";
-      render();
-    });
+    const openManualButton = document.getElementById("open-manual");
+    if (openManualButton) {
+      openManualButton.addEventListener("click", () => {
+        state.view = "manual";
+        render();
+      });
+    }
     const resumeButton = document.getElementById("resume-sheet");
     if (resumeButton) {
       resumeButton.addEventListener("click", () => {
+        state.settings.open = false;
         state.meta.hasOpenedSheet = true;
         state.view = "navlog";
         render();
@@ -614,6 +639,13 @@
       state.settings.open = !state.settings.open;
       render();
     });
+    const inlineManualButton = document.getElementById("open-manual-inline");
+    if (inlineManualButton) {
+      inlineManualButton.addEventListener("click", () => {
+        state.view = "manual";
+        render();
+      });
+    }
     const closeSettingsButton = document.getElementById("close-settings");
     if (closeSettingsButton) {
       closeSettingsButton.addEventListener("click", () => {
@@ -624,6 +656,7 @@
     document.getElementById("new-sheet").addEventListener("click", () => {
       if (!window.confirm("Clear this navlog?")) return;
       state.navlog = createBlankNavlog();
+      state.settings.open = false;
       state.meta.hasOpenedSheet = false;
       state.meta.usingPresetRoute = false;
       render();
@@ -665,6 +698,10 @@
       input.addEventListener("input", (event) => {
         const field = event.target.dataset.header;
         state.navlog.header[field] = field === "date" ? normalizeDisplayDate(event.target.value) : event.target.value;
+        if (field === "date") {
+          const dateProxy = document.querySelector("[data-date-picker]");
+          if (dateProxy) dateProxy.value = normalizeDateInputValue(state.navlog.header.date);
+        }
         if (field === "rpCNo") {
           const mappedAircraft = RPC_TO_AIRCRAFT[event.target.value.trim()];
           if (mappedAircraft) {
@@ -681,6 +718,10 @@
       input.addEventListener("change", (event) => {
         const field = event.target.dataset.header;
         state.navlog.header[field] = field === "date" ? normalizeDisplayDate(event.target.value) : event.target.value;
+        if (field === "date") {
+          const dateProxy = document.querySelector("[data-date-picker]");
+          if (dateProxy) dateProxy.value = normalizeDateInputValue(state.navlog.header.date);
+        }
         if (field === "rpCNo") {
           const mappedAircraft = RPC_TO_AIRCRAFT[event.target.value.trim()];
           if (mappedAircraft) {
@@ -724,18 +765,15 @@
       });
     });
     const datePickerInput = document.querySelector("[data-date-picker]");
-    const datePickerOpen = document.querySelector("[data-date-picker-open]");
-    if (datePickerOpen && datePickerInput) {
-      datePickerOpen.addEventListener("click", () => {
-        if (typeof datePickerInput.showPicker === "function") datePickerInput.showPicker();
-        else datePickerInput.click();
-      });
+    if (datePickerInput) {
       const dateDisplayInput = document.querySelector('[data-header="date"]');
       if (dateDisplayInput) {
-        dateDisplayInput.addEventListener("click", () => {
+        const openDatePicker = () => {
           if (typeof datePickerInput.showPicker === "function") datePickerInput.showPicker();
           else datePickerInput.click();
-        });
+        };
+        dateDisplayInput.addEventListener("click", openDatePicker);
+        dateDisplayInput.addEventListener("focus", openDatePicker);
       }
       datePickerInput.addEventListener("change", (event) => {
         const picked = formatDateToDisplay(event.target.value);
@@ -823,6 +861,12 @@
         applySettingsChange({ roundDistanceValues: event.target.checked });
       });
     }
+    const distanceToGoToggle = document.getElementById("setting-distance-to-go");
+    if (distanceToGoToggle) {
+      distanceToGoToggle.addEventListener("change", (event) => {
+        applySettingsChange({ showDistanceToGo: event.target.checked });
+      });
+    }
     document.querySelectorAll('[name="setting-pdf-layout"]').forEach((input) => {
       input.addEventListener("change", (event) => {
         applySettingsChange({ pdfLayout: event.target.value });
@@ -837,6 +881,7 @@
           temperatureUnit: "c",
           roundTimeValues: true,
           roundDistanceValues: true,
+          showDistanceToGo: true,
           pdfLayout: "default",
         });
       });
@@ -856,6 +901,7 @@
       || previous.roundDistanceValues !== next.roundDistanceValues;
     const changed =
       affectsMathFormatting
+      || previous.showDistanceToGo !== next.showDistanceToGo
       || previous.pdfLayout !== next.pdfLayout;
     if (!changed) return;
 
@@ -1813,7 +1859,6 @@
     return `
       <span class="date-input-wrap">
         <input data-header="date" value="${escapeAttr(normalizedDisplay)}" placeholder="yy/mm/dd" />
-        <button type="button" class="date-picker-btn" data-date-picker-open aria-label="Open calendar">CAL</button>
         <input type="date" class="date-picker-proxy" data-date-picker value="${escapeAttr(isoValue)}" tabindex="-1" aria-hidden="true" />
       </span>
     `;
