@@ -112,9 +112,12 @@
 
   function render() {
     computeRouteMath();
-    app.innerHTML = state.view === "setup" ? renderSetupScreen() : renderNavlogScreen();
+    if (state.view === "setup") app.innerHTML = renderSetupScreen();
+    else if (state.view === "manual") app.innerHTML = renderManualScreen();
+    else app.innerHTML = renderNavlogScreen();
     startUtcClock();
     if (state.view === "setup") wireSetup();
+    else if (state.view === "manual") wireManual();
     else wireNavlog();
   }
 
@@ -147,7 +150,79 @@
           <div id="preset-status-slot">${presetStatus}</div>
           <div class="entry-actions">
             <button class="action primary" id="open-sheet">Open navlog</button>
+            <button class="action" id="open-manual" type="button">User manual</button>
             ${showResume ? `<button class="action" id="resume-sheet">Resume current sheet</button>` : ""}
+          </div>
+        </section>
+      </main>
+      </div>
+    `;
+  }
+
+  function renderManualScreen() {
+    return `
+      <div class="ui-scale">
+      <main class="entry-page">
+        <section class="topbar centered">
+          <div class="top-side"><button class="back-link" id="back-from-manual">Back</button></div>
+          <div class="top-center">
+            <h1>User Manual</h1>
+            <p class="setup-caption">Simple formulas and behavior guide</p>
+          </div>
+          <div class="top-side right"></div>
+        </section>
+        <section class="setup-card manual-card">
+          <div class="manual-section">
+            <h3>Core Inputs</h3>
+            <p>ALT in feet. TEMP in C. Speeds in knots. Distance in NM. Time in minutes.</p>
+          </div>
+          <div class="manual-section">
+            <h3>TAS Factor</h3>
+            <p class="manual-formula">h = 0.3048 * ALT</p>
+            <p class="manual-formula">P = 101325 * (1 - (0.0065 * h / 288.15))^5.2558797</p>
+            <p class="manual-formula">p = P / (287.05 * (T + 273.15))</p>
+            <p class="manual-formula">F = sqrt(1.225 / p)</p>
+            <p class="manual-formula">TA = CAS * F</p>
+            <p class="manual-formula">CAS = TA / F</p>
+          </div>
+          <div class="manual-section">
+            <h3>Wind / Heading</h3>
+            <p class="manual-formula">REL = windDir - TC</p>
+            <p class="manual-formula">WCA = asin((WIND_SPD * sin(REL)) / TAS)</p>
+            <p class="manual-formula">GS = TAS * cos(WCA) - WIND_SPD * cos(REL)</p>
+            <p class="manual-formula">WIND_SPD = (TAS * cos(WCA) - GS) / cos(REL)</p>
+            <p class="manual-formula">WIND_SPD = (TAS * sin(WCA)) / sin(REL)</p>
+            <p class="manual-formula">TAS = (GS + WIND_SPD * cos(REL)) / cos(WCA)</p>
+            <p class="manual-formula">TAS = (WIND_SPD * sin(REL)) / sin(WCA)</p>
+            <p>Reverse solving priority: cosine formula first, sine fallback.</p>
+          </div>
+          <div class="manual-section">
+            <h3>Time / Distance</h3>
+            <p class="manual-formula">EE = (DIST / GS) * 60</p>
+            <p class="manual-formula">DIST = (GS * EE) / 60</p>
+            <p class="manual-formula">GS = DIST / (EE / 60)</p>
+            <p>Derived time uses minutes only (max 1 decimal).</p>
+          </div>
+          <div class="manual-section">
+            <h3>TOC / TOD</h3>
+            <p class="manual-formula">TOC altitude gain = ALT(route 2) - ALT(route 1)</p>
+            <p class="manual-formula">TOC time = altitude gain / ROC</p>
+            <p class="manual-formula">TOC distance = TOC time * (GS / 60)</p>
+            <p class="manual-formula">TOD altitude lose = ALT(second last) - ALT(last)</p>
+            <p class="manual-formula">TOD time = altitude lose / ROD</p>
+            <p class="manual-formula">TOD distance = TOD time * (GS / 60)</p>
+          </div>
+          <div class="manual-section">
+            <h3>Preset Route Behavior</h3>
+            <p>If preset route is used and a leg is removed, TC of next leg is cleared for manual entry.</p>
+          </div>
+          <div class="manual-section">
+            <h3>Airport Row Helper</h3>
+            <p>Type airport code in LOCATION and press Enter to auto-fill radio/frequency fields.</p>
+          </div>
+          <div class="manual-section">
+            <h3>Warnings</h3>
+            <p>If abs((WIND_SPD * sin(REL)) / TAS) &gt; 1, WCA shows "Wind too strong".</p>
           </div>
         </section>
       </main>
@@ -374,6 +449,10 @@
       seedLegs();
       state.meta.hasOpenedSheet = true;
       state.view = "navlog";
+      render();
+    });
+    document.getElementById("open-manual").addEventListener("click", () => {
+      state.view = "manual";
       render();
     });
     const resumeButton = document.getElementById("resume-sheet");
@@ -773,6 +852,13 @@
     };
   }
 
+  function wireManual() {
+    document.getElementById("back-from-manual").addEventListener("click", () => {
+      state.view = "setup";
+      render();
+    });
+  }
+
   function computeTocTod() {
     const firstLeg = state.navlog.legs[0];
     const secondLeg = state.navlog.legs[1];
@@ -865,7 +951,7 @@
     if (!node) return;
     const displayValue =
       leg && leg._errors && leg._errors[field] && !(leg._manual && leg._manual[field])
-        ? leg._errors[field]
+        ? ""
         : value;
     node.value = displayValue;
   }
@@ -879,7 +965,12 @@
   function syncLegError(index, field, hasError) {
     const node = document.querySelector(`[data-leg-field="${index}:${field}"]`);
     const wrapper = node && node.closest(".field");
-    if (wrapper) wrapper.classList.toggle("error", Boolean(hasError));
+    if (!wrapper) return;
+    wrapper.classList.toggle("error", Boolean(hasError));
+    const leg = state.navlog.legs[index];
+    const errorText = leg && leg._errors ? leg._errors[field] : "";
+    if (hasError && errorText) wrapper.setAttribute("data-error", errorText);
+    else wrapper.removeAttribute("data-error");
   }
 
   function resolveDisplayField(leg, manual, lockedField, field, derivedValue, formatter) {

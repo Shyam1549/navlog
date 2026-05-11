@@ -97,6 +97,26 @@ select { font: inherit; }
 }
 
 .setup-card { margin-top: 18px; padding: 20px; }
+.manual-card { display: grid; gap: 14px; }
+.manual-section {
+  border: 2px solid rgba(46, 41, 35, 0.16);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.45);
+}
+.manual-section h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+.manual-section p {
+  margin: 6px 0;
+  font-size: 0.9rem;
+}
+.manual-formula {
+  font-family: "Courier New", monospace;
+  font-size: 0.86rem;
+  padding-left: 10px;
+}
 .setup-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 16px; align-items: end; }
 .setup-field { display: grid; gap: 8px; }
 .setup-field span { color: var(--muted); text-transform: uppercase; font-size: 0.84rem; }
@@ -383,27 +403,39 @@ select { font: inherit; }
   font-size: 0.94rem;
 }
 
-.field input::placeholder {
-  font-size: 0.72rem;
-  line-height: 1.1;
-}
-
 .field.derived input {
   background: transparent;
   font-weight: 700;
 }
 
+.field { position: relative; }
+
 .field.error input {
-  color: #b33a2b;
-  font-weight: 700;
-  font-size: 0.7rem;
-  line-height: 1.1;
-  padding: 6px 4px;
+  color: transparent;
+  caret-color: transparent;
 }
 
-.field input[data-leg-field$=":alt"]::placeholder {
-  font-size: 0.66rem;
-  letter-spacing: 0;
+.field.error::after {
+  content: attr(data-error);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: normal;
+  word-break: break-word;
+  padding: 8px;
+  color: #b33a2b;
+  font-weight: 700;
+  font-size: 0.94rem;
+  line-height: 1.15;
+  pointer-events: none;
+}
+
+.field input[data-leg-field="0:alt"] {
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .route-cell,
