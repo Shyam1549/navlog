@@ -167,6 +167,7 @@
           <div class="entry-actions">
             <button class="action primary" id="open-sheet">Open navlog</button>
             ${showResume ? `<button class="action" id="resume-sheet">Resume current sheet</button>` : ""}
+            <button class="action manual-front-btn" id="open-manual" type="button">User manual</button>
           </div>
         </section>
       </main>
@@ -269,7 +270,6 @@
             <div class="utc-pill" id="utc-clock">UTC ${formatUtcNow()}</div>
           </div>
           <div class="top-side right">
-            <button class="action" id="open-manual-inline" type="button">User manual</button>
             <button class="action" id="open-settings">Settings</button>
             <button class="action" id="new-sheet">New</button>
             <button class="action primary" id="save-sheet">Save</button>
@@ -371,17 +371,28 @@
   function getDistanceToGoDisplay(index) {
     if (!state.settings.showDistanceToGo) return "";
     if (!Array.isArray(state.navlog.legs) || index < 0 || index >= state.navlog.legs.length) return "";
-    let runningDistance = 0;
+    // Distance-to-go starts at waypoint rows (index 1 onward), not the departure row.
+    const startIndex = state.navlog.legs.length > 1 ? 1 : 0;
+    if (index < startIndex) return "";
+
+    let totalFromFirstWaypoint = 0;
     let hasAnyDistance = false;
-    for (let legIndex = state.navlog.legs.length - 1; legIndex >= index; legIndex -= 1) {
-      const rawDistance = state.navlog.legs[legIndex]?.distance;
-      const parsedDistance = parseDistanceInput(rawDistance);
+    for (let legIndex = startIndex; legIndex < state.navlog.legs.length; legIndex += 1) {
+      const parsedDistance = parseDistanceInput(state.navlog.legs[legIndex]?.distance);
       if (parsedDistance == null || !Number.isFinite(parsedDistance)) continue;
-      runningDistance += Math.max(0, parsedDistance);
+      totalFromFirstWaypoint += Math.max(0, parsedDistance);
       hasAnyDistance = true;
     }
     if (!hasAnyDistance) return "";
-    return formatDistanceDisplay(runningDistance);
+
+    let subtractDistance = 0;
+    for (let legIndex = startIndex; legIndex < index; legIndex += 1) {
+      const parsedDistance = parseDistanceInput(state.navlog.legs[legIndex]?.distance);
+      if (parsedDistance == null || !Number.isFinite(parsedDistance)) continue;
+      subtractDistance += Math.max(0, parsedDistance);
+    }
+    const distanceToGo = Math.max(0, totalFromFirstWaypoint - subtractDistance);
+    return formatDistanceDisplay(distanceToGo);
   }
 
   function renderLegRow(leg, index) {
@@ -639,13 +650,6 @@
       state.settings.open = !state.settings.open;
       render();
     });
-    const inlineManualButton = document.getElementById("open-manual-inline");
-    if (inlineManualButton) {
-      inlineManualButton.addEventListener("click", () => {
-        state.view = "manual";
-        render();
-      });
-    }
     const closeSettingsButton = document.getElementById("close-settings");
     if (closeSettingsButton) {
       closeSettingsButton.addEventListener("click", () => {
