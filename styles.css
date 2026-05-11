@@ -113,9 +113,17 @@ select { font: inherit; }
   font-size: 0.9rem;
 }
 .manual-formula {
-  font-family: "Courier New", monospace;
-  font-size: 0.86rem;
-  padding-left: 10px;
+  padding-left: 12px;
+  margin: 8px 0 4px !important;
+}
+.manual-note {
+  color: var(--muted);
+  margin: 0 0 8px 12px !important;
+}
+
+.manual-formula mjx-container {
+  display: block !important;
+  margin: 0 !important;
 }
 .setup-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 16px; align-items: end; }
 .setup-field { display: grid; gap: 8px; }
@@ -408,6 +416,80 @@ select { font: inherit; }
   font-weight: 700;
 }
 
+.settings-panel {
+  display: none;
+  margin-bottom: 12px;
+  border: 2px solid rgba(46, 41, 35, 0.2);
+  border-radius: 14px;
+  background: rgba(251, 247, 239, 0.92);
+  padding: 12px;
+}
+
+.settings-panel.open { display: block; }
+
+.settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.settings-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.settings-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.settings-item {
+  display: grid;
+  gap: 6px;
+}
+
+.settings-item span {
+  font-size: 0.82rem;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.settings-item select {
+  width: 100%;
+  min-height: 42px;
+  border: 2px solid rgba(46, 41, 35, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.8);
+  padding: 8px 10px;
+}
+
+.settings-item-check {
+  grid-column: 1 / -1;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  border: 2px solid rgba(46, 41, 35, 0.14);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.settings-item-check span {
+  text-transform: none;
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+
+.settings-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
 .field { position: relative; }
 
 .field.error input {
@@ -419,23 +501,35 @@ select { font: inherit; }
   content: attr(data-error);
   position: absolute;
   inset: 0;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
-  white-space: normal;
+  white-space: pre-line;
   word-break: break-word;
+  overflow-wrap: anywhere;
   padding: 8px;
   color: #b33a2b;
-  font-weight: 700;
   font-size: 0.94rem;
   line-height: 1.15;
   pointer-events: none;
 }
 
-.field input[data-leg-field="0:alt"] {
-  padding-left: 4px;
-  padding-right: 4px;
+.field.first-alt.show-alt-hint::before {
+  content: "enter airport\Aelevation";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  white-space: pre-line;
+  pointer-events: none;
+  color: rgba(24, 22, 18, 0.48);
+  font-size: 0.94rem;
+  line-height: 1.1;
 }
 
 .route-cell,
@@ -611,6 +705,8 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
   .setup-grid,
   .toc-tod { grid-template-columns: 1fr; }
+
+  .settings-grid { grid-template-columns: 1fr; }
 
   .topbar.centered {
     grid-template-columns: 1fr;

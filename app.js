@@ -41,13 +41,23 @@
   const state = {
     view: "setup",
     navlog: createBlankNavlog(),
+    settings: {
+      open: false,
+      altitudeUnit: "ft",
+      speedUnit: "kts",
+      timeDisplay: "minutes",
+      eeRoundingEnabled: true,
+    },
     meta: {
       hasOpenedSheet: false,
       usingPresetRoute: false,
     },
   };
   const TRIG_TOLERANCE = 1e-6;
+  const FEET_PER_METER = 3.280839895013123;
+  const KNOTS_PER_MPH = 0.868976;
   let utcTimer = null;
+  let manualMathRetryCount = 0;
 
   function createBlankLeg(route) {
     return {
@@ -119,6 +129,7 @@
     if (state.view === "setup") wireSetup();
     else if (state.view === "manual") wireManual();
     else wireNavlog();
+    if (state.view === "manual") typesetManualMath();
   }
 
   function renderSetupScreen() {
@@ -173,56 +184,77 @@
         </section>
         <section class="setup-card manual-card">
           <div class="manual-section">
-            <h3>Core Inputs</h3>
-            <p>ALT in feet. TEMP in C. Speeds in knots. Distance in NM. Time in minutes.</p>
+            <h3>Quick Legend</h3>
+            <p><strong>Altitude:</strong> pressure altitude. <strong>Temperature:</strong> outside air temp.</p>
+            <p><strong>Course:</strong> true course. <strong>Wind Dir:</strong> direction wind comes from.</p>
+            <p><strong>Speed:</strong> TAS/CAS/GS. <strong>Time:</strong> leg elapsed time.</p>
           </div>
           <div class="manual-section">
-            <h3>TAS Factor</h3>
-            <p class="manual-formula">h = 0.3048 * ALT</p>
-            <p class="manual-formula">P = 101325 * (1 - (0.0065 * h / 288.15))^5.2558797</p>
-            <p class="manual-formula">p = P / (287.05 * (T + 273.15))</p>
-            <p class="manual-formula">F = sqrt(1.225 / p)</p>
-            <p class="manual-formula">TA = CAS * F</p>
-            <p class="manual-formula">CAS = TA / F</p>
+            <h3>Density / TAS Factor</h3>
+            <p class="manual-formula">\\( h_m = 0.3048\\,h_{ft} \\)</p>
+            <p class="manual-note">Convert altitude in feet to meters.</p>
+            <p class="manual-formula">\\( P = 101325\\left(1 - \\frac{0.0065h_m}{288.15}\\right)^{5.2558797} \\)</p>
+            <p class="manual-note">Estimate pressure at altitude.</p>
+            <p class="manual-formula">\\( \\rho = \\frac{P}{287.05\\,(T_C+273.15)} \\)</p>
+            <p class="manual-note">Compute air density from pressure and temperature.</p>
+            <p class="manual-formula">\\( F = \\sqrt{\\frac{1.225}{\\rho}} \\)</p>
+            <p class="manual-note">Density factor used to move between CAS and TAS.</p>
+            <p class="manual-formula">\\( V_{TAS}=V_{CAS}\\,F \\qquad V_{CAS}=\\frac{V_{TAS}}{F} \\)</p>
+            <p class="manual-note">Forward and reverse speed conversion.</p>
           </div>
           <div class="manual-section">
-            <h3>Wind / Heading</h3>
-            <p class="manual-formula">REL = windDir - TC</p>
-            <p class="manual-formula">WCA = asin((WIND_SPD * sin(REL)) / TAS)</p>
-            <p class="manual-formula">GS = TAS * cos(WCA) - WIND_SPD * cos(REL)</p>
-            <p class="manual-formula">WIND_SPD = (TAS * cos(WCA) - GS) / cos(REL)</p>
-            <p class="manual-formula">WIND_SPD = (TAS * sin(WCA)) / sin(REL)</p>
-            <p class="manual-formula">TAS = (GS + WIND_SPD * cos(REL)) / cos(WCA)</p>
-            <p class="manual-formula">TAS = (WIND_SPD * sin(REL)) / sin(WCA)</p>
-            <p>Reverse solving priority: cosine formula first, sine fallback.</p>
+            <h3>Wind Triangle</h3>
+            <p class="manual-formula">\\( \\Delta = \\theta_{wind} - \\theta_{course} \\)</p>
+            <p class="manual-note">Relative wind angle to course.</p>
+            <p class="manual-formula">\\( \\text{WCA}=\\arcsin\\!\\left(\\frac{W\\sin\\Delta}{V_{TAS}}\\right) \\)</p>
+            <p class="manual-note">Wind correction angle.</p>
+            <p class="manual-formula">\\( V_{GS}=V_{TAS}\\cos(\\text{WCA})-W\\cos\\Delta \\)</p>
+            <p class="manual-note">Ground speed along track.</p>
+            <p class="manual-formula">\\( W=\\frac{V_{TAS}\\cos(\\text{WCA})-V_{GS}}{\\cos\\Delta} \\)</p>
+            <p class="manual-formula">\\( W=\\frac{V_{TAS}\\sin(\\text{WCA})}{\\sin\\Delta} \\)</p>
+            <p class="manual-note">Wind speed reverse solve (cosine first, sine fallback).</p>
+            <p class="manual-formula">\\( V_{TAS}=\\frac{V_{GS}+W\\cos\\Delta}{\\cos(\\text{WCA})} \\)</p>
+            <p class="manual-formula">\\( V_{TAS}=\\frac{W\\sin\\Delta}{\\sin(\\text{WCA})} \\)</p>
+            <p class="manual-note">TAS reverse solve (cosine first, sine fallback).</p>
           </div>
           <div class="manual-section">
-            <h3>Time / Distance</h3>
-            <p class="manual-formula">EE = (DIST / GS) * 60</p>
-            <p class="manual-formula">DIST = (GS * EE) / 60</p>
-            <p class="manual-formula">GS = DIST / (EE / 60)</p>
-            <p>Derived time uses minutes only (max 1 decimal).</p>
+            <h3>Leg Time / Distance</h3>
+            <p class="manual-formula">\\( t_{min}=\\frac{d_{NM}}{V_{GS}}\\times 60 \\)</p>
+            <p class="manual-note">Compute elapsed leg time.</p>
+            <p class="manual-formula">\\( d_{NM}=\\frac{V_{GS}\\,t_{min}}{60} \\)</p>
+            <p class="manual-note">Compute distance from speed and time.</p>
+            <p class="manual-formula">\\( V_{GS}=\\frac{d_{NM}}{t_{min}/60} \\)</p>
+            <p class="manual-note">Compute groundspeed from distance and time.</p>
           </div>
           <div class="manual-section">
             <h3>TOC / TOD</h3>
-            <p class="manual-formula">TOC altitude gain = ALT(route 2) - ALT(route 1)</p>
-            <p class="manual-formula">TOC time = altitude gain / ROC</p>
-            <p class="manual-formula">TOC distance = TOC time * (GS / 60)</p>
-            <p class="manual-formula">TOD altitude lose = ALT(second last) - ALT(last)</p>
-            <p class="manual-formula">TOD time = altitude lose / ROD</p>
-            <p class="manual-formula">TOD distance = TOD time * (GS / 60)</p>
+            <p class="manual-formula">\\( \\Delta h_{TOC}=h_2-h_1 \\)</p>
+            <p class="manual-note">Climb needed from first-route altitude to second-route altitude.</p>
+            <p class="manual-formula">\\( t_{TOC}=\\frac{\\Delta h_{TOC}}{ROC} \\)</p>
+            <p class="manual-formula">\\( d_{TOC}=t_{TOC}\\cdot\\frac{V_{GS}}{60} \\)</p>
+            <p class="manual-note">TOC time and distance.</p>
+            <p class="manual-formula">\\( \\Delta h_{TOD}=h_{secondLast}-h_{last} \\)</p>
+            <p class="manual-formula">\\( t_{TOD}=\\frac{\\Delta h_{TOD}}{ROD} \\)</p>
+            <p class="manual-formula">\\( d_{TOD}=t_{TOD}\\cdot\\frac{V_{GS}}{60} \\)</p>
+            <p class="manual-note">TOD time and distance.</p>
           </div>
           <div class="manual-section">
-            <h3>Preset Route Behavior</h3>
-            <p>If preset route is used and a leg is removed, TC of next leg is cleared for manual entry.</p>
+            <h3>Route Preset Logic</h3>
+            <p>If a preset route is active and you remove a leg, the next leg TC is cleared so you can enter it manually.</p>
           </div>
           <div class="manual-section">
-            <h3>Airport Row Helper</h3>
-            <p>Type airport code in LOCATION and press Enter to auto-fill radio/frequency fields.</p>
+            <h3>Airport Autofill</h3>
+            <p>In LOCATION, type airport code and press Enter to auto-fill frequency/remarks fields.</p>
           </div>
           <div class="manual-section">
             <h3>Warnings</h3>
-            <p>If abs((WIND_SPD * sin(REL)) / TAS) &gt; 1, WCA shows "Wind too strong".</p>
+            <p class="manual-formula">\\( \\left|\\frac{W\\sin\\Delta}{V_{TAS}}\\right| &gt; 1 \\Rightarrow \\) Wind too strong</p>
+            <p class="manual-note">When this fails, WCA is not physically solvable for the given inputs.</p>
+          </div>
+          <div class="manual-section">
+            <h3>Settings</h3>
+            <p>Settings lets you choose altitude unit (ft/m), speed unit (kts/mph), and time style (minutes/HH:MM:SS).</p>
+            <p>EE rounding toggle defaults ON. Turn it OFF for unrounded EE display.</p>
           </div>
         </section>
       </main>
@@ -232,6 +264,7 @@
 
   function renderNavlogScreen() {
     const h = state.navlog.header;
+    const settingsPanel = renderSettingsPanel();
     return `
       <div class="ui-scale">
       <main class="page">
@@ -242,10 +275,13 @@
             <div class="utc-pill" id="utc-clock">UTC ${formatUtcNow()}</div>
           </div>
           <div class="top-side right">
+            <button class="action" id="open-settings">Settings</button>
             <button class="action" id="new-sheet">New</button>
             <button class="action primary" id="save-sheet">Save</button>
           </div>
         </section>
+
+        ${settingsPanel}
 
         <section class="sheet-wrap">
           <div class="sheet">
@@ -280,6 +316,8 @@
   }
 
   function renderRouteTable() {
+    const speedUnitLabel = state.settings.speedUnit === "mph" ? "MPH" : "KTS";
+    const altUnitLabel = state.settings.altitudeUnit === "m" ? "M" : "FT";
     return `
       <section class="nav-table">
         <div class="nav-head-grid">
@@ -288,17 +326,17 @@
           <div class="head-cell group wind-head">WIND</div>
           <div class="head-cell tall tc-head">TC</div>
           <div class="head-cell tall wca-head">WCA</div>
-          <div class="head-cell tall ta-head">TA (KTS)</div>
-          <div class="head-cell tall gs-head">GS (KTS)</div>
+          <div class="head-cell tall ta-head">TA (${speedUnitLabel})</div>
+          <div class="head-cell tall gs-head">GS (${speedUnitLabel})</div>
           <div class="head-cell tall dis-head">DIS (NM)</div>
           <div class="head-cell tall ee-head">EE</div>
           <div class="head-cell tall et-head">ET</div>
           <div class="head-cell tall at-head">AT</div>
-          <div class="head-cell sub cas-head">CAS (KTS)</div>
-          <div class="head-cell sub alt-head">ALT (FT)</div>
+          <div class="head-cell sub cas-head">CAS (${speedUnitLabel})</div>
+          <div class="head-cell sub alt-head">ALT (${altUnitLabel})</div>
           <div class="head-cell sub temp-head">TEMP (C)</div>
           <div class="head-cell sub dir-head">DIR</div>
-          <div class="head-cell sub spd-head">SPD (KTS)</div>
+          <div class="head-cell sub spd-head">SPD (${speedUnitLabel})</div>
         </div>
         <div class="table-body">
           ${state.navlog.legs.map((leg, index) => renderLegRow(leg, index)).join("")}
@@ -317,13 +355,14 @@
 
   function legFieldValue(leg, field) {
     if (leg._errors && leg._errors[field] && !(leg._manual && leg._manual[field])) {
-      return leg._errors[field];
+      return "";
     }
     return leg[field];
   }
 
   function renderLegRow(leg, index) {
     const removable = index > 0 && index < state.navlog.legs.length - 1;
+    const altExtra = index === 0 ? "first-alt" : "";
     return `
       <div class="leg-row">
         <div class="${legFieldClass(leg, "route", "route route-cell")}">
@@ -331,7 +370,7 @@
           ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
         </div>
         <div class="${legFieldClass(leg, "cas")}"><input data-leg-field="${index}:cas" value="${escapeAttr(legFieldValue(leg, "cas"))}" /></div>
-        <div class="${legFieldClass(leg, "alt")}"><input data-leg-field="${index}:alt" placeholder="${index === 0 ? "enter airport elevation" : ""}" value="${escapeAttr(legFieldValue(leg, "alt"))}" /></div>
+        <div class="${legFieldClass(leg, "alt", altExtra)}"><input data-leg-field="${index}:alt" placeholder="${index === 0 ? " " : ""}" value="${escapeAttr(legFieldValue(leg, "alt"))}" /></div>
         <div class="${legFieldClass(leg, "temp")}"><input data-leg-field="${index}:temp" value="${escapeAttr(legFieldValue(leg, "temp"))}" /></div>
         <div class="${legFieldClass(leg, "windDir")}"><input data-leg-field="${index}:windDir" value="${escapeAttr(legFieldValue(leg, "windDir"))}" /></div>
         <div class="${legFieldClass(leg, "windSpd")}"><input data-leg-field="${index}:windSpd" value="${escapeAttr(legFieldValue(leg, "windSpd"))}" /></div>
@@ -344,6 +383,49 @@
         <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(legFieldValue(leg, "et"))}" /></div>
         <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" /></div>
       </div>
+    `;
+  }
+
+  function renderSettingsPanel() {
+    const s = state.settings;
+    const classes = `settings-panel${s.open ? " open" : ""}`;
+    return `
+      <section class="${classes}">
+        <div class="settings-head">
+          <h3>Settings</h3>
+          <button type="button" class="action" id="close-settings">Close</button>
+        </div>
+        <div class="settings-grid">
+          <label class="settings-item">
+            <span>Altitude Unit</span>
+            <select id="setting-altitude-unit">
+              <option value="ft" ${s.altitudeUnit === "ft" ? "selected" : ""}>feet (ft)</option>
+              <option value="m" ${s.altitudeUnit === "m" ? "selected" : ""}>meters (m)</option>
+            </select>
+          </label>
+          <label class="settings-item">
+            <span>Speed Unit</span>
+            <select id="setting-speed-unit">
+              <option value="kts" ${s.speedUnit === "kts" ? "selected" : ""}>knots (kts)</option>
+              <option value="mph" ${s.speedUnit === "mph" ? "selected" : ""}>mph</option>
+            </select>
+          </label>
+          <label class="settings-item">
+            <span>Time Display</span>
+            <select id="setting-time-display">
+              <option value="minutes" ${s.timeDisplay === "minutes" ? "selected" : ""}>minutes</option>
+              <option value="hhmmss" ${s.timeDisplay === "hhmmss" ? "selected" : ""}>HH:MM:SS</option>
+            </select>
+          </label>
+          <label class="settings-item settings-item-check">
+            <input type="checkbox" id="setting-ee-rounding" ${s.eeRoundingEnabled ? "checked" : ""} />
+            <span>EE rounding to whole minute</span>
+          </label>
+        </div>
+        <div class="settings-actions">
+          <button type="button" class="action" id="settings-reset-defaults">Reset Defaults</button>
+        </div>
+      </section>
     `;
   }
 
@@ -470,6 +552,17 @@
       state.view = "setup";
       render();
     });
+    document.getElementById("open-settings").addEventListener("click", () => {
+      state.settings.open = true;
+      render();
+    });
+    const closeSettingsButton = document.getElementById("close-settings");
+    if (closeSettingsButton) {
+      closeSettingsButton.addEventListener("click", () => {
+        state.settings.open = false;
+        render();
+      });
+    }
     document.getElementById("new-sheet").addEventListener("click", () => {
       if (!window.confirm("Clear this navlog?")) return;
       state.navlog = createBlankNavlog();
@@ -563,6 +656,13 @@
         leg._manual[field] = nextValue.trim() !== "";
         computeRouteMath({ index, field });
         updateComputedCells({ index, field });
+        if (index === 0 && field === "alt") syncFirstAltHint();
+      });
+      input.addEventListener("focus", () => {
+        syncFirstAltHint();
+      });
+      input.addEventListener("blur", () => {
+        syncFirstAltHint();
       });
     });
 
@@ -613,6 +713,94 @@
         state.navlog[event.target.dataset.footer] = event.target.value;
       });
     });
+
+    const altitudeUnitSelect = document.getElementById("setting-altitude-unit");
+    if (altitudeUnitSelect) {
+      altitudeUnitSelect.addEventListener("change", (event) => {
+        applySettingsChange({ altitudeUnit: event.target.value });
+      });
+    }
+    const speedUnitSelect = document.getElementById("setting-speed-unit");
+    if (speedUnitSelect) {
+      speedUnitSelect.addEventListener("change", (event) => {
+        applySettingsChange({ speedUnit: event.target.value });
+      });
+    }
+    const timeDisplaySelect = document.getElementById("setting-time-display");
+    if (timeDisplaySelect) {
+      timeDisplaySelect.addEventListener("change", (event) => {
+        applySettingsChange({ timeDisplay: event.target.value });
+      });
+    }
+    const eeRoundingToggle = document.getElementById("setting-ee-rounding");
+    if (eeRoundingToggle) {
+      eeRoundingToggle.addEventListener("change", (event) => {
+        applySettingsChange({ eeRoundingEnabled: event.target.checked });
+      });
+    }
+    const resetDefaultsButton = document.getElementById("settings-reset-defaults");
+    if (resetDefaultsButton) {
+      resetDefaultsButton.addEventListener("click", () => {
+        applySettingsChange({
+          altitudeUnit: "ft",
+          speedUnit: "kts",
+          timeDisplay: "minutes",
+          eeRoundingEnabled: true,
+        });
+      });
+    }
+
+    syncFirstAltHint();
+  }
+
+  function applySettingsChange(partial) {
+    const previous = { ...state.settings };
+    const next = { ...state.settings, ...partial };
+    const changed =
+      previous.altitudeUnit !== next.altitudeUnit
+      || previous.speedUnit !== next.speedUnit
+      || previous.timeDisplay !== next.timeDisplay
+      || previous.eeRoundingEnabled !== next.eeRoundingEnabled;
+    if (!changed) return;
+
+    convertStoredValuesForSettingsChange(previous, next);
+    state.settings = next;
+    computeRouteMath();
+    render();
+  }
+
+  function convertStoredValuesForSettingsChange(previous, next) {
+    state.navlog.legs.forEach((leg) => {
+      convertLegField(leg, "alt", previous, next, parseAltitudeInputWithUnit, formatAltitudeDisplayForUnit);
+      convertLegField(leg, "cas", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
+      convertLegField(leg, "windSpd", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
+      convertLegField(leg, "ta", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
+      convertLegField(leg, "gs", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
+      convertLegField(leg, "ee", previous, next, parseDurationInputWithMode, formatEeDisplayWithMode);
+    });
+
+    if (previous.altitudeUnit !== next.altitudeUnit) {
+      const rocInternal = parseClimbRateInputWithUnit(state.navlog.tocTod.roc, previous.altitudeUnit);
+      const rodInternal = parseClimbRateInputWithUnit(state.navlog.tocTod.rod, previous.altitudeUnit);
+      state.navlog.tocTod.roc = rocInternal == null ? state.navlog.tocTod.roc : formatClimbRateDisplayForUnit(rocInternal, next.altitudeUnit);
+      state.navlog.tocTod.rod = rodInternal == null ? state.navlog.tocTod.rod : formatClimbRateDisplayForUnit(rodInternal, next.altitudeUnit);
+    }
+
+    if (previous.timeDisplay !== next.timeDisplay || previous.eeRoundingEnabled !== next.eeRoundingEnabled) {
+      const tocMinutes = parseDurationInputWithMode(state.navlog.tocTod.tocTime, previous.timeDisplay);
+      const todMinutes = parseDurationInputWithMode(state.navlog.tocTod.todTime, previous.timeDisplay);
+      if (tocMinutes != null) state.navlog.tocTod.tocTime = formatGeneralMinutesWithMode(tocMinutes, next.timeDisplay);
+      if (todMinutes != null) state.navlog.tocTod.todTime = formatGeneralMinutesWithMode(todMinutes, next.timeDisplay);
+    }
+  }
+
+  function convertLegField(leg, field, previous, next, parseFn, formatFn) {
+    const raw = String(leg[field] ?? "").trim();
+    if (!raw) return;
+    const internal = parseFn(raw, field === "ee" ? previous.timeDisplay : field === "alt" ? previous.altitudeUnit : previous.speedUnit);
+    if (internal == null) return;
+    const nextMode = field === "ee" ? next.timeDisplay : field === "alt" ? next.altitudeUnit : next.speedUnit;
+    leg[field] = formatFn(internal, nextMode, next.eeRoundingEnabled);
   }
 
   function seedLegs() {
@@ -726,17 +914,17 @@
   function solveLeg(leg, lockedField) {
     const manual = leg._manual || {};
     const values = {
-      cas: manual.cas ? num(leg.cas) : null,
-      alt: manual.alt ? num(leg.alt) : null,
+      cas: manual.cas ? parseSpeedInput(leg.cas) : null,
+      alt: manual.alt ? parseAltitudeInput(leg.alt) : null,
       temp: manual.temp ? num(leg.temp) : null,
       windDir: manual.windDir ? num(leg.windDir) : null,
-      windSpd: manual.windSpd ? num(leg.windSpd) : null,
+      windSpd: manual.windSpd ? parseSpeedInput(leg.windSpd) : null,
       tc: manual.tc ? num(leg.tc) : null,
       wca: manual.wca ? num(leg.wca) : null,
-      ta: manual.ta ? num(leg.ta) : null,
-      gs: manual.gs ? num(leg.gs) : null,
+      ta: manual.ta ? parseSpeedInput(leg.ta) : null,
+      gs: manual.gs ? parseSpeedInput(leg.gs) : null,
       distance: manual.distance ? num(leg.distance) : null,
-      ee: manual.ee ? parseMinutes(leg.ee) : null,
+      ee: manual.ee ? parseDurationInput(leg.ee) : null,
     };
     const derived = {};
     const errors = {};
@@ -803,6 +991,8 @@
         } else if (canDerive("gs")) {
           errors.gs = "Wind too strong";
         }
+      } else {
+        delete errors.gs;
       }
 
       if (values.ta != null && values.wca != null && values.gs != null && cosRel != null && Math.abs(cosRel) > TRIG_TOLERANCE) {
@@ -838,17 +1028,17 @@
       _manual: manual,
       _derived: derived,
       _errors: errors,
-      cas: resolveDisplayField(leg, manual, lockedField, "cas", values.cas, maybeFormat),
-      alt: resolveDisplayField(leg, manual, lockedField, "alt", values.alt, maybeFormat),
+      cas: resolveDisplayField(leg, manual, lockedField, "cas", values.cas, formatSpeedDisplay),
+      alt: resolveDisplayField(leg, manual, lockedField, "alt", values.alt, formatAltitudeDisplay),
       temp: resolveDisplayField(leg, manual, lockedField, "temp", values.temp, maybeFormat),
       windDir: resolveDisplayField(leg, manual, lockedField, "windDir", values.windDir, maybeDegrees),
-      windSpd: resolveDisplayField(leg, manual, lockedField, "windSpd", values.windSpd, maybeFormat),
+      windSpd: resolveDisplayField(leg, manual, lockedField, "windSpd", values.windSpd, formatSpeedDisplay),
       tc: resolveDisplayField(leg, manual, lockedField, "tc", values.tc, maybeDegrees),
       wca: resolveDisplayField(leg, manual, lockedField, "wca", values.wca, maybeSignedDegrees),
-      ta: resolveDisplayField(leg, manual, lockedField, "ta", values.ta, maybeFormat),
-      gs: resolveDisplayField(leg, manual, lockedField, "gs", values.gs, maybeFormat),
+      ta: resolveDisplayField(leg, manual, lockedField, "ta", values.ta, formatSpeedDisplay),
+      gs: resolveDisplayField(leg, manual, lockedField, "gs", values.gs, formatSpeedDisplay),
       distance: resolveDisplayField(leg, manual, lockedField, "distance", values.distance, maybeFormat),
-      ee: resolveDisplayField(leg, manual, lockedField, "ee", values.ee, formatEeMinutes),
+      ee: resolveDisplayField(leg, manual, lockedField, "ee", values.ee, formatEeDisplay),
     };
   }
 
@@ -859,20 +1049,34 @@
     });
   }
 
+  function typesetManualMath() {
+    if (!window.MathJax || !window.MathJax.typesetPromise) {
+      if (manualMathRetryCount >= 20) return;
+      manualMathRetryCount += 1;
+      setTimeout(() => {
+        if (state.view === "manual") typesetManualMath();
+      }, 120);
+      return;
+    }
+    manualMathRetryCount = 0;
+    window.MathJax.typesetClear?.();
+    window.MathJax.typesetPromise().catch(() => {});
+  }
+
   function computeTocTod() {
     const firstLeg = state.navlog.legs[0];
     const secondLeg = state.navlog.legs[1];
     const last = state.navlog.legs[state.navlog.legs.length - 1];
     const secondLast = state.navlog.legs[state.navlog.legs.length - 2];
-    const roc = num(state.navlog.tocTod.roc);
-    const rod = num(state.navlog.tocTod.rod);
+    const roc = parseClimbRateInput(state.navlog.tocTod.roc);
+    const rod = parseClimbRateInput(state.navlog.tocTod.rod);
 
-    const firstAlt = num(firstLeg?.alt);
-    const secondAlt = num(secondLeg?.alt);
+    const firstAlt = parseAltitudeInput(firstLeg?.alt);
+    const secondAlt = parseAltitudeInput(secondLeg?.alt);
     const firstGs = firstAvailableValue("gs");
-    const lastAlt = num(last?.alt);
-    const secondLastAlt = num(secondLast?.alt);
-    const lastGs = num(last?.gs);
+    const lastAlt = parseAltitudeInput(last?.alt);
+    const secondLastAlt = parseAltitudeInput(secondLast?.alt);
+    const lastGs = parseSpeedInput(last?.gs);
 
     state.navlog.tocTod.tocDistance = "";
     state.navlog.tocTod.tocTime = "";
@@ -883,7 +1087,7 @@
       const altitudeToGain = secondAlt - firstAlt;
       const tocTime = altitudeToGain / roc;
       const tocDistance = tocTime * (firstGs / 60);
-      state.navlog.tocTod.tocTime = formatMinutes(tocTime);
+      state.navlog.tocTod.tocTime = formatGeneralMinutes(tocTime);
       state.navlog.tocTod.tocDistance = maybeFormat(tocDistance);
     }
 
@@ -891,7 +1095,7 @@
       const altitudeToLose = Math.max(0, secondLastAlt - lastAlt);
       const todTime = altitudeToLose / rod;
       const todDistance = todTime * (lastGs / 60);
-      state.navlog.tocTod.todTime = formatMinutes(todTime);
+      state.navlog.tocTod.todTime = formatGeneralMinutes(todTime);
       state.navlog.tocTod.todDistance = maybeFormat(todDistance);
     }
   }
@@ -899,7 +1103,13 @@
   function firstAvailableValue(field) {
     const firstTwoLegs = state.navlog.legs.slice(0, 2);
     for (const leg of firstTwoLegs) {
-      const value = num(leg?.[field]);
+      const raw = leg?.[field];
+      const value =
+        field === "gs" || field === "cas" || field === "windSpd" || field === "ta"
+          ? parseSpeedInput(raw)
+          : field === "alt"
+            ? parseAltitudeInput(raw)
+            : num(raw);
       if (value != null) return value;
     }
     return null;
@@ -934,6 +1144,7 @@
       syncLegError(index, "wca", Boolean(leg._errors && leg._errors.wca));
       syncLegError(index, "gs", Boolean(leg._errors && leg._errors.gs));
     });
+    syncFirstAltHint();
 
     const tocDistance = document.querySelector('[data-toc="tocDistance"]');
     const tocTime = document.querySelector('[data-toc="tocTime"]');
@@ -969,8 +1180,19 @@
     wrapper.classList.toggle("error", Boolean(hasError));
     const leg = state.navlog.legs[index];
     const errorText = leg && leg._errors ? leg._errors[field] : "";
-    if (hasError && errorText) wrapper.setAttribute("data-error", errorText);
+    if (hasError && errorText) {
+      const displayError = errorText === "Wind too strong" ? "Wind\ntoo strong" : errorText;
+      wrapper.setAttribute("data-error", displayError);
+    }
     else wrapper.removeAttribute("data-error");
+  }
+
+  function syncFirstAltHint() {
+    const node = document.querySelector('[data-leg-field="0:alt"]');
+    const wrapper = node && node.closest(".field");
+    if (!node || !wrapper) return;
+    const showHint = String(node.value || "").trim() === "" && document.activeElement !== node;
+    wrapper.classList.toggle("show-alt-hint", showHint);
   }
 
   function resolveDisplayField(leg, manual, lockedField, field, derivedValue, formatter) {
@@ -1057,6 +1279,62 @@
     return value == null || !Number.isFinite(value) ? "" : String(Math.round(value));
   }
 
+  function parseAltitudeInput(value) {
+    return parseAltitudeInputWithUnit(value, state.settings.altitudeUnit);
+  }
+
+  function parseAltitudeInputWithUnit(value, unit) {
+    const parsed = num(value);
+    if (parsed == null) return null;
+    return unit === "m" ? parsed * FEET_PER_METER : parsed;
+  }
+
+  function formatAltitudeDisplay(valueFeet) {
+    return formatAltitudeDisplayForUnit(valueFeet, state.settings.altitudeUnit);
+  }
+
+  function formatAltitudeDisplayForUnit(valueFeet, unit) {
+    if (valueFeet == null || !Number.isFinite(valueFeet)) return "";
+    const display = unit === "m" ? valueFeet / FEET_PER_METER : valueFeet;
+    return maybeFormat(display);
+  }
+
+  function parseSpeedInput(value) {
+    return parseSpeedInputWithUnit(value, state.settings.speedUnit);
+  }
+
+  function parseSpeedInputWithUnit(value, unit) {
+    const parsed = num(value);
+    if (parsed == null) return null;
+    return unit === "mph" ? parsed * KNOTS_PER_MPH : parsed;
+  }
+
+  function formatSpeedDisplay(valueKnots) {
+    return formatSpeedDisplayForUnit(valueKnots, state.settings.speedUnit);
+  }
+
+  function formatSpeedDisplayForUnit(valueKnots, unit) {
+    if (valueKnots == null || !Number.isFinite(valueKnots)) return "";
+    const display = unit === "mph" ? valueKnots / KNOTS_PER_MPH : valueKnots;
+    return maybeFormat(display);
+  }
+
+  function parseClimbRateInput(value) {
+    return parseClimbRateInputWithUnit(value, state.settings.altitudeUnit);
+  }
+
+  function parseClimbRateInputWithUnit(value, altitudeUnit) {
+    const parsed = num(value);
+    if (parsed == null) return null;
+    return altitudeUnit === "m" ? parsed * FEET_PER_METER : parsed;
+  }
+
+  function formatClimbRateDisplayForUnit(valueFeetPerMin, altitudeUnit) {
+    if (valueFeetPerMin == null || !Number.isFinite(valueFeetPerMin)) return "";
+    const display = altitudeUnit === "m" ? valueFeetPerMin / FEET_PER_METER : valueFeetPerMin;
+    return maybeFormat(display);
+  }
+
   function normalizeCode(value) {
     return String(value || "").trim().toUpperCase();
   }
@@ -1119,26 +1397,79 @@
     return rounded > 0 ? `+${rounded}` : String(rounded);
   }
 
-  function formatMinutes(minutesFloat) {
-    if (!Number.isFinite(minutesFloat)) return "";
-    const rounded = Math.round(minutesFloat * 10) / 10;
-    const label = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
-    return `${label} min`;
-  }
-
-  function formatEeMinutes(minutesFloat) {
+  function formatMinutesNumber(minutesFloat) {
     if (!Number.isFinite(minutesFloat)) return "";
     const rounded = Math.round(minutesFloat * 10) / 10;
     return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
   }
 
-  function parseMinutes(value) {
+  function formatGeneralMinutes(minutesFloat) {
+    return formatGeneralMinutesWithMode(minutesFloat, state.settings.timeDisplay);
+  }
+
+  function formatGeneralMinutesWithMode(minutesFloat, mode) {
+    if (!Number.isFinite(minutesFloat)) return "";
+    if (mode === "hhmmss") return formatMinutesAsClock(minutesFloat);
+    return `${formatMinutesNumber(minutesFloat)} min`;
+  }
+
+  function formatEeDisplay(minutesFloat) {
+    return formatEeDisplayWithMode(minutesFloat, state.settings.timeDisplay, state.settings.eeRoundingEnabled);
+  }
+
+  function formatEeDisplayWithMode(minutesFloat, mode, eeRoundingEnabled = true) {
+    if (!Number.isFinite(minutesFloat)) return "";
+    if (mode === "hhmmss") return formatMinutesAsClock(minutesFloat);
+    if (eeRoundingEnabled) return String(Math.floor(minutesFloat));
+    return formatMinutesNumber(minutesFloat);
+  }
+
+  function formatMinutesAsClock(minutesFloat) {
+    if (!Number.isFinite(minutesFloat)) return "";
+    const totalSeconds = Math.max(0, Math.round(minutesFloat * 60));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  function parseDurationInput(value) {
+    return parseDurationInputWithMode(value, state.settings.timeDisplay);
+  }
+
+  function parseDurationInputWithMode(value, mode) {
     const text = String(value || "").trim();
     if (!text) return null;
+    if (text.includes(":")) {
+      return parseClockToMinutes(text);
+    }
+    if (mode === "hhmmss" && /^\d{6}$/.test(text)) {
+      const hh = Number(text.slice(0, 2));
+      const mm = Number(text.slice(2, 4));
+      const ss = Number(text.slice(4, 6));
+      if ([hh, mm, ss].some((n) => !Number.isFinite(n))) return null;
+      return (hh * 60) + mm + (ss / 60);
+    }
     const match = text.match(/-?(?:\d+\.?\d*|\.\d+)/);
     if (!match) return null;
     const parsed = Number(match[0]);
     return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function parseClockToMinutes(text) {
+    const parts = String(text).trim().split(":");
+    if (parts.length < 2 || parts.length > 3) return null;
+    const nums = parts.map((part) => Number(part));
+    if (nums.some((n) => !Number.isFinite(n))) return null;
+    let hours = 0;
+    let minutes = 0;
+    let seconds = 0;
+    if (nums.length === 3) {
+      [hours, minutes, seconds] = nums;
+    } else {
+      [minutes, seconds] = nums;
+    }
+    return (hours * 60) + minutes + (seconds / 60);
   }
 
   function normalizeAngle(angle) {
