@@ -48,7 +48,7 @@
       temperatureUnit: "c",
       roundTimeValues: true,
       roundDistanceValues: true,
-      showDistanceToGo: true,
+      showDistanceToGo: false,
       pdfLayout: "default",
     },
     meta: {
@@ -370,17 +370,26 @@
   function getDistanceToGoDisplay(index) {
     if (!state.settings.showDistanceToGo) return "";
     if (!Array.isArray(state.navlog.legs) || index < 0 || index >= state.navlog.legs.length) return "";
-    const firstDistance = parseDistanceInput(state.navlog.legs[0]?.distance);
-    if (firstDistance == null || !Number.isFinite(firstDistance)) return "";
-    if (index === 0) return formatDistanceDisplay(Math.max(0, firstDistance));
+    let startIndex = -1;
+    let startDistance = null;
+    for (let legIndex = 0; legIndex < state.navlog.legs.length; legIndex += 1) {
+      const parsedDistance = parseDistanceInput(state.navlog.legs[legIndex]?.distance);
+      if (parsedDistance == null || !Number.isFinite(parsedDistance)) continue;
+      startIndex = legIndex;
+      startDistance = Math.max(0, parsedDistance);
+      break;
+    }
+    if (startIndex < 0 || startDistance == null) return "";
+    if (index < startIndex) return "";
+    if (index === startIndex) return formatDistanceDisplay(startDistance);
 
     let subtractDistance = 0;
-    for (let legIndex = 1; legIndex <= index; legIndex += 1) {
+    for (let legIndex = startIndex + 1; legIndex <= index; legIndex += 1) {
       const parsedDistance = parseDistanceInput(state.navlog.legs[legIndex]?.distance);
       if (parsedDistance == null || !Number.isFinite(parsedDistance)) continue;
       subtractDistance += Math.max(0, parsedDistance);
     }
-    const distanceToGo = Math.max(0, firstDistance - subtractDistance);
+    const distanceToGo = Math.max(0, startDistance - subtractDistance);
     return formatDistanceDisplay(distanceToGo);
   }
 
@@ -874,7 +883,7 @@
           temperatureUnit: "c",
           roundTimeValues: true,
           roundDistanceValues: true,
-          showDistanceToGo: true,
+          showDistanceToGo: false,
           pdfLayout: "default",
         });
       });
