@@ -717,7 +717,13 @@
       }
 
       if (values.ta != null && values.wca != null && values.windSpd != null && cosRel != null) {
-        assignDerived("gs", (values.ta * cosWca) - (values.windSpd * cosRel));
+        const computedGs = (values.ta * cosWca) - (values.windSpd * cosRel);
+        if (computedGs > TRIG_TOLERANCE) {
+          assignDerived("gs", computedGs);
+          delete errors.gs;
+        } else if (canDerive("gs")) {
+          errors.gs = "Wind too strong";
+        }
       }
 
       if (values.ta != null && values.wca != null && values.gs != null && cosRel != null && Math.abs(cosRel) > TRIG_TOLERANCE) {
@@ -763,7 +769,7 @@
       ta: resolveDisplayField(leg, manual, lockedField, "ta", values.ta, maybeFormat),
       gs: resolveDisplayField(leg, manual, lockedField, "gs", values.gs, maybeFormat),
       distance: resolveDisplayField(leg, manual, lockedField, "distance", values.distance, maybeFormat),
-      ee: resolveDisplayField(leg, manual, lockedField, "ee", values.ee, formatMinutes),
+      ee: resolveDisplayField(leg, manual, lockedField, "ee", values.ee, formatEeMinutes),
     };
   }
 
@@ -840,6 +846,7 @@
       syncLegDerived(index, "ee", Boolean(leg._derived && leg._derived.ee));
 
       syncLegError(index, "wca", Boolean(leg._errors && leg._errors.wca));
+      syncLegError(index, "gs", Boolean(leg._errors && leg._errors.gs));
     });
 
     const tocDistance = document.querySelector('[data-toc="tocDistance"]');
@@ -857,8 +864,8 @@
     const node = document.querySelector(`[data-leg-field="${index}:${field}"]`);
     if (!node) return;
     const displayValue =
-      field === "wca" && leg && leg._errors && leg._errors.wca && !(leg._manual && leg._manual.wca)
-        ? leg._errors.wca
+      leg && leg._errors && leg._errors[field] && !(leg._manual && leg._manual[field])
+        ? leg._errors[field]
         : value;
     node.value = displayValue;
   }
@@ -1026,6 +1033,12 @@
     const rounded = Math.round(minutesFloat * 10) / 10;
     const label = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
     return `${label} min`;
+  }
+
+  function formatEeMinutes(minutesFloat) {
+    if (!Number.isFinite(minutesFloat)) return "";
+    const rounded = Math.round(minutesFloat * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
   }
 
   function parseMinutes(value) {

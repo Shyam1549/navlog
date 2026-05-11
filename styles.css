@@ -383,6 +383,11 @@ select { font: inherit; }
   font-size: 0.94rem;
 }
 
+.field input::placeholder {
+  font-size: 0.72rem;
+  line-height: 1.1;
+}
+
 .field.derived input {
   background: transparent;
   font-weight: 700;
@@ -391,6 +396,14 @@ select { font: inherit; }
 .field.error input {
   color: #b33a2b;
   font-weight: 700;
+  font-size: 0.7rem;
+  line-height: 1.1;
+  padding: 6px 4px;
+}
+
+.field input[data-leg-field$=":alt"]::placeholder {
+  font-size: 0.66rem;
+  letter-spacing: 0;
 }
 
 .route-cell,
