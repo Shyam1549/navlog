@@ -148,7 +148,6 @@
             <h1>Navlog</h1>
             <div class="utc-pill" id="utc-clock">UTC ${formatUtcNow()}</div>
             <p class="setup-caption">Enter your DEP and ARR aerodrome.</p>
-            <p class="maintenance-warning">Maintenance notice: this tool is undergoing major math changes. Do not rely on these calculations for now.</p>
           </div>
         </section>
         <section class="setup-card">
@@ -371,27 +370,17 @@
   function getDistanceToGoDisplay(index) {
     if (!state.settings.showDistanceToGo) return "";
     if (!Array.isArray(state.navlog.legs) || index < 0 || index >= state.navlog.legs.length) return "";
-    // Distance-to-go starts at waypoint rows (index 1 onward), not the departure row.
-    const startIndex = state.navlog.legs.length > 1 ? 1 : 0;
-    if (index < startIndex) return "";
-
-    let totalFromFirstWaypoint = 0;
-    let hasAnyDistance = false;
-    for (let legIndex = startIndex; legIndex < state.navlog.legs.length; legIndex += 1) {
-      const parsedDistance = parseDistanceInput(state.navlog.legs[legIndex]?.distance);
-      if (parsedDistance == null || !Number.isFinite(parsedDistance)) continue;
-      totalFromFirstWaypoint += Math.max(0, parsedDistance);
-      hasAnyDistance = true;
-    }
-    if (!hasAnyDistance) return "";
+    const firstDistance = parseDistanceInput(state.navlog.legs[0]?.distance);
+    if (firstDistance == null || !Number.isFinite(firstDistance)) return "";
+    if (index === 0) return formatDistanceDisplay(Math.max(0, firstDistance));
 
     let subtractDistance = 0;
-    for (let legIndex = startIndex; legIndex < index; legIndex += 1) {
+    for (let legIndex = 1; legIndex <= index; legIndex += 1) {
       const parsedDistance = parseDistanceInput(state.navlog.legs[legIndex]?.distance);
       if (parsedDistance == null || !Number.isFinite(parsedDistance)) continue;
       subtractDistance += Math.max(0, parsedDistance);
     }
-    const distanceToGo = Math.max(0, totalFromFirstWaypoint - subtractDistance);
+    const distanceToGo = Math.max(0, firstDistance - subtractDistance);
     return formatDistanceDisplay(distanceToGo);
   }
 
