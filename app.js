@@ -56,6 +56,8 @@
   const TRIG_TOLERANCE = 1e-6;
   const FEET_PER_METER = 3.280839895013123;
   const KNOTS_PER_MPH = 0.868976;
+  const KNOTS_PER_KMH = 1 / 1.852;
+  const KNOTS_PER_MS = 1.9438444924406046;
   let utcTimer = null;
   let manualMathRetryCount = 0;
 
@@ -184,59 +186,54 @@
         </section>
         <section class="setup-card manual-card">
           <div class="manual-section">
-            <h3>Quick Legend</h3>
-            <p><strong>Altitude:</strong> pressure altitude. <strong>Temperature:</strong> outside air temp.</p>
-            <p><strong>Course:</strong> true course. <strong>Wind Dir:</strong> direction wind comes from.</p>
-            <p><strong>Speed:</strong> TAS/CAS/GS. <strong>Time:</strong> leg elapsed time.</p>
+            <h3>Variables</h3>
+            <div class="manual-vars">
+              <p><strong>h</strong> altitude</p>
+              <p><strong>T</strong> temperature (C)</p>
+              <p><strong>P</strong> pressure</p>
+              <p><strong>rho</strong> air density</p>
+              <p><strong>F</strong> TAS factor</p>
+              <p><strong>Vcas</strong> calibrated airspeed</p>
+              <p><strong>Vtas</strong> true airspeed</p>
+              <p><strong>Vgs</strong> groundspeed</p>
+              <p><strong>W</strong> wind speed</p>
+              <p><strong>Delta</strong> relative wind angle</p>
+              <p><strong>WCA</strong> wind correction angle</p>
+              <p><strong>d</strong> distance (NM)</p>
+              <p><strong>t</strong> time (min)</p>
+            </div>
           </div>
           <div class="manual-section">
             <h3>Density / TAS Factor</h3>
-            <p class="manual-formula">\\( h_m = 0.3048\\,h_{ft} \\)</p>
-            <p class="manual-note">Convert altitude in feet to meters.</p>
-            <p class="manual-formula">\\( P = 101325\\left(1 - \\frac{0.0065h_m}{288.15}\\right)^{5.2558797} \\)</p>
-            <p class="manual-note">Estimate pressure at altitude.</p>
-            <p class="manual-formula">\\( \\rho = \\frac{P}{287.05\\,(T_C+273.15)} \\)</p>
-            <p class="manual-note">Compute air density from pressure and temperature.</p>
-            <p class="manual-formula">\\( F = \\sqrt{\\frac{1.225}{\\rho}} \\)</p>
-            <p class="manual-note">Density factor used to move between CAS and TAS.</p>
-            <p class="manual-formula">\\( V_{TAS}=V_{CAS}\\,F \\qquad V_{CAS}=\\frac{V_{TAS}}{F} \\)</p>
-            <p class="manual-note">Forward and reverse speed conversion.</p>
+            <div class="manual-row"><p class="manual-formula">\\( P = 101325\\left(1 - \\frac{0.0065h}{288.15}\\right)^{5.2558797} \\)</p><p class="manual-note">Pressure at altitude.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( \\rho = \\frac{P}{287.05\\,(T+273.15)} \\)</p><p class="manual-note">Air density from pressure + temperature.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( F = \\sqrt{\\frac{1.225}{\\rho}} \\)</p><p class="manual-note">Density factor.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( V_{tas}=V_{cas}\\,F \\quad\\text{and}\\quad V_{cas}=\\frac{V_{tas}}{F} \\)</p><p class="manual-note">Convert CAS and TAS both ways.</p></div>
           </div>
           <div class="manual-section">
             <h3>Wind Triangle</h3>
-            <p class="manual-formula">\\( \\Delta = \\theta_{wind} - \\theta_{course} \\)</p>
-            <p class="manual-note">Relative wind angle to course.</p>
-            <p class="manual-formula">\\( \\text{WCA}=\\arcsin\\!\\left(\\frac{W\\sin\\Delta}{V_{TAS}}\\right) \\)</p>
-            <p class="manual-note">Wind correction angle.</p>
-            <p class="manual-formula">\\( V_{GS}=V_{TAS}\\cos(\\text{WCA})-W\\cos\\Delta \\)</p>
-            <p class="manual-note">Ground speed along track.</p>
-            <p class="manual-formula">\\( W=\\frac{V_{TAS}\\cos(\\text{WCA})-V_{GS}}{\\cos\\Delta} \\)</p>
-            <p class="manual-formula">\\( W=\\frac{V_{TAS}\\sin(\\text{WCA})}{\\sin\\Delta} \\)</p>
-            <p class="manual-note">Wind speed reverse solve (cosine first, sine fallback).</p>
-            <p class="manual-formula">\\( V_{TAS}=\\frac{V_{GS}+W\\cos\\Delta}{\\cos(\\text{WCA})} \\)</p>
-            <p class="manual-formula">\\( V_{TAS}=\\frac{W\\sin\\Delta}{\\sin(\\text{WCA})} \\)</p>
-            <p class="manual-note">TAS reverse solve (cosine first, sine fallback).</p>
+            <div class="manual-row"><p class="manual-formula">\\( \\Delta = \\theta_{wind}-\\theta_{course} \\)</p><p class="manual-note">Relative wind angle.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( WCA=\\arcsin\\!\\left(\\frac{W\\sin\\Delta}{V_{tas}}\\right) \\)</p><p class="manual-note">Wind correction angle.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( V_{gs}=V_{tas}\\cos(WCA)-W\\cos\\Delta \\)</p><p class="manual-note">Track speed over ground.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( W=\\frac{V_{tas}\\cos(WCA)-V_{gs}}{\\cos\\Delta} \\)</p><p class="manual-note">Reverse wind (priority formula).</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( W=\\frac{V_{tas}\\sin(WCA)}{\\sin\\Delta} \\)</p><p class="manual-note">Fallback wind formula.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( V_{tas}=\\frac{V_{gs}+W\\cos\\Delta}{\\cos(WCA)} \\)</p><p class="manual-note">Reverse TAS (priority formula).</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( V_{tas}=\\frac{W\\sin\\Delta}{\\sin(WCA)} \\)</p><p class="manual-note">Fallback TAS formula.</p></div>
           </div>
           <div class="manual-section">
             <h3>Leg Time / Distance</h3>
-            <p class="manual-formula">\\( t_{min}=\\frac{d_{NM}}{V_{GS}}\\times 60 \\)</p>
-            <p class="manual-note">Compute elapsed leg time.</p>
-            <p class="manual-formula">\\( d_{NM}=\\frac{V_{GS}\\,t_{min}}{60} \\)</p>
-            <p class="manual-note">Compute distance from speed and time.</p>
-            <p class="manual-formula">\\( V_{GS}=\\frac{d_{NM}}{t_{min}/60} \\)</p>
-            <p class="manual-note">Compute groundspeed from distance and time.</p>
+            <div class="manual-row"><p class="manual-formula">\\( t=\\frac{d}{V_{gs}}\\times 60 \\)</p><p class="manual-note">Time from distance and groundspeed.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( d=\\frac{V_{gs}\\,t}{60} \\)</p><p class="manual-note">Distance from speed and time.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( V_{gs}=\\frac{d}{t/60} \\)</p><p class="manual-note">Groundspeed from distance and time.</p></div>
           </div>
           <div class="manual-section">
             <h3>TOC / TOD</h3>
-            <p class="manual-formula">\\( \\Delta h_{TOC}=h_2-h_1 \\)</p>
-            <p class="manual-note">Climb needed from first-route altitude to second-route altitude.</p>
-            <p class="manual-formula">\\( t_{TOC}=\\frac{\\Delta h_{TOC}}{ROC} \\)</p>
-            <p class="manual-formula">\\( d_{TOC}=t_{TOC}\\cdot\\frac{V_{GS}}{60} \\)</p>
-            <p class="manual-note">TOC time and distance.</p>
-            <p class="manual-formula">\\( \\Delta h_{TOD}=h_{secondLast}-h_{last} \\)</p>
-            <p class="manual-formula">\\( t_{TOD}=\\frac{\\Delta h_{TOD}}{ROD} \\)</p>
-            <p class="manual-formula">\\( d_{TOD}=t_{TOD}\\cdot\\frac{V_{GS}}{60} \\)</p>
-            <p class="manual-note">TOD time and distance.</p>
+            <div class="manual-row"><p class="manual-formula">\\( \\Delta h_{toc}=h_2-h_1 \\)</p><p class="manual-note">Altitude to gain for climb.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( t_{toc}=\\frac{\\Delta h_{toc}}{ROC} \\)</p><p class="manual-note">TOC time.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( d_{toc}=t_{toc}\\cdot\\frac{V_{gs}}{60} \\)</p><p class="manual-note">TOC distance.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( \\Delta h_{tod}=h_{secondLast}-h_{last} \\)</p><p class="manual-note">Altitude to lose for descent.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( t_{tod}=\\frac{\\Delta h_{tod}}{ROD} \\)</p><p class="manual-note">TOD time.</p></div>
+            <div class="manual-row"><p class="manual-formula">\\( d_{tod}=t_{tod}\\cdot\\frac{V_{gs}}{60} \\)</p><p class="manual-note">TOD distance.</p></div>
           </div>
           <div class="manual-section">
             <h3>Route Preset Logic</h3>
@@ -248,13 +245,11 @@
           </div>
           <div class="manual-section">
             <h3>Warnings</h3>
-            <p class="manual-formula">\\( \\left|\\frac{W\\sin\\Delta}{V_{TAS}}\\right| &gt; 1 \\Rightarrow \\) Wind too strong</p>
-            <p class="manual-note">When this fails, WCA is not physically solvable for the given inputs.</p>
+            <div class="manual-row"><p class="manual-formula">\\( \\left|\\frac{W\\sin\\Delta}{V_{tas}}\\right| &gt; 1 \\Rightarrow \\text{Wind too strong} \\)</p><p class="manual-note">WCA is not physically solvable for that input mix.</p></div>
           </div>
           <div class="manual-section">
             <h3>Settings</h3>
-            <p>Settings lets you choose altitude unit (ft/m), speed unit (kts/mph), and time style (minutes/HH:MM:SS).</p>
-            <p>EE rounding toggle defaults ON. Turn it OFF for unrounded EE display.</p>
+            <p>Settings lets you choose altitude unit, speed unit, time display style, and EE rounding behavior.</p>
           </div>
         </section>
       </main>
@@ -316,7 +311,14 @@
   }
 
   function renderRouteTable() {
-    const speedUnitLabel = state.settings.speedUnit === "mph" ? "MPH" : "KTS";
+    const speedUnitLabel =
+      state.settings.speedUnit === "mph"
+        ? "MPH"
+        : state.settings.speedUnit === "kmh"
+          ? "KM/H"
+          : state.settings.speedUnit === "ms"
+            ? "M/S"
+            : "KTS";
     const altUnitLabel = state.settings.altitudeUnit === "m" ? "M" : "FT";
     return `
       <section class="nav-table">
@@ -408,6 +410,8 @@
             <select id="setting-speed-unit">
               <option value="kts" ${s.speedUnit === "kts" ? "selected" : ""}>knots (kts)</option>
               <option value="mph" ${s.speedUnit === "mph" ? "selected" : ""}>mph</option>
+              <option value="kmh" ${s.speedUnit === "kmh" ? "selected" : ""}>km/h</option>
+              <option value="ms" ${s.speedUnit === "ms" ? "selected" : ""}>m/s</option>
             </select>
           </label>
           <label class="settings-item">
@@ -1306,7 +1310,10 @@
   function parseSpeedInputWithUnit(value, unit) {
     const parsed = num(value);
     if (parsed == null) return null;
-    return unit === "mph" ? parsed * KNOTS_PER_MPH : parsed;
+    if (unit === "mph") return parsed * KNOTS_PER_MPH;
+    if (unit === "kmh") return parsed * KNOTS_PER_KMH;
+    if (unit === "ms") return parsed * KNOTS_PER_MS;
+    return parsed;
   }
 
   function formatSpeedDisplay(valueKnots) {
@@ -1315,7 +1322,14 @@
 
   function formatSpeedDisplayForUnit(valueKnots, unit) {
     if (valueKnots == null || !Number.isFinite(valueKnots)) return "";
-    const display = unit === "mph" ? valueKnots / KNOTS_PER_MPH : valueKnots;
+    const display =
+      unit === "mph"
+        ? valueKnots / KNOTS_PER_MPH
+        : unit === "kmh"
+          ? valueKnots / KNOTS_PER_KMH
+          : unit === "ms"
+            ? valueKnots / KNOTS_PER_MS
+            : valueKnots;
     return maybeFormat(display);
   }
 
