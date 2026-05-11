@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
   const RPC_TO_AIRCRAFT = {
     "832": "C152",
     "840": "C152",
@@ -48,6 +48,7 @@
       temperatureUnit: "c",
       roundTimeValues: true,
       roundDistanceValues: true,
+      pdfLayout: "default",
     },
     meta: {
       hasOpenedSheet: false,
@@ -237,20 +238,27 @@
             <div class="manual-row"><p class="manual-formula">\\( d_{tod}=t_{tod}\\cdot\\frac{V_{gs}}{60} \\)</p><p class="manual-note">TOD distance.</p></div>
           </div>
           <div class="manual-section">
-            <h3>Route Preset Logic</h3>
-            <p>If a preset route is active and you remove a leg, the next leg TC is cleared so you can enter it manually.</p>
+            <h3>Math Flow</h3>
+            <div class="manual-row"><p class="manual-formula">Input priority</p><p class="manual-note">User-entered values stay fixed. Empty values are solved from available equations.</p></div>
+            <div class="manual-row"><p class="manual-formula">Reverse solving</p><p class="manual-note">When multiple reverse equations exist, cosine-based wind/TAS equations are used first, then sine fallback.</p></div>
+            <div class="manual-row"><p class="manual-formula">Multi-pass solve</p><p class="manual-note">Solver iterates several passes so newly derived values can unlock other fields.</p></div>
           </div>
           <div class="manual-section">
-            <h3>Airport Autofill</h3>
-            <p>In LOCATION, type airport code and press Enter to auto-fill frequency/remarks fields.</p>
+            <h3>Limits / Guards</h3>
+            <div class="manual-row"><p class="manual-formula">Trig tolerance</p><p class="manual-note">Very small sine/cosine values are treated as zero to avoid unstable division.</p></div>
+            <div class="manual-row"><p class="manual-formula">WCA check</p><p class="manual-note">If \\(\\left|\\frac{W\\sin\\Delta}{V_{tas}}\\right| &gt; 1\\), WCA is invalid and "Wind too strong" is shown.</p></div>
+            <div class="manual-row"><p class="manual-formula">Positive GS requirement</p><p class="manual-note">Derived GS must be above zero; impossible wind cases are blocked.</p></div>
+            <div class="manual-row"><p class="manual-formula">TOC default</p><p class="manual-note">If departure elevation is blank, TOC uses 0 for departure elevation.</p></div>
           </div>
           <div class="manual-section">
-            <h3>Warnings</h3>
-            <div class="manual-row"><p class="manual-formula">\\( \\left|\\frac{W\\sin\\Delta}{V_{tas}}\\right| &gt; 1 \\Rightarrow \\text{Wind too strong} \\)</p><p class="manual-note">WCA is not physically solvable for that input mix.</p></div>
+            <h3>Data Behaviors</h3>
+            <div class="manual-row"><p class="manual-formula">Preset route delete</p><p class="manual-note">If a preset leg is removed, the next leg TC is cleared for manual entry.</p></div>
+            <div class="manual-row"><p class="manual-formula">Airport autofill</p><p class="manual-note">In LOCATION, type airport code and press Enter to auto-fill frequency/remarks.</p></div>
+            <div class="manual-row"><p class="manual-formula">Date entry</p><p class="manual-note">Date uses calendar picker and displays as \\(YY/MM/DD\\).</p></div>
           </div>
           <div class="manual-section">
             <h3>Settings</h3>
-            <p>Settings lets you choose altitude/speed/temperature units, time rounding (EE + TOC/TOD time), and distance rounding (DIS + TOC/TOD distance).</p>
+            <p>Settings controls units, rounding for time/distance outputs, and PDF export mode (Default vs Printable).</p>
           </div>
         </section>
       </main>
@@ -285,7 +293,7 @@
               ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
               <div class="header-box dark static planning-box">PREFLIGHT PLANNER</div>
               ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
-              ${renderHeaderInputBox("DATE", `<input data-header="date" value="${escapeAttr(h.date)}" />`, "date-box")}
+               ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
               ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
               <div class="header-box static navlog-box">NAVIGATION LOG</div>
               ${renderHeaderInputBox("UTC TIME", `<input data-header="timeUtc" value="${escapeAttr(h.timeUtc)}" />`, "utc-box")}
@@ -383,7 +391,7 @@
           <input data-leg-field="${index}:alt" value="${escapeAttr(legFieldValue(leg, "alt"))}" />
           ${
             index === 0
-              ? '<span class="alt-departure-hint" aria-hidden="true"><span>enter departure</span><span>elevation</span></span><button type="button" class="alt-info-badge" data-alt-info-toggle="0" aria-label="Departure elevation info">i</button><span class="alt-info-text" aria-hidden="true">TOC uses (WP1 ALT - DEP ELEV). Blank = 0.</span>'
+              ? '<span class="alt-departure-hint" aria-hidden="true"><span>enter departure</span><span>elevation</span></span><span class="alt-info-wrap" aria-hidden="true"><span class="alt-info-badge">i</span><span class="alt-info-text">The Differential of Departure elevation and Altitude of first way point is used for TOC calculation. Default=0</span></span>'
               : ""
           }
         </div>
@@ -410,7 +418,6 @@
         <div class="settings-head">
           <div class="settings-title-wrap">
             <h3>Settings</h3>
-            <p>Units and rounding behavior</p>
           </div>
           <button type="button" class="action" id="close-settings">Close</button>
         </div>
@@ -448,11 +455,28 @@
           <div class="settings-grid settings-grid-rounding">
             <label class="settings-item settings-item-check">
               <input type="checkbox" id="setting-round-time" ${s.roundTimeValues ? "checked" : ""} />
-              <span>Time: EE and TOC/TOD time</span>
+              <span>Time (EE and TOC/TOD)</span>
             </label>
             <label class="settings-item settings-item-check">
               <input type="checkbox" id="setting-round-distance" ${s.roundDistanceValues ? "checked" : ""} />
-              <span>Distance: DIS and TOC/TOD distance</span>
+              <span>Distance (DIS and TOC/TOD)</span>
+            </label>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4>PDF Export</h4>
+          <div class="settings-pdf-options">
+            <label class="settings-radio">
+              <input type="radio" name="setting-pdf-layout" value="default" ${s.pdfLayout === "default" ? "checked" : ""} />
+              <span>Default</span>
+            </label>
+            <label class="settings-radio">
+              <input type="radio" name="setting-pdf-layout" value="printable" ${s.pdfLayout === "printable" ? "checked" : ""} />
+              <span>Printable</span>
+              <span class="settings-info-wrap" aria-hidden="true">
+                <span class="settings-info-badge">i</span>
+                <span class="settings-info-text">Knee board size appropriate</span>
+              </span>
             </label>
           </div>
         </div>
@@ -587,7 +611,7 @@
       render();
     });
     document.getElementById("open-settings").addEventListener("click", () => {
-      state.settings.open = true;
+      state.settings.open = !state.settings.open;
       render();
     });
     const closeSettingsButton = document.getElementById("close-settings");
@@ -640,7 +664,7 @@
     document.querySelectorAll("[data-header]").forEach((input) => {
       input.addEventListener("input", (event) => {
         const field = event.target.dataset.header;
-        state.navlog.header[field] = event.target.value;
+        state.navlog.header[field] = field === "date" ? normalizeDisplayDate(event.target.value) : event.target.value;
         if (field === "rpCNo") {
           const mappedAircraft = RPC_TO_AIRCRAFT[event.target.value.trim()];
           if (mappedAircraft) {
@@ -656,7 +680,7 @@
       });
       input.addEventListener("change", (event) => {
         const field = event.target.dataset.header;
-        state.navlog.header[field] = event.target.value;
+        state.navlog.header[field] = field === "date" ? normalizeDisplayDate(event.target.value) : event.target.value;
         if (field === "rpCNo") {
           const mappedAircraft = RPC_TO_AIRCRAFT[event.target.value.trim()];
           if (mappedAircraft) {
@@ -699,6 +723,27 @@
         syncFirstAltHint();
       });
     });
+    const datePickerInput = document.querySelector("[data-date-picker]");
+    const datePickerOpen = document.querySelector("[data-date-picker-open]");
+    if (datePickerOpen && datePickerInput) {
+      datePickerOpen.addEventListener("click", () => {
+        if (typeof datePickerInput.showPicker === "function") datePickerInput.showPicker();
+        else datePickerInput.click();
+      });
+      const dateDisplayInput = document.querySelector('[data-header="date"]');
+      if (dateDisplayInput) {
+        dateDisplayInput.addEventListener("click", () => {
+          if (typeof datePickerInput.showPicker === "function") datePickerInput.showPicker();
+          else datePickerInput.click();
+        });
+      }
+      datePickerInput.addEventListener("change", (event) => {
+        const picked = formatDateToDisplay(event.target.value);
+        state.navlog.header.date = picked;
+        const dateInput = document.querySelector('[data-header="date"]');
+        if (dateInput) dateInput.value = picked;
+      });
+    }
 
     document.querySelectorAll("[data-toc-entry]").forEach((input) => {
       input.addEventListener("input", (event) => {
@@ -778,6 +823,11 @@
         applySettingsChange({ roundDistanceValues: event.target.checked });
       });
     }
+    document.querySelectorAll('[name="setting-pdf-layout"]').forEach((input) => {
+      input.addEventListener("change", (event) => {
+        applySettingsChange({ pdfLayout: event.target.value });
+      });
+    });
     const resetDefaultsButton = document.getElementById("settings-reset-defaults");
     if (resetDefaultsButton) {
       resetDefaultsButton.addEventListener("click", () => {
@@ -787,18 +837,10 @@
           temperatureUnit: "c",
           roundTimeValues: true,
           roundDistanceValues: true,
+          pdfLayout: "default",
         });
       });
     }
-
-    document.querySelectorAll("[data-alt-info-toggle]").forEach((button) => {
-      button.addEventListener("click", (event) => {
-        event.preventDefault();
-        const wrapper = button.closest(".field.first-alt");
-        if (!wrapper) return;
-        wrapper.classList.toggle("show-alt-info");
-      });
-    });
 
     syncFirstAltHint();
   }
@@ -806,17 +848,24 @@
   function applySettingsChange(partial) {
     const previous = { ...state.settings };
     const next = { ...state.settings, ...partial };
-    const changed =
+    const affectsMathFormatting =
       previous.altitudeUnit !== next.altitudeUnit
       || previous.speedUnit !== next.speedUnit
       || previous.temperatureUnit !== next.temperatureUnit
       || previous.roundTimeValues !== next.roundTimeValues
       || previous.roundDistanceValues !== next.roundDistanceValues;
+    const changed =
+      affectsMathFormatting
+      || previous.pdfLayout !== next.pdfLayout;
     if (!changed) return;
 
-    convertStoredValuesForSettingsChange(previous, next);
+    if (affectsMathFormatting) {
+      convertStoredValuesForSettingsChange(previous, next);
+    }
     state.settings = next;
-    computeRouteMath();
+    if (affectsMathFormatting) {
+      computeRouteMath();
+    }
     render();
   }
 
@@ -1057,7 +1106,7 @@
         assignDerived("ta", (values.windSpd * sinRel) / sinWca);
       }
 
-      if (values.ta != null && values.wca != null && values.windSpd != null && cosRel != null) {
+      if (values.ta != null && values.wca != null && values.windSpd != null && cosRel != null && cosWca != null && Math.abs(cosWca) > TRIG_TOLERANCE) {
         const computedGs = (values.ta * cosWca) - (values.windSpd * cosRel);
         if (computedGs > TRIG_TOLERANCE) {
           assignDerived("gs", computedGs);
@@ -1069,10 +1118,10 @@
         delete errors.gs;
       }
 
-      if (values.ta != null && values.wca != null && values.gs != null && cosRel != null && Math.abs(cosRel) > TRIG_TOLERANCE) {
+      if (values.ta != null && values.wca != null && values.gs != null && cosRel != null && cosWca != null && Math.abs(cosRel) > TRIG_TOLERANCE) {
         assignDerived("windSpd", ((values.ta * cosWca) - values.gs) / cosRel);
       }
-      if (values.ta != null && values.wca != null && sinRel != null && Math.abs(sinRel) > TRIG_TOLERANCE) {
+      if (values.ta != null && values.wca != null && sinRel != null && sinWca != null && Math.abs(sinRel) > TRIG_TOLERANCE) {
         assignDerived("windSpd", (values.ta * sinWca) / sinRel);
       }
 
@@ -1268,7 +1317,6 @@
     if (!node || !wrapper) return;
     const showHint = String(node.value || "").trim() === "" && document.activeElement !== node;
     wrapper.classList.toggle("show-alt-hint", showHint);
-    if (!showHint) wrapper.classList.remove("show-alt-info");
   }
 
   function resolveDisplayField(leg, manual, lockedField, field, derivedValue, formatter) {
@@ -1652,6 +1700,7 @@
     if (saveButton) saveButton.textContent = "Saving...";
     const pdfViewportWidth = 1366;
     const pdfViewportHeight = 1024;
+    const pdfLayout = state.settings.pdfLayout || "default";
 
     try {
       const canvas = await window.html2canvas(sheet, {
@@ -1662,6 +1711,7 @@
         windowHeight: pdfViewportHeight,
         onclone: (doc) => {
           doc.body.classList.add("pdf-export");
+          doc.body.classList.add(pdfLayout === "printable" ? "pdf-export-printable" : "pdf-export-default");
 
           // Force a desktop-like render box so mobile/tablet exports match desktop proportions.
           doc.documentElement.style.width = `${pdfViewportWidth}px`;
@@ -1688,24 +1738,31 @@
       });
       const image = canvas.toDataURL("image/png");
       const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF("p", "mm", "a4");
-      const pageHeight = 297;
-      const marginLeft = 8;
-      const marginTop = 8;
-      const bottomPadding = 10;
-      const exportWidth = 108;
-      const usableWidth = exportWidth;
-      const usableHeight = pageHeight - marginTop - bottomPadding;
-      const imageHeight = (canvas.height * usableWidth) / canvas.width;
-      let remaining = imageHeight;
-      let y = marginTop;
-      pdf.addImage(image, "PNG", marginLeft, y, usableWidth, imageHeight);
-      remaining -= usableHeight;
-      while (remaining > 0) {
-        pdf.addPage();
-        y = marginTop - (imageHeight - remaining);
+      let pdf;
+      if (pdfLayout === "printable") {
+        pdf = new jsPDF("p", "mm", "a4");
+        const pageHeight = 297;
+        const marginLeft = 8;
+        const marginTop = 8;
+        const bottomPadding = 10;
+        const exportWidth = 108;
+        const usableWidth = exportWidth;
+        const usableHeight = pageHeight - marginTop - bottomPadding;
+        const imageHeight = (canvas.height * usableWidth) / canvas.width;
+        let remaining = imageHeight;
+        let y = marginTop;
         pdf.addImage(image, "PNG", marginLeft, y, usableWidth, imageHeight);
         remaining -= usableHeight;
+        while (remaining > 0) {
+          pdf.addPage();
+          y = marginTop - (imageHeight - remaining);
+          pdf.addImage(image, "PNG", marginLeft, y, usableWidth, imageHeight);
+          remaining -= usableHeight;
+        }
+      } else {
+        const orientation = canvas.width >= canvas.height ? "l" : "p";
+        pdf = new jsPDF({ orientation, unit: "px", format: [canvas.width, canvas.height] });
+        pdf.addImage(image, "PNG", 0, 0, canvas.width, canvas.height);
       }
       pdf.save("vfr-navlog.pdf");
     } finally {
@@ -1719,6 +1776,47 @@
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;");
+  }
+
+  function normalizeDisplayDate(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const asIso = normalizeDateInputValue(raw);
+    if (asIso) return formatDateToDisplay(asIso);
+    return raw.replaceAll("-", "/");
+  }
+
+  function normalizeDateInputValue(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    const slash = text.match(/^(\d{2})\/(\d{2})\/(\d{2})$/);
+    if (slash) {
+      const year = 2000 + Number(slash[1]);
+      const month = Number(slash[2]);
+      const day = Number(slash[3]);
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+    return "";
+  }
+
+  function formatDateToDisplay(isoDate) {
+    const iso = normalizeDateInputValue(isoDate);
+    if (!iso) return "";
+    const [year, month, day] = iso.split("-");
+    return `${year.slice(-2)}/${month}/${day}`;
+  }
+
+  function renderDateHeaderControl(displayDateValue) {
+    const normalizedDisplay = normalizeDisplayDate(displayDateValue);
+    const isoValue = normalizeDateInputValue(normalizedDisplay);
+    return `
+      <span class="date-input-wrap">
+        <input data-header="date" value="${escapeAttr(normalizedDisplay)}" placeholder="yy/mm/dd" />
+        <button type="button" class="date-picker-btn" data-date-picker-open aria-label="Open calendar">CAL</button>
+        <input type="date" class="date-picker-proxy" data-date-picker value="${escapeAttr(isoValue)}" tabindex="-1" aria-hidden="true" />
+      </span>
+    `;
   }
 
   window.addEventListener("beforeunload", (event) => {
