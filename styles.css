@@ -84,6 +84,18 @@ select { font: inherit; }
   text-transform: none;
 }
 
+.maintenance-warning {
+  margin: 12px auto 0;
+  max-width: 760px;
+  padding: 10px 12px;
+  border: 2px solid #b33a2b;
+  border-radius: 10px;
+  background: rgba(179, 58, 43, 0.1);
+  color: #8e2e23;
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
 .setup-card { margin-top: 18px; padding: 20px; }
 .setup-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 16px; align-items: end; }
 .setup-field { display: grid; gap: 8px; }
@@ -373,6 +385,11 @@ select { font: inherit; }
 
 .field.derived input {
   background: transparent;
+  font-weight: 700;
+}
+
+.field.error input {
+  color: #b33a2b;
   font-weight: 700;
 }
 
