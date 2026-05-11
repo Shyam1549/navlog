@@ -444,18 +444,26 @@ select { font: inherit; }
   display: none;
   margin-bottom: 12px;
   border: 2px solid rgba(46, 41, 35, 0.2);
-  border-radius: 14px;
-  background: rgba(251, 247, 239, 0.92);
-  padding: 12px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.75) 0%, rgba(247, 242, 231, 0.95) 100%);
+  box-shadow: 0 8px 22px rgba(46, 41, 35, 0.09);
+  padding: 14px;
 }
 
 .settings-panel.open { display: block; }
 
 .settings-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 10px;
+}
+
+.settings-title-wrap p {
+  margin: 4px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  text-transform: none;
 }
 
 .settings-head h3 {
@@ -465,11 +473,31 @@ select { font: inherit; }
   letter-spacing: 0.03em;
 }
 
+.settings-group {
+  margin-top: 12px;
+  border: 1px solid rgba(46, 41, 35, 0.15);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 10px;
+}
+
+.settings-group h4 {
+  margin: 0;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
 .settings-grid {
   margin-top: 10px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
+}
+
+.settings-grid.settings-grid-rounding {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .settings-item {
@@ -488,12 +516,11 @@ select { font: inherit; }
   min-height: 42px;
   border: 2px solid rgba(46, 41, 35, 0.2);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.86);
   padding: 8px 10px;
 }
 
 .settings-item-check {
-  grid-column: 1 / -1;
   grid-template-columns: auto 1fr;
   align-items: center;
   border: 2px solid rgba(46, 41, 35, 0.14);
@@ -540,21 +567,75 @@ select { font: inherit; }
   pointer-events: none;
 }
 
-.field.first-alt.show-alt-hint::before {
-  content: "enter airport\A elevation";
+.field.first-alt .alt-departure-hint,
+.field.first-alt .alt-info-badge,
+.field.first-alt .alt-info-text {
+  display: none;
+}
+
+.field.first-alt.show-alt-hint .alt-departure-hint {
   position: absolute;
   inset: 0;
   z-index: 2;
   display: flex;
+  flex-direction: column;
+  gap: 1px;
   align-items: center;
   justify-content: center;
   text-align: center;
-  white-space: pre-line;
+  white-space: normal;
   overflow-wrap: anywhere;
   pointer-events: none;
   color: rgba(24, 22, 18, 0.48);
   font-size: 0.94rem;
   line-height: 1.1;
+  padding: 0 4px;
+}
+
+.field.first-alt.show-alt-hint .alt-departure-hint span {
+  display: block;
+  max-width: 100%;
+}
+
+.field.first-alt.show-alt-hint .alt-info-badge {
+  display: inline-flex;
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border: 1.5px solid rgba(46, 41, 35, 0.42);
+  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--ink);
+  font-size: 0.92rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+.field.first-alt.show-alt-hint.show-alt-info .alt-info-text {
+  display: block;
+}
+
+.field.first-alt.show-alt-hint .alt-info-text {
+  position: absolute;
+  z-index: 4;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  border: 1px solid rgba(46, 41, 35, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  padding: 4px 6px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.2;
+  pointer-events: none;
 }
 
 .route-cell,
@@ -732,6 +813,7 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   .toc-tod { grid-template-columns: 1fr; }
 
   .settings-grid { grid-template-columns: 1fr; }
+  .settings-grid.settings-grid-rounding { grid-template-columns: 1fr; }
   .manual-vars { grid-template-columns: 1fr; }
   .manual-row { grid-template-columns: 1fr; gap: 4px; }
 
@@ -809,7 +891,9 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 .pdf-export .toc-tod-card input::placeholder { color: transparent; }
 .pdf-export .route-cell,
 .pdf-export .location-cell { grid-template-columns: 1fr; }
-.pdf-export .field.first-alt.show-alt-hint::before { content: none !important; }
+.pdf-export .alt-departure-hint,
+.pdf-export .alt-info-badge,
+.pdf-export .alt-info-text { display: none !important; }
 .pdf-export .sheet { font-size: 0.88em; }
 .pdf-export .route-cell,
 .pdf-export .location-cell,

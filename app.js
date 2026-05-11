@@ -45,8 +45,9 @@
       open: false,
       altitudeUnit: "ft",
       speedUnit: "kts",
-      timeDisplay: "minutes",
-      eeRoundingEnabled: true,
+      temperatureUnit: "c",
+      roundTimeValues: true,
+      roundDistanceValues: true,
     },
     meta: {
       hasOpenedSheet: false,
@@ -249,7 +250,7 @@
           </div>
           <div class="manual-section">
             <h3>Settings</h3>
-            <p>Settings lets you choose altitude unit, speed unit, time display style, and EE rounding behavior.</p>
+            <p>Settings lets you choose altitude/speed/temperature units, time rounding (EE + TOC/TOD time), and distance rounding (DIS + TOC/TOD distance).</p>
           </div>
         </section>
       </main>
@@ -320,6 +321,12 @@
             ? "M/S"
             : "KTS";
     const altUnitLabel = state.settings.altitudeUnit === "m" ? "M" : "FT";
+    const tempUnitLabel =
+      state.settings.temperatureUnit === "f"
+        ? "F"
+        : state.settings.temperatureUnit === "k"
+          ? "K"
+          : "C";
     return `
       <section class="nav-table">
         <div class="nav-head-grid">
@@ -336,7 +343,7 @@
           <div class="head-cell tall at-head">AT</div>
           <div class="head-cell sub cas-head">CAS (${speedUnitLabel})</div>
           <div class="head-cell sub alt-head">ALT (${altUnitLabel})</div>
-          <div class="head-cell sub temp-head">TEMP (C)</div>
+          <div class="head-cell sub temp-head">TEMP (${tempUnitLabel})</div>
           <div class="head-cell sub dir-head">DIR</div>
           <div class="head-cell sub spd-head">SPD (${speedUnitLabel})</div>
         </div>
@@ -372,7 +379,14 @@
           ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
         </div>
         <div class="${legFieldClass(leg, "cas")}"><input data-leg-field="${index}:cas" value="${escapeAttr(legFieldValue(leg, "cas"))}" /></div>
-        <div class="${legFieldClass(leg, "alt", altExtra)}"><input data-leg-field="${index}:alt" placeholder="${index === 0 ? " " : ""}" value="${escapeAttr(legFieldValue(leg, "alt"))}" /></div>
+        <div class="${legFieldClass(leg, "alt", altExtra)}">
+          <input data-leg-field="${index}:alt" value="${escapeAttr(legFieldValue(leg, "alt"))}" />
+          ${
+            index === 0
+              ? '<span class="alt-departure-hint" aria-hidden="true"><span>enter departure</span><span>elevation</span></span><button type="button" class="alt-info-badge" data-alt-info-toggle="0" aria-label="Departure elevation info">i</button><span class="alt-info-text" aria-hidden="true">TOC uses (WP1 ALT - DEP ELEV). Blank = 0.</span>'
+              : ""
+          }
+        </div>
         <div class="${legFieldClass(leg, "temp")}"><input data-leg-field="${index}:temp" value="${escapeAttr(legFieldValue(leg, "temp"))}" /></div>
         <div class="${legFieldClass(leg, "windDir")}"><input data-leg-field="${index}:windDir" value="${escapeAttr(legFieldValue(leg, "windDir"))}" /></div>
         <div class="${legFieldClass(leg, "windSpd")}"><input data-leg-field="${index}:windSpd" value="${escapeAttr(legFieldValue(leg, "windSpd"))}" /></div>
@@ -394,37 +408,53 @@
     return `
       <section class="${classes}">
         <div class="settings-head">
-          <h3>Settings</h3>
+          <div class="settings-title-wrap">
+            <h3>Settings</h3>
+            <p>Units and rounding behavior</p>
+          </div>
           <button type="button" class="action" id="close-settings">Close</button>
         </div>
-        <div class="settings-grid">
-          <label class="settings-item">
-            <span>Altitude Unit</span>
-            <select id="setting-altitude-unit">
-              <option value="ft" ${s.altitudeUnit === "ft" ? "selected" : ""}>feet (ft)</option>
-              <option value="m" ${s.altitudeUnit === "m" ? "selected" : ""}>meters (m)</option>
-            </select>
-          </label>
-          <label class="settings-item">
-            <span>Speed Unit</span>
-            <select id="setting-speed-unit">
-              <option value="kts" ${s.speedUnit === "kts" ? "selected" : ""}>knots (kts)</option>
-              <option value="mph" ${s.speedUnit === "mph" ? "selected" : ""}>mph</option>
-              <option value="kmh" ${s.speedUnit === "kmh" ? "selected" : ""}>km/h</option>
-              <option value="ms" ${s.speedUnit === "ms" ? "selected" : ""}>m/s</option>
-            </select>
-          </label>
-          <label class="settings-item">
-            <span>Time Display</span>
-            <select id="setting-time-display">
-              <option value="minutes" ${s.timeDisplay === "minutes" ? "selected" : ""}>minutes</option>
-              <option value="hhmmss" ${s.timeDisplay === "hhmmss" ? "selected" : ""}>HH:MM:SS</option>
-            </select>
-          </label>
-          <label class="settings-item settings-item-check">
-            <input type="checkbox" id="setting-ee-rounding" ${s.eeRoundingEnabled ? "checked" : ""} />
-            <span>EE rounding to whole minute</span>
-          </label>
+        <div class="settings-group">
+          <h4>Units</h4>
+          <div class="settings-grid">
+            <label class="settings-item">
+              <span>Altitude</span>
+              <select id="setting-altitude-unit">
+                <option value="ft" ${s.altitudeUnit === "ft" ? "selected" : ""}>feet (ft)</option>
+                <option value="m" ${s.altitudeUnit === "m" ? "selected" : ""}>meters (m)</option>
+              </select>
+            </label>
+            <label class="settings-item">
+              <span>Speed</span>
+              <select id="setting-speed-unit">
+                <option value="kts" ${s.speedUnit === "kts" ? "selected" : ""}>knots (kts)</option>
+                <option value="mph" ${s.speedUnit === "mph" ? "selected" : ""}>miles/hour (mph)</option>
+                <option value="kmh" ${s.speedUnit === "kmh" ? "selected" : ""}>kilometers/hour (km/h)</option>
+                <option value="ms" ${s.speedUnit === "ms" ? "selected" : ""}>meters/second (m/s)</option>
+              </select>
+            </label>
+            <label class="settings-item">
+              <span>Temperature</span>
+              <select id="setting-temperature-unit">
+                <option value="c" ${s.temperatureUnit === "c" ? "selected" : ""}>celsius (C)</option>
+                <option value="f" ${s.temperatureUnit === "f" ? "selected" : ""}>fahrenheit (F)</option>
+                <option value="k" ${s.temperatureUnit === "k" ? "selected" : ""}>kelvin (K)</option>
+              </select>
+            </label>
+          </div>
+        </div>
+        <div class="settings-group">
+          <h4>Rounding</h4>
+          <div class="settings-grid settings-grid-rounding">
+            <label class="settings-item settings-item-check">
+              <input type="checkbox" id="setting-round-time" ${s.roundTimeValues ? "checked" : ""} />
+              <span>Time: EE and TOC/TOD time</span>
+            </label>
+            <label class="settings-item settings-item-check">
+              <input type="checkbox" id="setting-round-distance" ${s.roundDistanceValues ? "checked" : ""} />
+              <span>Distance: DIS and TOC/TOD distance</span>
+            </label>
+          </div>
         </div>
         <div class="settings-actions">
           <button type="button" class="action" id="settings-reset-defaults">Reset Defaults</button>
@@ -730,16 +760,22 @@
         applySettingsChange({ speedUnit: event.target.value });
       });
     }
-    const timeDisplaySelect = document.getElementById("setting-time-display");
-    if (timeDisplaySelect) {
-      timeDisplaySelect.addEventListener("change", (event) => {
-        applySettingsChange({ timeDisplay: event.target.value });
+    const temperatureUnitSelect = document.getElementById("setting-temperature-unit");
+    if (temperatureUnitSelect) {
+      temperatureUnitSelect.addEventListener("change", (event) => {
+        applySettingsChange({ temperatureUnit: event.target.value });
       });
     }
-    const eeRoundingToggle = document.getElementById("setting-ee-rounding");
-    if (eeRoundingToggle) {
-      eeRoundingToggle.addEventListener("change", (event) => {
-        applySettingsChange({ eeRoundingEnabled: event.target.checked });
+    const roundTimeToggle = document.getElementById("setting-round-time");
+    if (roundTimeToggle) {
+      roundTimeToggle.addEventListener("change", (event) => {
+        applySettingsChange({ roundTimeValues: event.target.checked });
+      });
+    }
+    const roundDistanceToggle = document.getElementById("setting-round-distance");
+    if (roundDistanceToggle) {
+      roundDistanceToggle.addEventListener("change", (event) => {
+        applySettingsChange({ roundDistanceValues: event.target.checked });
       });
     }
     const resetDefaultsButton = document.getElementById("settings-reset-defaults");
@@ -748,11 +784,21 @@
         applySettingsChange({
           altitudeUnit: "ft",
           speedUnit: "kts",
-          timeDisplay: "minutes",
-          eeRoundingEnabled: true,
+          temperatureUnit: "c",
+          roundTimeValues: true,
+          roundDistanceValues: true,
         });
       });
     }
+
+    document.querySelectorAll("[data-alt-info-toggle]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        const wrapper = button.closest(".field.first-alt");
+        if (!wrapper) return;
+        wrapper.classList.toggle("show-alt-info");
+      });
+    });
 
     syncFirstAltHint();
   }
@@ -763,8 +809,9 @@
     const changed =
       previous.altitudeUnit !== next.altitudeUnit
       || previous.speedUnit !== next.speedUnit
-      || previous.timeDisplay !== next.timeDisplay
-      || previous.eeRoundingEnabled !== next.eeRoundingEnabled;
+      || previous.temperatureUnit !== next.temperatureUnit
+      || previous.roundTimeValues !== next.roundTimeValues
+      || previous.roundDistanceValues !== next.roundDistanceValues;
     if (!changed) return;
 
     convertStoredValuesForSettingsChange(previous, next);
@@ -777,10 +824,12 @@
     state.navlog.legs.forEach((leg) => {
       convertLegField(leg, "alt", previous, next, parseAltitudeInputWithUnit, formatAltitudeDisplayForUnit);
       convertLegField(leg, "cas", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
+      convertLegField(leg, "temp", previous, next, parseTemperatureInputWithUnit, formatTemperatureDisplayForUnit);
       convertLegField(leg, "windSpd", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
       convertLegField(leg, "ta", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
       convertLegField(leg, "gs", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
-      convertLegField(leg, "ee", previous, next, parseDurationInputWithMode, formatEeDisplayWithMode);
+      convertLegField(leg, "distance", previous, next, parseDistanceInputWithRounding, formatDistanceDisplayWithRounding);
+      convertLegField(leg, "ee", previous, next, parseDurationInputWithTimeRounding, formatEeDisplayWithTimeRounding);
     });
 
     if (previous.altitudeUnit !== next.altitudeUnit) {
@@ -790,21 +839,42 @@
       state.navlog.tocTod.rod = rodInternal == null ? state.navlog.tocTod.rod : formatClimbRateDisplayForUnit(rodInternal, next.altitudeUnit);
     }
 
-    if (previous.timeDisplay !== next.timeDisplay || previous.eeRoundingEnabled !== next.eeRoundingEnabled) {
-      const tocMinutes = parseDurationInputWithMode(state.navlog.tocTod.tocTime, previous.timeDisplay);
-      const todMinutes = parseDurationInputWithMode(state.navlog.tocTod.todTime, previous.timeDisplay);
-      if (tocMinutes != null) state.navlog.tocTod.tocTime = formatGeneralMinutesWithMode(tocMinutes, next.timeDisplay);
-      if (todMinutes != null) state.navlog.tocTod.todTime = formatGeneralMinutesWithMode(todMinutes, next.timeDisplay);
+    if (previous.roundTimeValues !== next.roundTimeValues) {
+      const tocMinutes = parseDurationInputWithTimeRounding(state.navlog.tocTod.tocTime, previous.roundTimeValues);
+      const todMinutes = parseDurationInputWithTimeRounding(state.navlog.tocTod.todTime, previous.roundTimeValues);
+      if (tocMinutes != null) state.navlog.tocTod.tocTime = formatGeneralMinutesWithTimeRounding(tocMinutes, next.roundTimeValues);
+      if (todMinutes != null) state.navlog.tocTod.todTime = formatGeneralMinutesWithTimeRounding(todMinutes, next.roundTimeValues);
+    }
+
+    if (previous.roundDistanceValues !== next.roundDistanceValues) {
+      const tocDistance = parseDistanceInputWithRounding(state.navlog.tocTod.tocDistance, previous.roundDistanceValues);
+      const todDistance = parseDistanceInputWithRounding(state.navlog.tocTod.todDistance, previous.roundDistanceValues);
+      if (tocDistance != null) state.navlog.tocTod.tocDistance = formatDistanceDisplayWithRounding(tocDistance, next.roundDistanceValues);
+      if (todDistance != null) state.navlog.tocTod.todDistance = formatDistanceDisplayWithRounding(todDistance, next.roundDistanceValues);
     }
   }
 
   function convertLegField(leg, field, previous, next, parseFn, formatFn) {
     const raw = String(leg[field] ?? "").trim();
     if (!raw) return;
-    const internal = parseFn(raw, field === "ee" ? previous.timeDisplay : field === "alt" ? previous.altitudeUnit : previous.speedUnit);
+    let parseMode = previous.speedUnit;
+    let formatMode = next.speedUnit;
+    if (field === "ee") {
+      parseMode = previous.roundTimeValues;
+      formatMode = next.roundTimeValues;
+    } else if (field === "distance") {
+      parseMode = previous.roundDistanceValues;
+      formatMode = next.roundDistanceValues;
+    } else if (field === "alt") {
+      parseMode = previous.altitudeUnit;
+      formatMode = next.altitudeUnit;
+    } else if (field === "temp") {
+      parseMode = previous.temperatureUnit;
+      formatMode = next.temperatureUnit;
+    }
+    const internal = parseFn(raw, parseMode);
     if (internal == null) return;
-    const nextMode = field === "ee" ? next.timeDisplay : field === "alt" ? next.altitudeUnit : next.speedUnit;
-    leg[field] = formatFn(internal, nextMode, next.eeRoundingEnabled);
+    leg[field] = formatFn(internal, formatMode, next.roundTimeValues);
   }
 
   function seedLegs() {
@@ -920,14 +990,14 @@
     const values = {
       cas: manual.cas ? parseSpeedInput(leg.cas) : null,
       alt: manual.alt ? parseAltitudeInput(leg.alt) : null,
-      temp: manual.temp ? num(leg.temp) : null,
+      temp: manual.temp ? parseTemperatureInput(leg.temp) : null,
       windDir: manual.windDir ? num(leg.windDir) : null,
       windSpd: manual.windSpd ? parseSpeedInput(leg.windSpd) : null,
       tc: manual.tc ? num(leg.tc) : null,
       wca: manual.wca ? num(leg.wca) : null,
       ta: manual.ta ? parseSpeedInput(leg.ta) : null,
       gs: manual.gs ? parseSpeedInput(leg.gs) : null,
-      distance: manual.distance ? num(leg.distance) : null,
+      distance: manual.distance ? parseDistanceInput(leg.distance) : null,
       ee: manual.ee ? parseDurationInput(leg.ee) : null,
     };
     const derived = {};
@@ -1034,14 +1104,14 @@
       _errors: errors,
       cas: resolveDisplayField(leg, manual, lockedField, "cas", values.cas, formatSpeedDisplay),
       alt: resolveDisplayField(leg, manual, lockedField, "alt", values.alt, formatAltitudeDisplay),
-      temp: resolveDisplayField(leg, manual, lockedField, "temp", values.temp, maybeFormat),
+      temp: resolveDisplayField(leg, manual, lockedField, "temp", values.temp, formatTemperatureDisplay),
       windDir: resolveDisplayField(leg, manual, lockedField, "windDir", values.windDir, maybeDegrees),
       windSpd: resolveDisplayField(leg, manual, lockedField, "windSpd", values.windSpd, formatSpeedDisplay),
       tc: resolveDisplayField(leg, manual, lockedField, "tc", values.tc, maybeDegrees),
       wca: resolveDisplayField(leg, manual, lockedField, "wca", values.wca, maybeSignedDegrees),
       ta: resolveDisplayField(leg, manual, lockedField, "ta", values.ta, formatSpeedDisplay),
       gs: resolveDisplayField(leg, manual, lockedField, "gs", values.gs, formatSpeedDisplay),
-      distance: resolveDisplayField(leg, manual, lockedField, "distance", values.distance, maybeFormat),
+      distance: resolveDisplayField(leg, manual, lockedField, "distance", values.distance, formatDistanceDisplay),
       ee: resolveDisplayField(leg, manual, lockedField, "ee", values.ee, formatEeDisplay),
     };
   }
@@ -1087,12 +1157,13 @@
     state.navlog.tocTod.todDistance = "";
     state.navlog.tocTod.todTime = "";
 
-    if (!state.navlog.tocTod.tocEditing && roc != null && roc > 0 && firstAlt != null && secondAlt != null && firstGs != null) {
-      const altitudeToGain = secondAlt - firstAlt;
-      const tocTime = altitudeToGain / roc;
+    if (!state.navlog.tocTod.tocEditing && roc != null && roc > 0 && secondAlt != null && firstGs != null) {
+      const departureElevation = firstAlt == null ? 0 : firstAlt;
+      const altitudeToGain = secondAlt - departureElevation;
+      const tocTime = Math.max(0, altitudeToGain / roc);
       const tocDistance = tocTime * (firstGs / 60);
       state.navlog.tocTod.tocTime = formatGeneralMinutes(tocTime);
-      state.navlog.tocTod.tocDistance = maybeFormat(tocDistance);
+      state.navlog.tocTod.tocDistance = formatDistanceDisplay(tocDistance);
     }
 
     if (!state.navlog.tocTod.todEditing && rod != null && rod > 0 && lastAlt != null && secondLastAlt != null && lastGs != null) {
@@ -1100,7 +1171,7 @@
       const todTime = altitudeToLose / rod;
       const todDistance = todTime * (lastGs / 60);
       state.navlog.tocTod.todTime = formatGeneralMinutes(todTime);
-      state.navlog.tocTod.todDistance = maybeFormat(todDistance);
+      state.navlog.tocTod.todDistance = formatDistanceDisplay(todDistance);
     }
   }
 
@@ -1197,6 +1268,7 @@
     if (!node || !wrapper) return;
     const showHint = String(node.value || "").trim() === "" && document.activeElement !== node;
     wrapper.classList.toggle("show-alt-hint", showHint);
+    if (!showHint) wrapper.classList.remove("show-alt-info");
   }
 
   function resolveDisplayField(leg, manual, lockedField, field, derivedValue, formatter) {
@@ -1280,7 +1352,13 @@
   }
 
   function maybeFormat(value) {
-    return value == null || !Number.isFinite(value) ? "" : String(Math.round(value));
+    return value == null || !Number.isFinite(value) ? "" : String(roundHalfUp(value));
+  }
+
+  function formatOneDecimal(value) {
+    if (value == null || !Number.isFinite(value)) return "";
+    const rounded = Math.round(value * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
   }
 
   function parseAltitudeInput(value) {
@@ -1331,6 +1409,50 @@
             ? valueKnots / KNOTS_PER_MS
             : valueKnots;
     return maybeFormat(display);
+  }
+
+  function parseTemperatureInput(value) {
+    return parseTemperatureInputWithUnit(value, state.settings.temperatureUnit);
+  }
+
+  function parseTemperatureInputWithUnit(value, unit) {
+    const parsed = num(value);
+    if (parsed == null) return null;
+    if (unit === "f") return (parsed - 32) * (5 / 9);
+    if (unit === "k") return parsed - 273.15;
+    return parsed;
+  }
+
+  function formatTemperatureDisplay(valueCelsius) {
+    return formatTemperatureDisplayForUnit(valueCelsius, state.settings.temperatureUnit);
+  }
+
+  function formatTemperatureDisplayForUnit(valueCelsius, unit) {
+    if (valueCelsius == null || !Number.isFinite(valueCelsius)) return "";
+    const display =
+      unit === "f"
+        ? (valueCelsius * (9 / 5)) + 32
+        : unit === "k"
+          ? valueCelsius + 273.15
+          : valueCelsius;
+    return maybeFormat(display);
+  }
+
+  function parseDistanceInput(value) {
+    return parseDistanceInputWithRounding(value, state.settings.roundDistanceValues);
+  }
+
+  function parseDistanceInputWithRounding(value, _roundDistanceValues) {
+    return num(value);
+  }
+
+  function formatDistanceDisplay(valueNm) {
+    return formatDistanceDisplayWithRounding(valueNm, state.settings.roundDistanceValues);
+  }
+
+  function formatDistanceDisplayWithRounding(valueNm, roundDistanceValues) {
+    if (valueNm == null || !Number.isFinite(valueNm)) return "";
+    return roundDistanceValues ? maybeFormat(valueNm) : formatOneDecimal(valueNm);
   }
 
   function parseClimbRateInput(value) {
@@ -1411,31 +1533,27 @@
     return rounded > 0 ? `+${rounded}` : String(rounded);
   }
 
-  function formatMinutesNumber(minutesFloat) {
-    if (!Number.isFinite(minutesFloat)) return "";
-    const rounded = Math.round(minutesFloat * 10) / 10;
-    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
-  }
-
   function formatGeneralMinutes(minutesFloat) {
-    return formatGeneralMinutesWithMode(minutesFloat, state.settings.timeDisplay);
+    return formatGeneralMinutesWithTimeRounding(minutesFloat, state.settings.roundTimeValues);
   }
 
-  function formatGeneralMinutesWithMode(minutesFloat, mode) {
-    if (!Number.isFinite(minutesFloat)) return "";
-    if (mode === "hhmmss") return formatMinutesAsClock(minutesFloat);
-    return `${formatMinutesNumber(minutesFloat)} min`;
+  function formatGeneralMinutesWithTimeRounding(minutesFloat, roundTimeValues) {
+    return formatMinutesDisplayWithTimeRounding(minutesFloat, roundTimeValues);
   }
 
   function formatEeDisplay(minutesFloat) {
-    return formatEeDisplayWithMode(minutesFloat, state.settings.timeDisplay, state.settings.eeRoundingEnabled);
+    return formatEeDisplayWithTimeRounding(minutesFloat, state.settings.roundTimeValues);
   }
 
-  function formatEeDisplayWithMode(minutesFloat, mode, eeRoundingEnabled = true) {
+  function formatEeDisplayWithTimeRounding(minutesFloat, roundTimeValues) {
+    return formatMinutesDisplayWithTimeRounding(minutesFloat, roundTimeValues);
+  }
+
+  function formatMinutesDisplayWithTimeRounding(minutesFloat, roundTimeValues) {
     if (!Number.isFinite(minutesFloat)) return "";
-    if (mode === "hhmmss") return formatMinutesAsClock(minutesFloat);
-    if (eeRoundingEnabled) return String(Math.floor(minutesFloat));
-    return formatMinutesNumber(minutesFloat);
+    const bounded = Math.max(0, minutesFloat);
+    if (roundTimeValues) return String(Math.ceil(bounded));
+    return formatMinutesAsClock(bounded);
   }
 
   function formatMinutesAsClock(minutesFloat) {
@@ -1444,26 +1562,18 @@
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
-    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    if (hours > 0) return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
 
   function parseDurationInput(value) {
-    return parseDurationInputWithMode(value, state.settings.timeDisplay);
+    return parseDurationInputWithTimeRounding(value, state.settings.roundTimeValues);
   }
 
-  function parseDurationInputWithMode(value, mode) {
+  function parseDurationInputWithTimeRounding(value, _roundTimeValues) {
     const text = String(value || "").trim();
     if (!text) return null;
-    if (text.includes(":")) {
-      return parseClockToMinutes(text);
-    }
-    if (mode === "hhmmss" && /^\d{6}$/.test(text)) {
-      const hh = Number(text.slice(0, 2));
-      const mm = Number(text.slice(2, 4));
-      const ss = Number(text.slice(4, 6));
-      if ([hh, mm, ss].some((n) => !Number.isFinite(n))) return null;
-      return (hh * 60) + mm + (ss / 60);
-    }
+    if (text.includes(":")) return parseClockToMinutes(text);
     const match = text.match(/-?(?:\d+\.?\d*|\.\d+)/);
     if (!match) return null;
     const parsed = Number(match[0]);
@@ -1483,6 +1593,9 @@
     } else {
       [minutes, seconds] = nums;
     }
+    if (minutes < 0 || seconds < 0 || hours < 0) return null;
+    if (nums.length === 3 && minutes >= 60) return null;
+    if (seconds >= 60) return null;
     return (hours * 60) + minutes + (seconds / 60);
   }
 
