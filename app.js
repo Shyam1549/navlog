@@ -1319,6 +1319,7 @@
       syncLegError(index, "wca", Boolean(leg._errors && leg._errors.wca));
       syncLegError(index, "gs", Boolean(leg._errors && leg._errors.gs));
     });
+    syncDistanceToGo();
     syncFirstAltHint();
 
     const tocDistance = document.querySelector('[data-toc="tocDistance"]');
@@ -1329,6 +1330,18 @@
     if (tocTime) tocTime.value = state.navlog.tocTod.tocTime;
     if (todDistance) todDistance.value = state.navlog.tocTod.todDistance;
     if (todTime) todTime.value = state.navlog.tocTod.todTime;
+  }
+
+  function syncDistanceToGo() {
+    if (!state.settings.showDistanceToGo) return;
+    state.navlog.legs.forEach((_, index) => {
+      const routeInput = document.querySelector(`[data-leg-field="${index}:route"]`);
+      const routeCell = routeInput && routeInput.closest(".route-cell");
+      const distanceNode = routeCell && routeCell.querySelector(".route-dtg");
+      if (!distanceNode) return;
+      const distanceToGo = getDistanceToGoDisplay(index);
+      distanceNode.textContent = distanceToGo ? `(${distanceToGo})` : "";
+    });
   }
 
   function syncLegField(index, field, value, activeEdit, leg) {
