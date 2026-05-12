@@ -22,7 +22,7 @@
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
   const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
   const ADDITIONAL_INFO_ROWS = 19;
-  const ADDITIONAL_INFO_COLS = 9;
+  const ADDITIONAL_INFO_DEFAULT_COLS = 9;
 
   const app = document.getElementById("app");
   const state = {
@@ -211,17 +211,39 @@
     return `ann_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  function createEmptyAdditionalInfoTable() {
-    return Array.from({ length: ADDITIONAL_INFO_ROWS }, () => Array.from({ length: ADDITIONAL_INFO_COLS }, () => ""));
+  function createEmptyAdditionalInfoTable(columnCount = ADDITIONAL_INFO_DEFAULT_COLS) {
+    const cols = Math.max(1, Number(columnCount) || ADDITIONAL_INFO_DEFAULT_COLS);
+    return Array.from({ length: ADDITIONAL_INFO_ROWS }, () => Array.from({ length: cols }, () => ""));
   }
 
-  function normalizeAdditionalInfoTable(value) {
+  function getAdditionalInfoColumnCount(value) {
     const source = Array.isArray(value) ? value : [];
+    const detected = source.reduce((max, row) => {
+      const rowCols = Array.isArray(row) ? row.length : 0;
+      return Math.max(max, rowCols);
+    }, 0);
+    return Math.max(1, detected || ADDITIONAL_INFO_DEFAULT_COLS);
+  }
+
+  function normalizeAdditionalInfoTable(value, fallbackCols = 1) {
+    const source = Array.isArray(value) ? value : [];
+    const detectedCols = getAdditionalInfoColumnCount(source);
+    const fallback = Math.max(1, Number(fallbackCols) || ADDITIONAL_INFO_DEFAULT_COLS);
+    const cols = Math.max(detectedCols, fallback);
     const rows = Array.from({ length: ADDITIONAL_INFO_ROWS }, (_, rowIndex) => {
       const row = Array.isArray(source[rowIndex]) ? source[rowIndex] : [];
-      return Array.from({ length: ADDITIONAL_INFO_COLS }, (_, colIndex) => String(row[colIndex] || ""));
+      return Array.from({ length: cols }, (_, colIndex) => String(row[colIndex] || ""));
     });
     return rows;
+  }
+
+  function resizeAdditionalInfoColumns(value, nextCols) {
+    const cols = Math.max(1, Number(nextCols) || 1);
+    const source = normalizeAdditionalInfoTable(value, cols);
+    return Array.from({ length: ADDITIONAL_INFO_ROWS }, (_, rowIndex) => {
+      const row = source[rowIndex] || [];
+      return Array.from({ length: cols }, (_, colIndex) => String(row[colIndex] || ""));
+    });
   }
 
   function readStoredValue(key) {
@@ -751,6 +773,11 @@
           </div>
           <div class="manual-section${panel === "additional-info" ? "" : " hidden"}">
             <h3>Additional Information</h3><br>
+            <div class="entry-actions additional-info-controls">
+              <button class="action" id="admin-additional-add-col" type="button">+ Column</button>
+              <button class="action" id="admin-additional-remove-col" type="button">- Column</button>
+              <span class="admin-subtle-status">Columns: ${getAdditionalInfoColumnCount(state.admin.additionalInfoDraft)}</span>
+            </div>
             <div class="additional-info-wrap">
               <table class="additional-info-table editable">
                 <tbody>
@@ -2245,6 +2272,22 @@
         state.admin.additionalInfoSaveStatus = "";
       });
     });
+    const additionalAddColButton = document.getElementById("admin-additional-add-col");
+    if (additionalAddColButton) {
+      additionalAddColButton.addEventListener("click", () => {
+        const currentCols = getAdditionalInfoColumnCount(state.admin.additionalInfoDraft);
+        state.admin.additionalInfoDraft = resizeAdditionalInfoColumns(state.admin.additionalInfoDraft, currentCols + 1);
+        render();
+      });
+    }
+    const additionalRemoveColButton = document.getElementById("admin-additional-remove-col");
+    if (additionalRemoveColButton) {
+      additionalRemoveColButton.addEventListener("click", () => {
+        const currentCols = getAdditionalInfoColumnCount(state.admin.additionalInfoDraft);
+        state.admin.additionalInfoDraft = resizeAdditionalInfoColumns(state.admin.additionalInfoDraft, currentCols - 1);
+        render();
+      });
+    }
     const additionalSaveButton = document.getElementById("admin-additional-save");
     if (additionalSaveButton) {
       additionalSaveButton.addEventListener("click", async () => {
@@ -2252,6 +2295,7 @@
         await saveAdditionalInfoFromAdmin();
       });
     }
+    syncAdditionalInfoCellHeight();
   }
 
   function initAdminMiniGame() {
@@ -2389,6 +2433,14 @@
       adminGameAnimation = null;
     }
     if (adminGameState) adminGameState.running = false;
+  }
+
+  function syncAdditionalInfoCellHeight() {
+    const rowButton = document.querySelector(".admin-mini-btn");
+    if (!rowButton) return;
+    const height = Math.round(rowButton.getBoundingClientRect().height);
+    if (!Number.isFinite(height) || height <= 0) return;
+    document.documentElement.style.setProperty("--additional-info-cell-height", `${height}px`);
   }
 
   async function connectSupabaseClient(forceRecreate) {
@@ -2560,15 +2612,23 @@
   }
 
   function readAdditionalInfoFromInputs() {
-    const rows = createEmptyAdditionalInfoTable();
     const inputs = Array.from(document.querySelectorAll("[data-admin-additional]"));
+    const maxColFromInputs = inputs.reduce((max, input) => {
+      const key = String(input.getAttribute("data-admin-additional") || "");
+      const parts = key.split(":");
+      const col = Number(parts[1]);
+      return Number.isFinite(col) ? Math.max(max, col) : max;
+    }, -1);
+    const fallbackCols = getAdditionalInfoColumnCount(state.admin.additionalInfoDraft);
+    const colCount = Math.max(1, maxColFromInputs + 1, fallbackCols);
+    const rows = createEmptyAdditionalInfoTable(colCount);
     inputs.forEach((input) => {
       const key = String(input.getAttribute("data-admin-additional") || "");
       const [rowText, colText] = key.split(":");
       const row = Number(rowText);
       const col = Number(colText);
       if (!Number.isFinite(row) || !Number.isFinite(col)) return;
-      if (row < 0 || row >= ADDITIONAL_INFO_ROWS || col < 0 || col >= ADDITIONAL_INFO_COLS) return;
+      if (row < 0 || row >= ADDITIONAL_INFO_ROWS || col < 0 || col >= colCount) return;
       rows[row][col] = String(input.value || "");
     });
     state.admin.additionalInfoDraft = rows;

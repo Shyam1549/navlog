@@ -10,6 +10,7 @@
   --ui-scale: 0.84;
   --header-side-width: 250px;
   --admin-row-height: 42px;
+  --additional-info-cell-height: 42px;
 }
 
 * { box-sizing: border-box; }
@@ -1479,18 +1480,19 @@ select { font: inherit; }
 
 .additional-info-table.editable td {
   padding: 0;
-  height: calc(var(--admin-row-height) - 2px);
+  height: var(--additional-info-cell-height);
 }
 
 .additional-info-table.editable td input {
   width: 100%;
   border: 0;
   background: transparent;
-  min-height: calc(var(--admin-row-height) - 2px);
-  height: calc(var(--admin-row-height) - 2px);
+  min-height: var(--additional-info-cell-height);
+  height: var(--additional-info-cell-height);
   padding: 0 6px;
   line-height: 1.15;
   font-size: 0.84rem;
+  box-sizing: border-box;
 }
 
 .route-dtg {
