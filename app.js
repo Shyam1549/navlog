@@ -136,8 +136,8 @@
       clickCount: 0,
       lastClickAt: 0,
       firstClickAt: 0,
-      supabaseUrl: readStoredValue(SUPABASE_URL_KEY),
-      supabaseAnonKey: readStoredValue(SUPABASE_ANON_KEY),
+      supabaseUrl: readStoredValue(SUPABASE_URL_KEY) || readSupabaseConfigValue("supabaseUrl"),
+      supabaseAnonKey: readStoredValue(SUPABASE_ANON_KEY) || readSupabaseConfigValue("supabaseAnonKey"),
       loading: false,
       notice: "",
       error: "",
@@ -253,6 +253,15 @@
   function readStoredValue(key) {
     try {
       return String(window.localStorage.getItem(key) || "");
+    } catch {
+      return "";
+    }
+  }
+
+  function readSupabaseConfigValue(field) {
+    try {
+      const config = window.NAVLOG_CONFIG || {};
+      return String(config[field] || "").trim();
     } catch {
       return "";
     }
@@ -578,9 +587,9 @@
   }
 
   function renderAdminLoginScreen() {
-    const isReady = Boolean(supabaseClient);
-    const statusText = state.admin.error || state.admin.notice;
-    const statusClass = state.admin.error ? "admin-status error" : "admin-status ok";
+    const hasSupabaseConfig = Boolean(state.admin.supabaseUrl && state.admin.supabaseAnonKey);
+    const statusText = state.admin.error || state.admin.notice || (!hasSupabaseConfig ? "Supabase config missing. Set window.NAVLOG_CONFIG in index.html." : "");
+    const statusClass = state.admin.error || !hasSupabaseConfig ? "admin-status error" : "admin-status ok";
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -588,25 +597,11 @@
           <div class="top-side"><button class="back-link" id="back-from-admin-login">Back</button></div>
           <div class="top-center">
             <h1>Admin Login</h1>
-            <p class="setup-caption">Sign in with your Supabase admin user</p>
+            <p class="setup-caption">Sign in with your admin email and password</p>
           </div>
           <div class="top-side right"></div>
         </section>
         <section class="setup-card admin-card">
-          <div class="admin-grid two-col">
-            <label class="setup-field">
-              <span>Supabase URL</span>
-              <input id="admin-supabase-url" value="${escapeAttr(state.admin.supabaseUrl)}" placeholder="https://project-ref.supabase.co" />
-            </label>
-            <label class="setup-field">
-              <span>Supabase anon key</span>
-              <input id="admin-supabase-anon" value="${escapeAttr(state.admin.supabaseAnonKey)}" placeholder="eyJhbGciOi..." />
-            </label>
-          </div>
-          <div class="entry-actions">
-            <button class="action" id="admin-connect-supabase">Connect</button>
-          </div>
-          <div class="admin-divider"></div>
           <div class="admin-grid two-col">
             <label class="setup-field">
               <span>Admin email</span>
@@ -618,7 +613,7 @@
             </label>
           </div>
           <div class="entry-actions">
-            <button class="action primary" id="admin-login-submit" ${isReady ? "" : "disabled"}>Sign in</button>
+            <button class="action primary" id="admin-login-submit" ${hasSupabaseConfig ? "" : "disabled"}>Sign in</button>
           </div>
           ${statusText ? `<p class="${statusClass}">${escapeHtml(statusText)}</p>` : ""}
         </section>
@@ -1822,28 +1817,12 @@
   }
 
   function wireAdminLogin() {
+    if (!state.admin.supabaseUrl) state.admin.supabaseUrl = readSupabaseConfigValue("supabaseUrl");
+    if (!state.admin.supabaseAnonKey) state.admin.supabaseAnonKey = readSupabaseConfigValue("supabaseAnonKey");
     const backButton = document.getElementById("back-from-admin-login");
     if (backButton) {
       backButton.addEventListener("click", () => {
         state.view = state.meta.lastNonDocView || "setup";
-        render();
-      });
-    }
-
-    const connectButton = document.getElementById("admin-connect-supabase");
-    if (connectButton) {
-      connectButton.addEventListener("click", async () => {
-        const urlInput = document.getElementById("admin-supabase-url");
-        const anonInput = document.getElementById("admin-supabase-anon");
-        state.admin.supabaseUrl = String(urlInput ? urlInput.value : "").trim();
-        state.admin.supabaseAnonKey = String(anonInput ? anonInput.value : "").trim();
-        writeStoredValue(SUPABASE_URL_KEY, state.admin.supabaseUrl);
-        writeStoredValue(SUPABASE_ANON_KEY, state.admin.supabaseAnonKey);
-        const ok = await connectSupabaseClient(true);
-        if (ok) {
-          state.admin.notice = "Supabase connected.";
-          await loadPublicCatalogFromSupabase();
-        }
         render();
       });
     }

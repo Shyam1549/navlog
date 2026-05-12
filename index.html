@@ -6,6 +6,12 @@
   <title>Navlog</title>
   <link rel="stylesheet" href="./styles.css" />
   <script>
+    window.NAVLOG_CONFIG = window.NAVLOG_CONFIG || {
+      supabaseUrl: "",
+      supabaseAnonKey: "",
+    };
+  </script>
+  <script>
     window.MathJax = {
       tex: { inlineMath: [["\\(", "\\)"], ["$", "$"]] },
       svg: { fontCache: "global" },

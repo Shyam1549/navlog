@@ -14,11 +14,10 @@
 - Use that account to sign in from Navlog admin login.
 
 ## 4) Connect in Navlog
+- In `index.html`, set:
+  - `window.NAVLOG_CONFIG.supabaseUrl`
+  - `window.NAVLOG_CONFIG.supabaseAnonKey`
 - On Navlog setup page, click UTC clock 5 times quickly.
-- Enter:
-  - Supabase URL
-  - Supabase anon key
-- Click `Connect`.
 - Sign in with admin email/password.
 
 ## 5) What can be edited
