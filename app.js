@@ -21,6 +21,8 @@
   const ANNOUNCEMENT_SEEN_KEY = "navlog_announcement_seen_signature";
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
   const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
+  const ADDITIONAL_INFO_ROWS = 9;
+  const ADDITIONAL_INFO_COLS = 19;
 
   const app = document.getElementById("app");
   const state = {
@@ -210,14 +212,14 @@
   }
 
   function createEmptyAdditionalInfoTable() {
-    return Array.from({ length: 9 }, () => Array.from({ length: 19 }, () => ""));
+    return Array.from({ length: ADDITIONAL_INFO_ROWS }, () => Array.from({ length: ADDITIONAL_INFO_COLS }, () => ""));
   }
 
   function normalizeAdditionalInfoTable(value) {
     const source = Array.isArray(value) ? value : [];
-    const rows = Array.from({ length: 9 }, (_, rowIndex) => {
+    const rows = Array.from({ length: ADDITIONAL_INFO_ROWS }, (_, rowIndex) => {
       const row = Array.isArray(source[rowIndex]) ? source[rowIndex] : [];
-      return Array.from({ length: 19 }, (_, colIndex) => String(row[colIndex] || ""));
+      return Array.from({ length: ADDITIONAL_INFO_COLS }, (_, colIndex) => String(row[colIndex] || ""));
     });
     return rows;
   }
@@ -488,7 +490,8 @@
         <section class="topbar centered">
           <div class="top-side"><button class="back-link" id="back-from-additional-info">Back</button></div>
           <div class="top-center">
-            <h1>Aircraft Information</h1>
+            <h1>Additional Information</h1>
+            <p class="setup-caption">Aircraft Information</p>
           </div>
           <div class="top-side right"></div>
         </section>
@@ -2565,7 +2568,7 @@
       const row = Number(rowText);
       const col = Number(colText);
       if (!Number.isFinite(row) || !Number.isFinite(col)) return;
-      if (row < 0 || row >= 9 || col < 0 || col >= 19) return;
+      if (row < 0 || row >= ADDITIONAL_INFO_ROWS || col < 0 || col >= ADDITIONAL_INFO_COLS) return;
       rows[row][col] = String(input.value || "");
     });
     state.admin.additionalInfoDraft = rows;

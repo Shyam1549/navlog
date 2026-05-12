@@ -1463,10 +1463,10 @@ select { font: inherit; }
 
 .additional-info-table td {
   border: 1px solid rgba(46, 41, 35, 0.16);
-  padding: 6px 8px;
+  padding: 4px 6px;
   font-size: 0.84rem;
   min-width: 72px;
-  height: 36px;
+  height: 34px;
   vertical-align: middle;
 }
 
@@ -1478,8 +1478,10 @@ select { font: inherit; }
   width: 100%;
   border: 0;
   background: transparent;
-  min-height: 36px;
-  padding: 6px 8px;
+  min-height: 34px;
+  height: 34px;
+  padding: 4px 6px;
+  line-height: 1.15;
   font-size: 0.84rem;
 }
 
