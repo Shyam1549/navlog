@@ -18,6 +18,7 @@
   const ADMIN_REMEMBER_KEY = "navlog_admin_remember";
   const ADMIN_EMAIL_KEY = "navlog_admin_email";
   const ADMIN_PASSWORD_KEY = "navlog_admin_password";
+  const ANNOUNCEMENT_SEEN_KEY = "navlog_announcement_seen_signature";
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
   const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
 
@@ -38,7 +39,14 @@
       content: {
         manualHtml: "",
         privacyHtml: "",
+        announcements: [],
       },
+    },
+    announcement: {
+      open: false,
+      items: [],
+      index: 0,
+      activeSignature: "",
     },
     admin: {
       clickCount: 0,
@@ -67,6 +75,8 @@
       rememberLogin: readStoredValue(ADMIN_REMEMBER_KEY) === "1",
       manualSaveStatus: "",
       privacySaveStatus: "",
+      announcementDrafts: [createEmptyAnnouncementDraft()],
+      announcementSaveStatus: "",
     },
     meta: {
       hasOpenedSheet: false,
@@ -175,6 +185,21 @@
     };
   }
 
+  function createEmptyAnnouncementDraft() {
+    return {
+      id: createAnnouncementId(),
+      heading: "",
+      body: "",
+      startAt: "",
+      endAt: "",
+      permanent: false,
+    };
+  }
+
+  function createAnnouncementId() {
+    return `ann_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
   function readStoredValue(key) {
     try {
       return String(window.localStorage.getItem(key) || "");
@@ -225,6 +250,7 @@
   }
 
   function render() {
+    evaluateAnnouncementsPrompt();
     computeRouteMath();
     if (state.view === "setup") app.innerHTML = renderSetupScreen();
     else if (state.view === "manual") app.innerHTML = renderManualScreen();
@@ -242,6 +268,7 @@
     wireUtcAdminTrigger();
     wireFooterActions();
     wireBugReportModal();
+    wireAnnouncementModal();
     if (state.view === "manual") typesetManualMath();
   }
 
@@ -291,6 +318,7 @@
         </section>
         ${renderFrontFooter()}
         ${renderBugReportModal()}
+        ${renderAnnouncementModal()}
       </main>
       </div>
     `;
@@ -341,6 +369,32 @@
     `;
   }
 
+  function renderAnnouncementModal() {
+    if (!state.announcement.open || !Array.isArray(state.announcement.items) || !state.announcement.items.length) return "";
+    const index = Math.max(0, Math.min(state.announcement.index, state.announcement.items.length - 1));
+    const total = state.announcement.items.length;
+    const current = state.announcement.items[index];
+    const isLast = index >= total - 1;
+    return `
+      <div class="announcement-overlay" id="announcement-overlay">
+        <section class="announcement-modal" role="dialog" aria-modal="true" aria-label="Announcement">
+          <div class="announcement-head">
+            <h3>${escapeHtml(current.heading || "Announcement")}</h3>
+            <span class="announcement-count">${index + 1} / ${total}</span>
+          </div>
+          <p class="announcement-body">${escapeHtml(current.body || "")}</p>
+          <div class="announcement-actions">
+            ${
+              isLast
+                ? '<button class="action primary" id="announcement-close" type="button">Close</button>'
+                : '<button class="action primary" id="announcement-next" type="button">Next</button>'
+            }
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
   function renderManualScreen() {
     const customManual = String(state.catalog.content.manualHtml || "").trim();
     return `
@@ -365,6 +419,7 @@
         </section>
         ${renderFrontFooter()}
         ${renderBugReportModal()}
+        ${renderAnnouncementModal()}
       </main>
       </div>
     `;
@@ -394,6 +449,7 @@
         </section>
         ${renderFrontFooter()}
         ${renderBugReportModal()}
+        ${renderAnnouncementModal()}
       </main>
       </div>
     `;
@@ -438,6 +494,7 @@
         </section>
         ${renderFrontFooter()}
         ${renderBugReportModal()}
+        ${renderAnnouncementModal()}
       </main>
       </div>
     `;
@@ -543,9 +600,53 @@
             </div>
           </div>
           <div class="manual-section">
+            <h3>Announcement</h3>
+            <section class="admin-announcement-list">
+              ${state.admin.announcementDrafts.map((draft, index) => `
+                <article class="admin-announcement-item">
+                  <div class="admin-announcement-item-head">
+                    <strong>#${index + 1}</strong>
+                    <button class="action admin-mini-btn${state.admin.announcementDrafts.length > 1 ? " active" : ""}" data-admin-announcement-remove="${index}" type="button" ${state.admin.announcementDrafts.length > 1 ? "" : "disabled"}>-</button>
+                  </div>
+                  <div class="admin-grid two-col">
+                    <label class="setup-field">
+                      <span>Heading</span>
+                      <input data-admin-announcement-field="${index}:heading" value="${escapeAttr(draft.heading)}" />
+                    </label>
+                    <div class="setup-field">
+                      <span>Permanent</span>
+                      <label class="admin-toggle-line">
+                        <input data-admin-announcement-field="${index}:permanent" type="checkbox" ${draft.permanent ? "checked" : ""} />
+                        <span>Permanent announcement</span>
+                      </label>
+                    </div>
+                  </div>
+                  <label class="setup-field">
+                    <span>Body</span>
+                    <textarea data-admin-announcement-field="${index}:body" class="admin-textarea">${escapeHtml(draft.body)}</textarea>
+                  </label>
+                  <div class="admin-grid two-col">
+                    <label class="setup-field">
+                      <span>Start Date & Time</span>
+                      <input data-admin-announcement-field="${index}:startAt" type="datetime-local" value="${escapeAttr(formatDatetimeLocalValue(draft.startAt))}" />
+                    </label>
+                    <label class="setup-field">
+                      <span>End Date & Time</span>
+                      <input data-admin-announcement-field="${index}:endAt" type="datetime-local" value="${escapeAttr(formatDatetimeLocalValue(draft.endAt))}" />
+                    </label>
+                  </div>
+                </article>
+              `).join("")}
+            </section>
+            <div class="entry-actions">
+              <button class="action" id="admin-announcement-add">Add announcement</button>
+              <button class="action primary" id="admin-announcement-save">Save</button>
+              <span class="admin-subtle-status">${escapeHtml(state.admin.announcementSaveStatus)}</span>
+            </div>
+          </div>
+          <div class="manual-section">
             <h3>User Manual Content</h3>
             <label class="setup-field">
-              <span>Manual Text</span>
               <textarea id="admin-manual-html" class="admin-textarea admin-textarea-large">${escapeHtml(state.admin.manualHtmlDraft)}</textarea>
             </label>
             <div class="entry-actions">
@@ -556,7 +657,6 @@
           <div class="manual-section">
             <h3>Privacy Policy Content</h3>
             <label class="setup-field">
-              <span>Privacy Text</span>
               <textarea id="admin-privacy-html" class="admin-textarea admin-textarea-large">${escapeHtml(state.admin.privacyHtmlDraft)}</textarea>
             </label>
             <div class="entry-actions">
@@ -568,6 +668,7 @@
         </section>
         ${renderFrontFooter()}
         ${renderBugReportModal()}
+        ${renderAnnouncementModal()}
       </main>
       </div>
     `;
@@ -614,6 +715,7 @@
         </section>
         ${renderFrontFooter()}
         ${renderBugReportModal()}
+        ${renderAnnouncementModal()}
       </main>
       </div>
     `;
@@ -1664,6 +1766,42 @@
     }
   }
 
+  function wireAnnouncementModal() {
+    if (!state.announcement.open) return;
+    const nextButton = document.getElementById("announcement-next");
+    if (nextButton) {
+      nextButton.addEventListener("click", () => {
+        if (state.announcement.index < state.announcement.items.length - 1) {
+          state.announcement.index += 1;
+          render();
+          return;
+        }
+        dismissAnnouncements();
+      });
+    }
+    const closeButton = document.getElementById("announcement-close");
+    if (closeButton) {
+      closeButton.addEventListener("click", () => {
+        dismissAnnouncements();
+      });
+    }
+    const overlay = document.getElementById("announcement-overlay");
+    if (overlay) {
+      overlay.addEventListener("click", (event) => {
+        if (event.target !== overlay) return;
+        dismissAnnouncements();
+      });
+    }
+  }
+
+  function dismissAnnouncements() {
+    state.announcement.open = false;
+    state.announcement.index = 0;
+    state.announcement.items = [];
+    if (state.announcement.activeSignature) writeStoredValue(ANNOUNCEMENT_SEEN_KEY, state.announcement.activeSignature);
+    render();
+  }
+
   function wirePrivacy() {
     const backButton = document.getElementById("back-from-privacy");
     if (!backButton) return;
@@ -1889,6 +2027,48 @@
         state.admin.privacySaveStatus = "";
       });
     }
+
+    const announcementAddButton = document.getElementById("admin-announcement-add");
+    if (announcementAddButton) {
+      announcementAddButton.addEventListener("click", () => {
+        state.admin.announcementDrafts.push(createEmptyAnnouncementDraft());
+        render();
+      });
+    }
+    const announcementRemoveButtons = Array.from(document.querySelectorAll("[data-admin-announcement-remove]"));
+    announcementRemoveButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const rawIndex = String(button.getAttribute("data-admin-announcement-remove") || "");
+        const index = Number(rawIndex);
+        if (!Number.isFinite(index) || index < 0 || index >= state.admin.announcementDrafts.length) return;
+        if (state.admin.announcementDrafts.length === 1) {
+          state.admin.announcementDrafts = [createEmptyAnnouncementDraft()];
+        } else {
+          state.admin.announcementDrafts.splice(index, 1);
+        }
+        render();
+      });
+    });
+    const announcementFields = Array.from(document.querySelectorAll("[data-admin-announcement-field]"));
+    announcementFields.forEach((field) => {
+      field.addEventListener("input", () => {
+        readAnnouncementDraftsFromInputs();
+        state.admin.announcementSaveStatus = "";
+      });
+      if (String(field.getAttribute("type") || "").toLowerCase() === "checkbox") {
+        field.addEventListener("change", () => {
+          readAnnouncementDraftsFromInputs();
+          state.admin.announcementSaveStatus = "";
+        });
+      }
+    });
+    const announcementSaveButton = document.getElementById("admin-announcement-save");
+    if (announcementSaveButton) {
+      announcementSaveButton.addEventListener("click", async () => {
+        readAnnouncementDraftsFromInputs();
+        await saveAnnouncementsFromAdmin();
+      });
+    }
   }
 
   async function connectSupabaseClient(forceRecreate) {
@@ -2031,12 +2211,15 @@
       state.catalog.airports = state.admin.airports.map((airport) => ({ ...airport }));
       state.catalog.content.manualHtml = contentMap.manual || "";
       state.catalog.content.privacyHtml = contentMap.privacy || "";
+      state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
       state.admin.manualHtmlDraft = contentHtmlToEditorText("manual", state.catalog.content.manualHtml);
       state.admin.privacyHtmlDraft = contentHtmlToEditorText("privacy", state.catalog.content.privacyHtml);
       state.admin.manualDraftBaselineHtml = state.catalog.content.manualHtml;
       state.admin.privacyDraftBaselineHtml = state.catalog.content.privacyHtml;
       state.admin.manualDraftBaselineText = state.admin.manualHtmlDraft;
       state.admin.privacyDraftBaselineText = state.admin.privacyHtmlDraft;
+      state.admin.announcementDrafts = normalizeAnnouncementDrafts(state.catalog.content.announcements);
+      evaluateAnnouncementsPrompt();
 
       if (state.admin.selectedPresetId) selectPresetForEditing(state.admin.selectedPresetId);
       else loadPresetByPair();
@@ -2051,6 +2234,24 @@
       state.admin.loading = false;
       render();
     }
+  }
+
+  function readAnnouncementDraftsFromInputs() {
+    const fields = Array.from(document.querySelectorAll("[data-admin-announcement-field]"));
+    const byIndex = [];
+    fields.forEach((field) => {
+      const key = String(field.getAttribute("data-admin-announcement-field") || "");
+      const [indexText, prop] = key.split(":");
+      const index = Number(indexText);
+      if (!Number.isFinite(index) || index < 0 || !prop) return;
+      if (!byIndex[index]) byIndex[index] = createEmptyAnnouncementDraft();
+      if (prop === "permanent") {
+        byIndex[index][prop] = Boolean(field.checked);
+      } else {
+        byIndex[index][prop] = String(field.value || "");
+      }
+    });
+    state.admin.announcementDrafts = normalizeAnnouncementDrafts(byIndex);
   }
 
   function readPresetFormFromInputs() {
@@ -2375,6 +2576,104 @@
     return String(value || "").replace(/\r\n?/g, "\n");
   }
 
+  function normalizeAnnouncementDrafts(items, ensureOne = true) {
+    const source = Array.isArray(items) ? items : [];
+    const normalized = source.map((item) => ({
+      id: String(item && item.id ? item.id : createAnnouncementId()),
+      heading: String(item && item.heading ? item.heading : ""),
+      body: String(item && item.body ? item.body : ""),
+      startAt: normalizeDatetimeLocalInput(item && item.startAt ? item.startAt : ""),
+      endAt: normalizeDatetimeLocalInput(item && item.endAt ? item.endAt : ""),
+      permanent: Boolean(item && item.permanent),
+    }));
+    if (normalized.length) return normalized;
+    return ensureOne ? [createEmptyAnnouncementDraft()] : [];
+  }
+
+  function normalizeDatetimeLocalInput(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    const asDate = new Date(text);
+    if (!Number.isFinite(asDate.getTime())) return "";
+    return toDatetimeLocalValue(asDate);
+  }
+
+  function toDatetimeLocalValue(dateObj) {
+    if (!(dateObj instanceof Date) || !Number.isFinite(dateObj.getTime())) return "";
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+    const day = String(dateObj.getDate()).padStart(2, "0");
+    const hour = String(dateObj.getHours()).padStart(2, "0");
+    const minute = String(dateObj.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hour}:${minute}`;
+  }
+
+  function formatDatetimeLocalValue(value) {
+    return normalizeDatetimeLocalInput(value);
+  }
+
+  function parseAnnouncementsContent(raw) {
+    const text = String(raw || "").trim();
+    if (!text) return [];
+    try {
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) return [];
+      return normalizeAnnouncementDrafts(parsed, false);
+    } catch {
+      return [];
+    }
+  }
+
+  function isAnnouncementActive(item, nowMs) {
+    if (!item) return false;
+    if (item.permanent) return true;
+    const startMs = item.startAt ? new Date(item.startAt).getTime() : Number.NaN;
+    const endMs = item.endAt ? new Date(item.endAt).getTime() : Number.NaN;
+    const hasStart = Number.isFinite(startMs);
+    const hasEnd = Number.isFinite(endMs);
+    if (hasStart && nowMs < startMs) return false;
+    if (hasEnd && nowMs > endMs) return false;
+    return hasStart || hasEnd;
+  }
+
+  function computeAnnouncementSignature(items) {
+    return (Array.isArray(items) ? items : [])
+      .map((item) => `${item.id}|${item.heading}|${item.body}|${item.startAt}|${item.endAt}|${item.permanent ? 1 : 0}`)
+      .join("||");
+  }
+
+  function evaluateAnnouncementsPrompt() {
+    if (state.view === "admin" || state.view === "admin-login") return;
+    const announcements = Array.isArray(state.catalog.content.announcements) ? state.catalog.content.announcements : [];
+    if (!announcements.length) {
+      state.announcement.open = false;
+      state.announcement.items = [];
+      state.announcement.index = 0;
+      state.announcement.activeSignature = "";
+      return;
+    }
+    const nowMs = Date.now();
+    const active = announcements
+      .filter((item) => isAnnouncementActive(item, nowMs))
+      .filter((item) => String(item.heading || "").trim() !== "" || String(item.body || "").trim() !== "");
+    if (!active.length) {
+      state.announcement.open = false;
+      state.announcement.items = [];
+      state.announcement.index = 0;
+      state.announcement.activeSignature = "";
+      return;
+    }
+    const signature = computeAnnouncementSignature(active);
+    const previousSignature = state.announcement.activeSignature;
+    state.announcement.activeSignature = signature;
+    if (state.announcement.open && previousSignature === signature && state.announcement.items.length) return;
+    const seenSignature = readStoredValue(ANNOUNCEMENT_SEEN_KEY);
+    if (seenSignature === signature) return;
+    state.announcement.items = active;
+    state.announcement.index = 0;
+    state.announcement.open = true;
+  }
+
   function normalizeEditorComparison(value) {
     return normalizeEditorText(value).trim();
   }
@@ -2688,6 +2987,34 @@
       state.admin.error = error && error.message ? error.message : `Could not save ${pageKey} content.`;
       if (pageKey === "manual") state.admin.manualSaveStatus = "Save failed";
       if (pageKey === "privacy") state.admin.privacySaveStatus = "Save failed";
+      render();
+    }
+  }
+
+  async function saveAnnouncementsFromAdmin() {
+    const normalized = normalizeAnnouncementDrafts(state.admin.announcementDrafts).filter((item) => {
+      return String(item.heading || "").trim() !== "" || String(item.body || "").trim() !== "";
+    });
+    const payload = JSON.stringify(normalized);
+    const ok = await connectSupabaseClient(false);
+    if (!ok) {
+      render();
+      return;
+    }
+    state.admin.error = "";
+    state.admin.notice = "";
+    try {
+      const { error } = await supabaseClient.from("content_pages").upsert(
+        { key: "announcements", body_html: payload },
+        { onConflict: "key" },
+      );
+      if (error) throw error;
+      state.admin.announcementSaveStatus = `Saved ${formatAdminSaveTime()}`;
+      await loadAdminData();
+      evaluateAnnouncementsPrompt();
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Could not save announcements.";
+      state.admin.announcementSaveStatus = "Save failed";
       render();
     }
   }
@@ -3462,6 +3789,7 @@
       state.catalog.airports = dbAirports.map((airport) => ({ ...airport }));
       if (typeof contentMap.manual === "string") state.catalog.content.manualHtml = contentMap.manual;
       if (typeof contentMap.privacy === "string") state.catalog.content.privacyHtml = contentMap.privacy;
+      state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
     } finally {
       loadingPublicCatalog = false;
     }
@@ -3469,6 +3797,7 @@
 
   async function initializeApp() {
     await loadPublicCatalogFromSupabase();
+    evaluateAnnouncementsPrompt();
     render();
   }
 
