@@ -13,101 +13,6 @@
     "833": "C172",
     "8734": "Seneca",
   };
-  const AIRPORTS = [
-    { id: "RPVD", code: "RPVD", cptAtis: "", depAap: "", twr: "129.7", gnd: "", fss: "", remarks: "09-27/15ft" },
-    { id: "RPVZ", code: "RPVZ", cptAtis: "", depAap: "", twr: "", gnd: "", fss: "121.9", remarks: "04-22/26ft" },
-    { id: "RPMG", code: "RPMG", cptAtis: "", depAap: "", twr: "123.8/121.7", gnd: "", fss: "", remarks: "02-20/12ft" },
-    { id: "RPSP", code: "RPSP", cptAtis: "126.5", depAap: "", twr: "124.5", gnd: "121.6", fss: "", remarks: "03-21/39ft" },
-    { id: "RPMO", code: "RPMO", cptAtis: "127.6", depAap: "125.5", twr: "122.6", gnd: "", fss: "", remarks: "03-21/16ft" },
-    { id: "RPMY", code: "RPMY", cptAtis: "127.6", depAap: "125.5", twr: "122.6", gnd: "", fss: "", remarks: "09-27/191ft" },
-    { id: "RPVB", code: "RPVB", cptAtis: "", depAap: "121.0", twr: "118.8", gnd: "", fss: "", remarks: "03-21/86ft" },
-    { id: "RPMH", code: "RPMH", cptAtis: "", depAap: "", twr: "", gnd: "", fss: "121.9", remarks: "07-25/53ft" },
-    { id: "RPVM", code: "RPVM", cptAtis: "126.6", depAap: "121.2", twr: "118.1", gnd: "121.8", fss: "124.0", remarks: "04-22/28ft" },
-    { id: "RPVH", code: "RPVH", cptAtis: "", depAap: "", twr: "", gnd: "", fss: "121.9", remarks: "16-34/328ft" },
-    { id: "RPSM", code: "RPSM", cptAtis: "", depAap: "", twr: "", gnd: "", fss: "121.9", remarks: "18-36/12ft" },
-    { id: "RPMP", code: "RPMP", cptAtis: "", depAap: "122.0", twr: "", gnd: "", fss: "", remarks: "02-20/5ft" },
-    { id: "RPSB", code: "RPSB", cptAtis: "", depAap: "", twr: "", gnd: "", fss: "121.9", remarks: "16-24/60ft" },
-    { id: "RPVI", code: "RPVI", cptAtis: "", depAap: "121.0", twr: "123.4", gnd: "", fss: "", remarks: "02-20/153ft" },
-    { id: "RPVR", code: "RPVR", cptAtis: "", depAap: "", twr: "118.5", gnd: "", fss: "", remarks: "14-32/9ft" },
-    { id: "SIPALAY", code: "SIPALAY", cptAtis: "", depAap: "", twr: "", gnd: "", fss: "121.9", remarks: "02-20" },
-    { id: "RPVK", code: "RPVK", cptAtis: "", depAap: "120.4", twr: "124.2", gnd: "", fss: "", remarks: "05-23/91ft" },
-    { id: "RPVO", code: "RPVO", cptAtis: "", depAap: "", twr: "", gnd: "", fss: "121.9", remarks: "18-36/83ft" },
-    { id: "RPVA", code: "RPVA", cptAtis: "", depAap: "120.4", twr: "124.3", gnd: "", fss: "", remarks: "18-36/4ft" },
-    { id: "RPMS", code: "RPMS", cptAtis: "", depAap: "122.0", twr: "", gnd: "", fss: "", remarks: "18-36/20ft" },
-    { id: "RPME", code: "RPME", cptAtis: "", depAap: "121.3", twr: "123.3/122.0", gnd: "", fss: "", remarks: "12-30/44ft" },
-  ];
-  const DEFAULT_ROUTE_PRESETS = [
-    {
-      id: "preset-rpsp-rpvd",
-      name: "RPSP to RPVD",
-      departure: "RPSP",
-      destination: "RPVD",
-      legs: [
-        { route: "RPSP" },
-        { route: "DOLJO", tc: 291, distance: 4, cas: 70 },
-        { route: "BOLJOON", tc: 280, distance: 15, cas: 85 },
-        { route: "OSLOB", tc: 203, distance: 6, cas: 85 },
-        { route: "SUMILON", tc: 210, distance: 6, cas: 85 },
-        { route: "RPVD", tc: 215, distance: 8, cas: 85 },
-      ],
-    },
-    {
-      id: "preset-rpvd-rpmg",
-      name: "RPVD to RPMG",
-      departure: "RPVD",
-      destination: "RPMG",
-      legs: [
-        { route: "RPVD" },
-        { route: "DAUIN", tc: 197, distance: 9, cas: 70 },
-        { route: "ZAMBOANGUITA", tc: 218, distance: 8, cas: 85 },
-        { route: "ALIGUAY", tc: 176, distance: 22, cas: 85 },
-        { route: "RPMG", tc: 137, distance: 11, cas: 85 },
-      ],
-    },
-    {
-      id: "preset-rpmg-rpvd",
-      name: "RPMG to RPVD",
-      departure: "RPMG",
-      destination: "RPVD",
-      legs: [
-        { route: "RPMG" },
-        { route: "TAGULO POINT", tc: 16, distance: 8, cas: 70 },
-        { route: "SELINOG", tc: 18, distance: 8, cas: 85 },
-        { route: "APO ISLAND", tc: 327, distance: 16, cas: 85 },
-        { route: "DAUIN", tc: 359, distance: 7, cas: 85 },
-        { route: "RPVD", tc: 22, distance: 7, cas: 85 },
-      ],
-    },
-    {
-      id: "preset-rpvd-rpsp",
-      name: "RPVD to RPSP",
-      departure: "RPVD",
-      destination: "RPSP",
-      legs: [
-        { route: "RPVD" },
-        { route: "SUMILON", tc: 35, distance: 8, cas: 70 },
-        { route: "OSLOB", tc: 30, distance: 6, cas: 85 },
-        { route: "DOLJO", tc: 76, distance: 18, cas: 85 },
-        { route: "RPSP", tc: 111, distance: 4, cas: 85 },
-      ],
-    },
-    {
-      id: "preset-rpmg-rpsp",
-      name: "RPMG to RPSP",
-      departure: "RPMG",
-      destination: "RPSP",
-      legs: [
-        { route: "RPMG" },
-        { route: "TAUOLO POINT", tc: 16, distance: 8, cas: 70 },
-        { route: "SELINOG", tc: 14, distance: 8, cas: 85 },
-        { route: "SAN JUAN", tc: 14, distance: 19, cas: 85 },
-        { route: "LAZI", tc: 116, distance: 8, cas: 85 },
-        { route: "MARIA", tc: 39, distance: 7, cas: 85 },
-        { route: "PAMILICAN", tc: 38, distance: 24, cas: 85 },
-        { route: "RPSP", tc: 300, distance: 10, cas: 85 },
-      ],
-    },
-  ];
   const SUPABASE_URL_KEY = "navlog_supabase_url";
   const SUPABASE_ANON_KEY = "navlog_supabase_anon_key";
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
@@ -125,8 +30,8 @@
       note: "",
     },
     catalog: {
-      airports: AIRPORTS.map((airport) => ({ ...airport })),
-      routePresets: DEFAULT_ROUTE_PRESETS.map((preset) => ({ ...preset, legs: preset.legs.map((leg) => ({ ...leg })) })),
+      airports: [],
+      routePresets: [],
       content: {
         manualHtml: "",
         privacyHtml: "",
@@ -628,11 +533,13 @@
     if (!state.admin.session) return renderAdminLoginScreen();
     const statusText = state.admin.error || state.admin.notice;
     const statusClass = state.admin.error ? "admin-status error" : "admin-status ok";
-    const presetOptions = state.admin.presets
-      .map((preset) => `<option value="${escapeAttr(preset.id)}"${preset.id === state.admin.selectedPresetId ? " selected" : ""}>${escapeHtml(preset.name || `${preset.departure} to ${preset.destination}`)}</option>`)
+    const presetLookup = getPresetLookupState();
+    const airportLookup = getAirportLookupState();
+    const presetList = state.admin.presets
+      .map((preset) => `<li>${escapeHtml(preset.departure)} to ${escapeHtml(preset.destination)}${preset.name ? ` - ${escapeHtml(preset.name)}` : ""}</li>`)
       .join("");
-    const airportOptions = state.admin.airports
-      .map((airport) => `<option value="${escapeAttr(airport.code)}"${airport.code === state.admin.selectedAirportCode ? " selected" : ""}>${escapeHtml(airport.code)}</option>`)
+    const airportList = state.admin.airports
+      .map((airport) => `<li>${escapeHtml(airport.code)}${airport.id ? ` (${escapeHtml(airport.id)})` : ""}</li>`)
       .join("");
     return `
       <div class="ui-scale">
@@ -653,17 +560,6 @@
             <h3>Route Presets</h3>
             <div class="admin-grid two-col">
               <label class="setup-field">
-                <span>Existing preset</span>
-                <select id="admin-preset-select">
-                  <option value="">Select preset</option>
-                  ${presetOptions}
-                </select>
-              </label>
-              <label class="setup-field">
-                <span>Preset name</span>
-                <input id="admin-preset-name" value="${escapeAttr(state.admin.presetForm.name)}" />
-              </label>
-              <label class="setup-field">
                 <span>Departure</span>
                 <input id="admin-preset-departure" value="${escapeAttr(state.admin.presetForm.departure)}" />
               </label>
@@ -671,31 +567,39 @@
                 <span>Destination</span>
                 <input id="admin-preset-destination" value="${escapeAttr(state.admin.presetForm.destination)}" />
               </label>
+              <label class="setup-field">
+                <span>Preset name</span>
+                <input id="admin-preset-name" value="${escapeAttr(state.admin.presetForm.name)}" />
+              </label>
+              <div class="setup-field admin-lookup-wrap">
+                <span>Status</span>
+                <p class="admin-lookup ${presetLookup.exists ? "ok" : "warn"}">${escapeHtml(presetLookup.message)}</p>
+              </div>
             </div>
             <label class="setup-field">
               <span>Legs JSON</span>
               <textarea id="admin-preset-legs" class="admin-textarea">${escapeHtml(state.admin.presetForm.legsJson)}</textarea>
             </label>
             <div class="entry-actions">
-              <button class="action" id="admin-preset-new">New</button>
+              <button class="action" id="admin-preset-find">Find</button>
+              <button class="action" id="admin-preset-new">Clear</button>
               <button class="action primary" id="admin-preset-save">Save</button>
-              <button class="action" id="admin-preset-delete"${state.admin.selectedPresetId ? "" : " disabled"}>Delete</button>
+              <button class="action" id="admin-preset-delete"${presetLookup.exists ? "" : " disabled"}>Delete</button>
             </div>
+            <p class="admin-meta">Existing presets: ${state.admin.presets.length}</p>
+            <ul class="admin-mini-list">${presetList || "<li>No presets found.</li>"}</ul>
           </div>
           <div class="manual-section">
             <h3>Airports</h3>
             <div class="admin-grid two-col">
               <label class="setup-field">
-                <span>Existing airport</span>
-                <select id="admin-airport-select">
-                  <option value="">Select airport</option>
-                  ${airportOptions}
-                </select>
-              </label>
-              <label class="setup-field">
                 <span>Airport code</span>
                 <input id="admin-airport-code" value="${escapeAttr(state.admin.airportForm.code)}" />
               </label>
+              <div class="setup-field admin-lookup-wrap">
+                <span>Status</span>
+                <p class="admin-lookup ${airportLookup.exists ? "ok" : "warn"}">${escapeHtml(airportLookup.message)}</p>
+              </div>
               <label class="setup-field">
                 <span>Airport id</span>
                 <input id="admin-airport-id" value="${escapeAttr(state.admin.airportForm.id)}" />
@@ -726,10 +630,13 @@
               <input id="admin-airport-remarks" value="${escapeAttr(state.admin.airportForm.remarks)}" />
             </label>
             <div class="entry-actions">
-              <button class="action" id="admin-airport-new">New</button>
+              <button class="action" id="admin-airport-find">Find</button>
+              <button class="action" id="admin-airport-new">Clear</button>
               <button class="action primary" id="admin-airport-save">Save</button>
-              <button class="action" id="admin-airport-delete"${state.admin.selectedAirportCode ? "" : " disabled"}>Delete</button>
+              <button class="action" id="admin-airport-delete"${airportLookup.exists ? "" : " disabled"}>Delete</button>
             </div>
+            <p class="admin-meta">Existing airports: ${state.admin.airports.length}</p>
+            <ul class="admin-mini-list">${airportList || "<li>No airports found.</li>"}</ul>
           </div>
           <div class="manual-section">
             <h3>User Manual Content</h3>
@@ -1861,13 +1768,22 @@
       });
     }
 
-    const presetSelect = document.getElementById("admin-preset-select");
-    if (presetSelect) {
-      presetSelect.addEventListener("change", (event) => {
-        selectPresetForEditing(event.target.value);
+    const presetFindButton = document.getElementById("admin-preset-find");
+    if (presetFindButton) {
+      presetFindButton.addEventListener("click", () => {
+        readPresetFormFromInputs();
+        loadPresetByPair();
         render();
       });
     }
+    ["admin-preset-departure", "admin-preset-destination"].forEach((id) => {
+      const field = document.getElementById(id);
+      if (!field) return;
+      field.addEventListener("change", () => {
+        readPresetFormFromInputs();
+        render();
+      });
+    });
     const presetNewButton = document.getElementById("admin-preset-new");
     if (presetNewButton) {
       presetNewButton.addEventListener("click", () => {
@@ -1886,14 +1802,23 @@
     const presetDeleteButton = document.getElementById("admin-preset-delete");
     if (presetDeleteButton) {
       presetDeleteButton.addEventListener("click", async () => {
+        readPresetFormFromInputs();
         await deletePresetFromAdmin();
       });
     }
 
-    const airportSelect = document.getElementById("admin-airport-select");
-    if (airportSelect) {
-      airportSelect.addEventListener("change", (event) => {
-        selectAirportForEditing(event.target.value);
+    const airportFindButton = document.getElementById("admin-airport-find");
+    if (airportFindButton) {
+      airportFindButton.addEventListener("click", () => {
+        readAirportFormFromInputs();
+        loadAirportByCode();
+        render();
+      });
+    }
+    const airportCodeInput = document.getElementById("admin-airport-code");
+    if (airportCodeInput) {
+      airportCodeInput.addEventListener("change", () => {
+        readAirportFormFromInputs();
         render();
       });
     }
@@ -1915,6 +1840,7 @@
     const airportDeleteButton = document.getElementById("admin-airport-delete");
     if (airportDeleteButton) {
       airportDeleteButton.addEventListener("click", async () => {
+        readAirportFormFromInputs();
         await deleteAirportFromAdmin();
       });
     }
@@ -2029,7 +1955,7 @@
     state.admin.error = "";
     state.admin.notice = "";
     try {
-      const [presetResult, airportResult, contentResult] = await Promise.all([
+      let [presetResult, airportResult, contentResult] = await Promise.all([
         supabaseClient.from("route_presets").select("*").order("name", { ascending: true }),
         supabaseClient.from("airports").select("*").order("code", { ascending: true }),
         supabaseClient.from("content_pages").select("*"),
@@ -2067,9 +1993,7 @@
       state.admin.privacyHtmlDraft = state.catalog.content.privacyHtml;
 
       if (state.admin.selectedPresetId) selectPresetForEditing(state.admin.selectedPresetId);
-      else if (state.admin.presets[0]) selectPresetForEditing(state.admin.presets[0].id);
       if (state.admin.selectedAirportCode) selectAirportForEditing(state.admin.selectedAirportCode);
-      else if (state.admin.airports[0]) selectAirportForEditing(state.admin.airports[0].code);
 
       state.admin.notice = "Admin data loaded.";
     } catch (error) {
@@ -2125,6 +2049,32 @@
     };
   }
 
+  function findPresetByPair(departure, destination) {
+    const dep = normalizeCode(departure);
+    const dest = normalizeCode(destination);
+    if (!dep || !dest) return null;
+    return state.admin.presets.find((preset) => normalizeCode(preset.departure) === dep && normalizeCode(preset.destination) === dest) || null;
+  }
+
+  function loadPresetByPair() {
+    const match = findPresetByPair(state.admin.presetForm.departure, state.admin.presetForm.destination);
+    if (!match) {
+      state.admin.selectedPresetId = "";
+      if (!state.admin.presetForm.legsJson.trim()) state.admin.presetForm.legsJson = "[]";
+      return;
+    }
+    selectPresetForEditing(match.id);
+  }
+
+  function getPresetLookupState() {
+    const dep = normalizeCode(state.admin.presetForm.departure);
+    const dest = normalizeCode(state.admin.presetForm.destination);
+    if (!dep || !dest) return { exists: false, message: "Enter DEP and ARR to check existing preset." };
+    const match = findPresetByPair(dep, dest);
+    if (match) return { exists: true, message: `Existing preset found (${match.name || `${dep} to ${dest}`}).` };
+    return { exists: false, message: "No preset found for this DEP/ARR pair. Saving will create one." };
+  }
+
   function selectAirportForEditing(code) {
     state.admin.selectedAirportCode = normalizeCode(code);
     const selected = state.admin.airports.find((airport) => airport.code === state.admin.selectedAirportCode);
@@ -2133,6 +2083,23 @@
       return;
     }
     state.admin.airportForm = normalizeAirportRecord(selected);
+  }
+
+  function loadAirportByCode() {
+    const code = normalizeCode(state.admin.airportForm.code);
+    if (!code) {
+      state.admin.selectedAirportCode = "";
+      return;
+    }
+    selectAirportForEditing(code);
+  }
+
+  function getAirportLookupState() {
+    const code = normalizeCode(state.admin.airportForm.code);
+    if (!code) return { exists: false, message: "Enter airport code to check existing record." };
+    const match = state.admin.airports.find((airport) => airport.code === code);
+    if (match) return { exists: true, message: `Existing airport found (${match.code}).` };
+    return { exists: false, message: "No airport found for this code. Saving will create one." };
   }
 
   async function savePresetFromAdmin() {
@@ -2171,9 +2138,11 @@
     state.admin.error = "";
     state.admin.notice = "";
     try {
+      const existingByPair = findPresetByPair(payload.departure, payload.destination);
+      const targetId = existingByPair ? existingByPair.id : state.admin.selectedPresetId;
       let result;
-      if (state.admin.selectedPresetId) {
-        result = await supabaseClient.from("route_presets").update(payload).eq("id", state.admin.selectedPresetId).select().single();
+      if (targetId) {
+        result = await supabaseClient.from("route_presets").update(payload).eq("id", targetId).select().single();
       } else {
         result = await supabaseClient.from("route_presets").insert(payload).select().single();
       }
@@ -2189,7 +2158,9 @@
 
   async function deletePresetFromAdmin() {
     const ok = await connectSupabaseClient(false);
-    if (!ok || !state.admin.selectedPresetId) {
+    const lookup = findPresetByPair(state.admin.presetForm.departure, state.admin.presetForm.destination);
+    const targetId = lookup ? lookup.id : state.admin.selectedPresetId;
+    if (!ok || !targetId) {
       render();
       return;
     }
@@ -2197,7 +2168,7 @@
     state.admin.error = "";
     state.admin.notice = "";
     try {
-      const { error } = await supabaseClient.from("route_presets").delete().eq("id", state.admin.selectedPresetId);
+      const { error } = await supabaseClient.from("route_presets").delete().eq("id", targetId);
       if (error) throw error;
       state.admin.selectedPresetId = "";
       state.admin.presetForm = createEmptyPresetForm();
@@ -2248,7 +2219,8 @@
 
   async function deleteAirportFromAdmin() {
     const ok = await connectSupabaseClient(false);
-    if (!ok || !state.admin.selectedAirportCode) {
+    const code = normalizeCode(state.admin.airportForm.code) || state.admin.selectedAirportCode;
+    if (!ok || !code) {
       render();
       return;
     }
@@ -2256,7 +2228,7 @@
     state.admin.error = "";
     state.admin.notice = "";
     try {
-      const { error } = await supabaseClient.from("airports").delete().eq("code", state.admin.selectedAirportCode);
+      const { error } = await supabaseClient.from("airports").delete().eq("code", code);
       if (error) throw error;
       state.admin.selectedAirportCode = "";
       state.admin.airportForm = createEmptyAirportForm();
@@ -3013,8 +2985,8 @@
         contentMap[String(row.key || "").toLowerCase()] = String(row.body_html || "");
       });
 
-      if (dbPresets.length) state.catalog.routePresets = dbPresets.map((preset) => clonePreset(preset));
-      if (dbAirports.length) state.catalog.airports = dbAirports.map((airport) => ({ ...airport }));
+      state.catalog.routePresets = dbPresets.map((preset) => clonePreset(preset));
+      state.catalog.airports = dbAirports.map((airport) => ({ ...airport }));
       if (typeof contentMap.manual === "string") state.catalog.content.manualHtml = contentMap.manual;
       if (typeof contentMap.privacy === "string") state.catalog.content.privacyHtml = contentMap.privacy;
     } finally {

@@ -28,6 +28,6 @@
 
 ## Notes
 - Public app reads presets/airports/manual/privacy from Supabase when URL/key are configured.
-- If Supabase is not configured, app falls back to local built-in defaults.
+- Preset and airport data are DB-only now; if tables are empty, the app will show no presets/airports until you create them in admin.
 - Current SQL allows any authenticated Supabase user to write admin data.
   - For production, limit writes to trusted admin users only.
