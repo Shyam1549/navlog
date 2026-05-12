@@ -32,15 +32,11 @@ select { font: inherit; }
 .page {
   width: min(1320px, 100%);
   margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
 }
 
 .ui-scale {
   width: 100%;
-  transform: scale(var(--ui-scale));
-  transform-origin: top center;
+  zoom: var(--ui-scale);
 }
 
 .entry-hero,
@@ -201,8 +197,8 @@ select { font: inherit; }
 .manual-front-btn { margin-left: auto; }
 
 .front-footer {
-  margin-top: auto;
-  padding: 13px 16px;
+  margin-top: 14px;
+  padding: 12px 16px;
   border: 2px solid rgba(46, 41, 35, 0.16);
   border-radius: 16px;
   background: rgba(251, 247, 239, 0.9);
@@ -216,8 +212,30 @@ select { font: inherit; }
 
 .front-footer-links {
   display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 12px;
+  flex-wrap: nowrap;
+  align-items: center;
+  padding: 7px 10px;
+  border: 1px solid rgba(46, 41, 35, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.front-footer-links .footer-link + .footer-link {
+  position: relative;
+  margin-left: 6px;
+  padding-left: 14px;
+}
+
+.front-footer-links .footer-link + .footer-link::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 1px;
+  height: 14px;
+  background: rgba(46, 41, 35, 0.26);
 }
 
 .footer-link {
@@ -228,6 +246,7 @@ select { font: inherit; }
   font-size: 0.88rem;
   text-decoration: none;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .footer-link:hover {
@@ -239,12 +258,13 @@ select { font: inherit; }
   margin: 0;
   font-size: 0.8rem;
   color: var(--muted);
+  margin-left: auto;
 }
 
 .bug-report-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.02);
+  background: rgba(255, 255, 255, 0.01);
   backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
@@ -1069,7 +1089,7 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
   .ui-scale {
     width: 100%;
-    transform: none;
+    zoom: 1;
   }
 
   .sheet-wrap {
@@ -1148,6 +1168,32 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     border-bottom: 2px solid var(--line);
   }
   .atis-cell:last-child { border-bottom: 0; }
+
+  .front-footer {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .front-footer-links {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .front-footer-links .footer-link + .footer-link {
+    margin-left: 0;
+    padding-left: 0;
+  }
+
+  .front-footer-links .footer-link + .footer-link::before {
+    display: none;
+  }
+
+  .front-footer-copy {
+    width: 100%;
+    text-align: center;
+    margin-left: 0;
+  }
 }
 
 @media print {
