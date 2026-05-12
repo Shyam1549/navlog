@@ -1455,10 +1455,15 @@ select { font: inherit; }
   background: rgba(255, 255, 255, 0.55);
 }
 
+.additional-info-subtitle {
+  margin: 0 0 8px;
+  font-size: 0.96rem;
+}
+
 .additional-info-table {
   width: 100%;
   border-collapse: collapse;
-  min-width: 1280px;
+  min-width: 620px;
 }
 
 .additional-info-table td {
@@ -1466,20 +1471,21 @@ select { font: inherit; }
   padding: 4px 6px;
   font-size: 0.84rem;
   min-width: 72px;
-  height: 34px;
+  height: 42px;
   vertical-align: middle;
 }
 
 .additional-info-table.editable td {
   padding: 0;
+  height: 42px;
 }
 
 .additional-info-table.editable td input {
   width: 100%;
   border: 0;
   background: transparent;
-  min-height: 34px;
-  height: 34px;
+  min-height: 42px;
+  height: 42px;
   padding: 4px 6px;
   line-height: 1.15;
   font-size: 0.84rem;

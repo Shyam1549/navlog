@@ -21,8 +21,8 @@
   const ANNOUNCEMENT_SEEN_KEY = "navlog_announcement_seen_signature";
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
   const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
-  const ADDITIONAL_INFO_ROWS = 9;
-  const ADDITIONAL_INFO_COLS = 19;
+  const ADDITIONAL_INFO_ROWS = 19;
+  const ADDITIONAL_INFO_COLS = 9;
 
   const app = document.getElementById("app");
   const state = {
@@ -491,11 +491,11 @@
           <div class="top-side"><button class="back-link" id="back-from-additional-info">Back</button></div>
           <div class="top-center">
             <h1>Additional Information</h1>
-            <p class="setup-caption">Aircraft Information</p>
           </div>
           <div class="top-side right"></div>
         </section>
         <section class="setup-card privacy-card">
+          <h3 class="additional-info-subtitle">Aircraft Information</h3>
           <div class="additional-info-wrap">
             <table class="additional-info-table">
               <tbody>
