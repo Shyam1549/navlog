@@ -42,6 +42,12 @@
     view: "setup",
     navlog: createBlankNavlog(),
     settings: createDefaultSettings(),
+    bugReport: {
+      open: false,
+      submitting: false,
+      status: "",
+      note: "",
+    },
     meta: {
       hasOpenedSheet: false,
       usingPresetRoute: false,
@@ -170,10 +176,43 @@
           <div class="entry-actions">
             <button class="action primary" id="open-sheet">Open navlog</button>
             ${showResume ? `<button class="action" id="resume-sheet">Resume current sheet</button>` : ""}
+            <button class="action" id="open-bug-report" type="button">Report bug</button>
             <button class="action manual-front-btn" id="open-manual" type="button">User manual</button>
           </div>
         </section>
+        ${renderBugReportModal()}
       </main>
+      </div>
+    `;
+  }
+
+  function renderBugReportModal() {
+    if (!state.bugReport.open) return "";
+    const disabled = state.bugReport.submitting ? "disabled" : "";
+    const submitLabel = state.bugReport.submitting ? "Sending..." : "Send report";
+    const statusClass = state.bugReport.status === "ok" ? "bug-report-status ok" : "bug-report-status error";
+    return `
+      <div class="bug-report-overlay" id="bug-report-overlay">
+        <section class="bug-report-modal" role="dialog" aria-modal="true" aria-label="Bug report form">
+          <div class="bug-report-head">
+            <h3>Report a bug</h3>
+            <button class="action bug-report-close" id="close-bug-report" type="button" ${disabled}>Close</button>
+          </div>
+          <form id="bug-report-form" class="bug-report-form">
+            <label>
+              <span>What went wrong?</span>
+              <textarea id="bug-report-message" maxlength="2000" required placeholder="Describe what happened and how to reproduce it."></textarea>
+            </label>
+            <label>
+              <span>Your email (optional)</span>
+              <input id="bug-report-email" type="email" maxlength="200" placeholder="you@example.com" />
+            </label>
+            ${state.bugReport.note ? `<p class="${statusClass}">${escapeHtml(state.bugReport.note)}</p>` : ""}
+            <div class="bug-report-actions">
+              <button class="action primary" type="submit" ${disabled}>${submitLabel}</button>
+            </div>
+          </form>
+        </section>
       </div>
     `;
   }
@@ -633,6 +672,82 @@
       openManualButton.addEventListener("click", () => {
         state.view = "manual";
         render();
+      });
+    }
+    const openBugReportButton = document.getElementById("open-bug-report");
+    if (openBugReportButton) {
+      openBugReportButton.addEventListener("click", () => {
+        state.bugReport.open = true;
+        state.bugReport.submitting = false;
+        state.bugReport.status = "";
+        state.bugReport.note = "";
+        render();
+      });
+    }
+    const closeBugReportButton = document.getElementById("close-bug-report");
+    if (closeBugReportButton) {
+      closeBugReportButton.addEventListener("click", () => {
+        state.bugReport.open = false;
+        state.bugReport.submitting = false;
+        state.bugReport.status = "";
+        state.bugReport.note = "";
+        render();
+      });
+    }
+    const bugReportOverlay = document.getElementById("bug-report-overlay");
+    if (bugReportOverlay) {
+      bugReportOverlay.addEventListener("click", (event) => {
+        if (event.target !== bugReportOverlay || state.bugReport.submitting) return;
+        state.bugReport.open = false;
+        state.bugReport.status = "";
+        state.bugReport.note = "";
+        render();
+      });
+    }
+    const bugReportForm = document.getElementById("bug-report-form");
+    if (bugReportForm) {
+      bugReportForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (state.bugReport.submitting) return;
+        const messageInput = document.getElementById("bug-report-message");
+        const emailInput = document.getElementById("bug-report-email");
+        const message = (messageInput ? messageInput.value : "").trim();
+        const reporterEmail = (emailInput ? emailInput.value : "").trim();
+        if (!message) {
+          state.bugReport.status = "error";
+          state.bugReport.note = "Please add bug details first.";
+          render();
+          return;
+        }
+        state.bugReport.submitting = true;
+        state.bugReport.status = "";
+        state.bugReport.note = "";
+        render();
+        try {
+          const response = await fetch("/api/bug-report", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message,
+              reporterEmail,
+              page: state.view,
+              departure: state.navlog.setup.departure || "",
+              destination: state.navlog.setup.destination || "",
+              userAgent: window.navigator.userAgent || "",
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.error || "Could not submit bug report.");
+          state.bugReport.submitting = false;
+          state.bugReport.status = "ok";
+          state.bugReport.note = "Thanks. Your bug report was sent.";
+          render();
+        } catch (error) {
+          state.bugReport.submitting = false;
+          state.bugReport.status = "error";
+          state.bugReport.note = error && error.message ? error.message : "Could not submit bug report.";
+          render();
+        }
       });
     }
     const resumeButton = document.getElementById("resume-sheet");
@@ -1844,6 +1959,13 @@
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;");
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
   }
 
   function normalizeDisplayDate(value) {

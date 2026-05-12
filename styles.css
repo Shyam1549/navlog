@@ -194,6 +194,87 @@ select { font: inherit; }
 .entry-actions { margin-top: 18px; }
 .manual-front-btn { margin-left: auto; }
 
+.bug-report-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 10, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1200;
+}
+
+.bug-report-modal {
+  width: min(620px, 100%);
+  border: 2px solid rgba(46, 41, 35, 0.22);
+  border-radius: 16px;
+  background: rgba(251, 247, 239, 0.98);
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+
+.bug-report-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bug-report-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.bug-report-close {
+  padding: 8px 12px;
+}
+
+.bug-report-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.bug-report-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.bug-report-form span {
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+}
+
+.bug-report-form textarea,
+.bug-report-form input {
+  width: 100%;
+  border: 2px solid rgba(46, 41, 35, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 10px 12px;
+}
+
+.bug-report-form textarea {
+  min-height: 140px;
+  resize: vertical;
+}
+
+.bug-report-status {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.bug-report-status.ok { color: #1f7a33; }
+.bug-report-status.error { color: #b33a2b; }
+
+.bug-report-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .preset-status {
   margin-top: 10px;
   font-size: 0.78rem;
