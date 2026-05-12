@@ -78,6 +78,11 @@
       announcementDrafts: [createEmptyAnnouncementDraft()],
       announcementSaveStatus: "",
       panel: "dashboard",
+      analytics: {
+        loading: false,
+        error: "",
+        summary: null,
+      },
     },
     meta: {
       hasOpenedSheet: false,
@@ -399,6 +404,31 @@
     `;
   }
 
+  function renderAdminAnalyticsSummary(summary) {
+    if (!summary) return "<p>No analytics data yet.</p>";
+    const pageviews24h = Number(summary.pageviews24h || 0);
+    const pageviews7d = Number(summary.pageviews7d || 0);
+    const uniqueVisitors24h = Number(summary.uniqueVisitors24h || 0);
+    const uniqueVisitors7d = Number(summary.uniqueVisitors7d || 0);
+    const topPages = Array.isArray(summary.topPages) ? summary.topPages : [];
+    return `
+      <div class="admin-analytics-grid">
+        <div class="admin-analytics-kpi"><strong>${pageviews24h}</strong><span>Pageviews (24h)</span></div>
+        <div class="admin-analytics-kpi"><strong>${uniqueVisitors24h}</strong><span>Visitors (24h)</span></div>
+        <div class="admin-analytics-kpi"><strong>${pageviews7d}</strong><span>Pageviews (7d)</span></div>
+        <div class="admin-analytics-kpi"><strong>${uniqueVisitors7d}</strong><span>Visitors (7d)</span></div>
+      </div>
+      <div class="admin-analytics-pages">
+        <h5>Top Pages (7d)</h5>
+        ${
+          topPages.length
+            ? `<ul>${topPages.map((item) => `<li><span>${escapeHtml(String(item.path || "/"))}</span><strong>${Number(item.views || 0)}</strong></li>`).join("")}</ul>`
+            : "<p>No page data.</p>"
+        }
+      </div>
+    `;
+  }
+
   function renderManualScreen() {
     const customManual = String(state.catalog.content.manualHtml || "").trim();
     return `
@@ -528,7 +558,6 @@
       { id: "manual", label: "User Manual" },
       { id: "privacy", label: "Privacy Policy" },
     ];
-    const vercelAnalyticsUrl = String(readSupabaseConfigValue("vercelAnalyticsUrl") || "https://vercel.com/dashboard/analytics");
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -550,7 +579,7 @@
             </aside>
             <div class="admin-panel-wrap">
           <div class="manual-section${panel === "presets" ? "" : " hidden"}">
-            <h3>Route Presets</h3>
+            <h3>Route Presets</h3><br>
             <datalist id="admin-preset-code-list">${presetCodeOptions}</datalist>
             <div class="admin-grid two-col">
               <label class="setup-field">
@@ -592,7 +621,7 @@
             </div>
           </div>
           <div class="manual-section${panel === "airports" ? "" : " hidden"}">
-            <h3>Airport Information</h3>
+            <h3>Airport Information</h3><br>
             <datalist id="admin-airport-code-list">${airportCodeOptions}</datalist>
             <div class="preset-status ${airportLookup.active ? (airportLookup.exists ? "available" : "missing") : ""}">${airportLookup.active ? (airportLookup.exists ? "airport avbl" : "airport unavbl") : ""}</div>
             <section class="admin-airport-table">
@@ -625,6 +654,7 @@
               <h3>Announcements</h3>
               <button class="action" id="admin-announcement-add">Add</button>
             </div>
+            <br>
             <section class="admin-announcement-list">
               ${state.admin.announcementDrafts.length ? state.admin.announcementDrafts.map((draft, index) => `
                 <article class="admin-announcement-item${draft.collapsed ? " collapsed" : ""}">
@@ -637,24 +667,24 @@
                   </div>
                   <div class="admin-announcement-body-wrap">
                   <div class="admin-grid one-col">
-                    <label class="setup-field">
+                    <label class="setup-field admin-title-gap">
                       <span>Heading</span>
                       <input data-admin-announcement-field="${index}:heading" value="${escapeAttr(draft.heading)}" />
                     </label>
                   </div>
-                  <label class="setup-field">
+                  <label class="setup-field admin-title-gap">
                     <span>Body</span>
                     <textarea data-admin-announcement-field="${index}:body" class="admin-textarea">${escapeHtml(draft.body)}</textarea>
                   </label>
                   <div class="admin-grid two-col">
-                    <label class="setup-field admin-announcement-datetime">
+                    <label class="setup-field admin-announcement-datetime admin-title-gap">
                       <span>Start (Y/M/D) / UTC</span>
                       <div class="admin-inline-inputs">
                         <input data-admin-announcement-field="${index}:startDate" value="${escapeAttr(formatAnnouncementDateInput(draft.startDate))}" placeholder="yyyy/mm/dd" ${draft.permanent ? "disabled" : ""} />
                         <input data-admin-announcement-field="${index}:startTimeUtc" value="${escapeAttr(formatAnnouncementTimeInput(draft.startTimeUtc))}" placeholder="hh:mm" ${draft.permanent ? "disabled" : ""} />
                       </div>
                     </label>
-                    <label class="setup-field admin-announcement-datetime">
+                    <label class="setup-field admin-announcement-datetime admin-title-gap">
                       <span>End (Y/M/D) / UTC</span>
                       <div class="admin-inline-inputs">
                         <input data-admin-announcement-field="${index}:endDate" value="${escapeAttr(formatAnnouncementDateInput(draft.endDate))}" placeholder="yyyy/mm/dd" ${draft.permanent ? "disabled" : ""} />
@@ -676,7 +706,7 @@
             <span class="admin-subtle-status">${escapeHtml(state.admin.announcementSaveStatus)}</span>
           </div>
           <div class="manual-section${panel === "manual" ? "" : " hidden"}">
-            <h3>User Manual Content</h3>
+            <h3>User Manual Content</h3><br>
             <label class="setup-field">
               <textarea id="admin-manual-html" class="admin-textarea admin-textarea-large">${escapeHtml(state.admin.manualHtmlDraft)}</textarea>
             </label>
@@ -686,7 +716,7 @@
             </div>
           </div>
           <div class="manual-section${panel === "privacy" ? "" : " hidden"}">
-            <h3>Privacy Policy Content</h3>
+            <h3>Privacy Policy Content</h3><br>
             <label class="setup-field">
               <textarea id="admin-privacy-html" class="admin-textarea admin-textarea-large">${escapeHtml(state.admin.privacyHtmlDraft)}</textarea>
             </label>
@@ -696,18 +726,17 @@
             </div>
           </div>
           <div class="manual-section${panel === "dashboard" ? "" : " hidden"}">
-            <h3>Overview</h3>
+            <h3>Overview</h3><br>
             <p class="setup-caption">Select a section from the left menu to manage content.</p>
             <div class="admin-analytics-card">
-              <h4>Vercel Analytics</h4>
-              <p>Embedded analytics view.</p>
-              <iframe
-                class="admin-analytics-frame"
-                src="${escapeAttr(vercelAnalyticsUrl)}"
-                title="Vercel Analytics"
-                loading="lazy"
-                referrerpolicy="no-referrer"
-              ></iframe>
+              <h4>Vercel Analytics (Native)</h4>
+              ${
+                state.admin.analytics.loading
+                  ? '<p>Loading analytics...</p>'
+                  : state.admin.analytics.error
+                    ? `<p class="admin-status error">${escapeHtml(state.admin.analytics.error)}</p>`
+                    : renderAdminAnalyticsSummary(state.admin.analytics.summary)
+              }
             </div>
           </div>
           </div>
@@ -1952,13 +1981,17 @@
     }
     const adminPanelButtons = Array.from(document.querySelectorAll("[data-admin-panel]"));
     adminPanelButtons.forEach((button) => {
-      button.addEventListener("click", () => {
+      button.addEventListener("click", async () => {
         const nextPanel = String(button.getAttribute("data-admin-panel") || "");
         if (!nextPanel || nextPanel === state.admin.panel) return;
         state.admin.panel = nextPanel;
+        if (nextPanel === "dashboard") await loadAdminAnalyticsSummary();
         render();
       });
     });
+    if (state.admin.panel === "dashboard" && !state.admin.analytics.loading && !state.admin.analytics.summary && !state.admin.analytics.error) {
+      loadAdminAnalyticsSummary();
+    }
 
     ["admin-preset-departure", "admin-preset-destination"].forEach((id) => {
       const field = document.getElementById(id);
@@ -2088,7 +2121,7 @@
     const announcementAddButton = document.getElementById("admin-announcement-add");
     if (announcementAddButton) {
       announcementAddButton.addEventListener("click", () => {
-        state.admin.announcementDrafts.push(createEmptyAnnouncementDraft());
+        state.admin.announcementDrafts.unshift(createEmptyAnnouncementDraft());
         render();
       });
     }
@@ -2141,6 +2174,25 @@
         await saveAnnouncementByIndex(index);
       });
     });
+  }
+
+  async function loadAdminAnalyticsSummary() {
+    state.admin.analytics.loading = true;
+    state.admin.analytics.error = "";
+    render();
+    try {
+      const response = await fetch("/api/admin-analytics-summary");
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || "Could not load analytics summary.");
+      state.admin.analytics.summary = payload.summary || null;
+      state.admin.analytics.error = payload.notice ? String(payload.notice) : "";
+    } catch (error) {
+      state.admin.analytics.summary = null;
+      state.admin.analytics.error = error && error.message ? error.message : "Could not load analytics summary.";
+    } finally {
+      state.admin.analytics.loading = false;
+      render();
+    }
   }
 
   async function connectSupabaseClient(forceRecreate) {
