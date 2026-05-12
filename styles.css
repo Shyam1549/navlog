@@ -568,13 +568,13 @@ select { font: inherit; }
   background: rgba(46, 41, 35, 0.12);
   border-color: rgba(46, 41, 35, 0.2);
   color: rgba(46, 41, 35, 0.45);
-  cursor: not-allowed;
+  cursor: pointer;
 }
 
 .admin-mini-btn.active {
-  background: #000;
-  color: #fff;
-  border-color: #000;
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--ink);
+  border-color: var(--line);
 }
 
 .admin-subtle-status {
@@ -1140,6 +1140,7 @@ select { font: inherit; }
 .location-cell {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 30px;
+  position: relative;
 }
 
 .route-main input,
@@ -1150,6 +1151,24 @@ select { font: inherit; }
 
 .route-main input {
   padding-bottom: 24px;
+}
+
+.route-inline-hint {
+  display: none;
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  right: 36px;
+  color: rgba(110, 100, 88, 0.92);
+  font-size: 0.72rem;
+  line-height: 1.05;
+  text-transform: lowercase;
+  pointer-events: none;
+  white-space: normal;
+}
+
+.route-cell.show-route-hint .route-inline-hint {
+  display: block;
 }
 
 .route-dtg {

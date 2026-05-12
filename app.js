@@ -715,13 +715,22 @@
     const removable = index > 0 && index < state.navlog.legs.length - 1;
     const altExtra = index === 0 ? "first-alt" : "";
     const distanceToGo = getDistanceToGoDisplay(index);
-    const routePlaceholder = index === 0 ? ' placeholder="enter departure airport"' : "";
+    const isFirstRoute = index === 0;
+    const isLastRoute = index === state.navlog.legs.length - 1;
+    const routeCellExtra = isFirstRoute ? "first-route-hint" : (isLastRoute ? "last-route-hint" : "");
     return `
       <div class="leg-row">
-        <div class="${legFieldClass(leg, "route", "route route-cell")}">
+        <div class="${legFieldClass(leg, "route", `route route-cell ${routeCellExtra}`.trim())}">
           <div class="route-main">
-            <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}"${routePlaceholder} />
+            <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" />
             ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
+            ${
+              isFirstRoute
+                ? '<span class="route-inline-hint route-inline-hint-dep" aria-hidden="true">departure<br>airport<br>here</span>'
+                : isLastRoute
+                  ? '<span class="route-inline-hint route-inline-hint-dest" aria-hidden="true">destination<br>airport<br>here</span>'
+                  : ""
+            }
           </div>
           ${state.settings.showDistanceToGo ? `<span class="route-dtg">${distanceToGo ? `(${escapeAttr(distanceToGo)})` : ""}</span>` : ""}
         </div>
@@ -808,6 +817,10 @@
             <label class="settings-item settings-item-check">
               <input type="checkbox" id="setting-distance-to-go" ${s.showDistanceToGo ? "checked" : ""} />
               <span>Show distance-to-go under route waypoints</span>
+            </label>
+            <label class="settings-item settings-item-check">
+              <input type="checkbox" id="setting-variation-deviation" disabled />
+              <span>Variation/Deviation</span>
             </label>
           </div>
         </div>
@@ -1082,12 +1095,15 @@
         computeRouteMath({ index, field });
         updateComputedCells({ index, field });
         if (index === 0 && field === "alt") syncFirstAltHint();
+        if (field === "route") syncRouteHints();
       });
       input.addEventListener("focus", () => {
         syncFirstAltHint();
+        syncRouteHints();
       });
       input.addEventListener("blur", () => {
         syncFirstAltHint();
+        syncRouteHints();
       });
     });
     const datePickerInput = document.querySelector("[data-date-picker]");
@@ -1227,6 +1243,7 @@
     }
 
     syncFirstAltHint();
+    syncRouteHints();
   }
 
   function applySettingsChange(partial) {
@@ -2488,6 +2505,7 @@
     });
     syncDistanceToGo();
     syncFirstAltHint();
+    syncRouteHints();
 
     const tocDistance = document.querySelector('[data-toc="tocDistance"]');
     const tocTime = document.querySelector('[data-toc="tocTime"]');
@@ -2548,6 +2566,16 @@
     if (!node || !wrapper) return;
     const showHint = String(node.value || "").trim() === "" && document.activeElement !== node;
     wrapper.classList.toggle("show-alt-hint", showHint);
+  }
+
+  function syncRouteHints() {
+    state.navlog.legs.forEach((_, index) => {
+      const node = document.querySelector(`[data-leg-field="${index}:route"]`);
+      const wrapper = node && node.closest(".route-cell");
+      if (!node || !wrapper) return;
+      const showHint = String(node.value || "").trim() === "" && document.activeElement !== node;
+      wrapper.classList.toggle("show-route-hint", showHint);
+    });
   }
 
   function resolveDisplayField(leg, manual, lockedField, field, derivedValue, formatter) {
