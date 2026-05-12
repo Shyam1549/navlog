@@ -68,6 +68,7 @@
       hasOpenedSheet: false,
       usingPresetRoute: false,
       lastNonDocView: "setup",
+      docBackView: "",
     },
   };
   const TRIG_TOLERANCE = 1e-6;
@@ -488,17 +489,23 @@
                 <div></div>
               </div>
               <div class="admin-preset-body">
-                ${presetRows.map((row, index) => `
-                  <div class="admin-preset-row">
-                    <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" />
-                    <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" />
-                    <input data-admin-preset-row="${index}:distance" value="${escapeAttr(row.distance)}" />
-                    <button class="action admin-mini-btn" data-admin-preset-remove="${index}" type="button" aria-label="Remove preset row">-</button>
-                  </div>
-                `).join("")}
+                ${presetRows.map((row, index) => {
+                  const rowHasContent = String(row.route || "").trim() !== ""
+                    || String(row.tc || "").trim() !== ""
+                    || String(row.distance || "").trim() !== "";
+                  return `
+                    <div class="admin-preset-row">
+                      <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" />
+                      <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" />
+                      <input data-admin-preset-row="${index}:distance" value="${escapeAttr(row.distance)}" />
+                      <button class="action admin-mini-btn${rowHasContent ? " active" : ""}" data-admin-preset-remove="${index}" type="button" aria-label="Remove preset row" ${rowHasContent ? "" : "disabled"}>-</button>
+                    </div>
+                  `;
+                }).join("")}
               </div>
             </section>
-            <div class="entry-actions">              <button class="action primary" id="admin-preset-save">Save</button>
+            <div class="entry-actions">
+              <button class="action primary" id="admin-preset-save">Save</button>
               <button class="action" id="admin-preset-delete"${presetLookup.exists ? "" : " disabled"}>Delete</button>
             </div>
           </div>
@@ -708,11 +715,12 @@
     const removable = index > 0 && index < state.navlog.legs.length - 1;
     const altExtra = index === 0 ? "first-alt" : "";
     const distanceToGo = getDistanceToGoDisplay(index);
+    const routePlaceholder = index === 0 ? ' placeholder="enter departure airport"' : "";
     return `
       <div class="leg-row">
         <div class="${legFieldClass(leg, "route", "route route-cell")}">
           <div class="route-main">
-            <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" />
+            <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}"${routePlaceholder} />
             ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
           </div>
           ${state.settings.showDistanceToGo ? `<span class="route-dtg">${distanceToGo ? `(${escapeAttr(distanceToGo)})` : ""}</span>` : ""}
@@ -969,7 +977,13 @@
     });
     document.getElementById("save-sheet").addEventListener("click", downloadPdf);
     document.getElementById("add-leg").addEventListener("click", () => {
-      state.navlog.legs.splice(state.navlog.legs.length - 1, 0, createBlankLeg(""));
+      const newLeg = createBlankLeg("");
+      state.navlog.legs.splice(state.navlog.legs.length - 1, 0, newLeg);
+      const aircraftFromRpc = getMappedAircraftFromRpc(state.navlog.header.rpCNo);
+      if (aircraftFromRpc === "C152") {
+        const insertedIndex = Math.max(1, state.navlog.legs.length - 2);
+        setLegCasDefault(insertedIndex, "85");
+      }
       render();
     });
     document.getElementById("add-radio-row").addEventListener("click", () => {
@@ -1009,13 +1023,16 @@
           if (dateProxy) dateProxy.value = normalizeDateInputValue(state.navlog.header.date);
         }
         if (field === "rpCNo") {
-          const mappedAircraft = RPC_TO_AIRCRAFT[event.target.value.trim()];
+          const mappedAircraft = getMappedAircraftFromRpc(event.target.value);
           if (mappedAircraft) {
             state.navlog.header.aircraft = mappedAircraft;
             const aircraftInput = document.querySelector('[data-header="aircraft"]');
             if (aircraftInput) aircraftInput.value = mappedAircraft;
           }
+          applyDefaultCasForAircraft(mappedAircraft);
           syncAircraftFuelDefaults();
+          computeRouteMath();
+          updateComputedCells();
         }
         if (field === "aircraft") {
           syncAircraftFuelDefaults();
@@ -1029,13 +1046,16 @@
           if (dateProxy) dateProxy.value = normalizeDateInputValue(state.navlog.header.date);
         }
         if (field === "rpCNo") {
-          const mappedAircraft = RPC_TO_AIRCRAFT[event.target.value.trim()];
+          const mappedAircraft = getMappedAircraftFromRpc(event.target.value);
           if (mappedAircraft) {
             state.navlog.header.aircraft = mappedAircraft;
             const aircraftInput = document.querySelector('[data-header="aircraft"]');
             if (aircraftInput) aircraftInput.value = mappedAircraft;
           }
+          applyDefaultCasForAircraft(mappedAircraft);
           syncAircraftFuelDefaults();
+          computeRouteMath();
+          updateComputedCells();
         }
         if (field === "aircraft") {
           syncAircraftFuelDefaults();
@@ -1301,6 +1321,7 @@
       createBlankLeg(""),
       createBlankLeg(state.navlog.setup.destination),
     ];
+    applyDefaultCasForAircraft(getMappedAircraftFromRpc(state.navlog.header.rpCNo));
   }
 
   function getPresetLegs(departure, destination) {
@@ -1325,6 +1346,7 @@
     leg._derived = {};
     leg._errors = {};
     Object.entries(fields).forEach(([field, value]) => {
+      if (field === "cas") return;
       leg[field] = String(value);
       leg._manual[field] = true;
     });
@@ -1501,7 +1523,12 @@
 
   function wireManual() {
     document.getElementById("back-from-manual").addEventListener("click", () => {
-      state.view = state.meta.lastNonDocView || "setup";
+      if (state.meta.docBackView) {
+        state.view = state.meta.docBackView;
+        state.meta.docBackView = "";
+      } else {
+        state.view = state.meta.lastNonDocView || "setup";
+      }
       render();
     });
   }
@@ -1510,7 +1537,12 @@
     const openManualButton = document.getElementById("open-manual");
     if (openManualButton) {
       openManualButton.addEventListener("click", () => {
-        state.meta.lastNonDocView = state.view;
+        if (state.view === "manual" || state.view === "privacy") {
+          state.meta.docBackView = state.view;
+        } else {
+          state.meta.lastNonDocView = state.view;
+          state.meta.docBackView = "";
+        }
         state.view = "manual";
         render();
       });
@@ -1518,7 +1550,12 @@
     const openPrivacyButton = document.getElementById("open-privacy");
     if (openPrivacyButton) {
       openPrivacyButton.addEventListener("click", () => {
-        state.meta.lastNonDocView = state.view;
+        if (state.view === "manual" || state.view === "privacy") {
+          state.meta.docBackView = state.view;
+        } else {
+          state.meta.lastNonDocView = state.view;
+          state.meta.docBackView = "";
+        }
         state.view = "privacy";
         render();
       });
@@ -1610,7 +1647,12 @@
     const backButton = document.getElementById("back-from-privacy");
     if (!backButton) return;
     backButton.addEventListener("click", () => {
-      state.view = state.meta.lastNonDocView || "setup";
+      if (state.meta.docBackView) {
+        state.view = state.meta.docBackView;
+        state.meta.docBackView = "";
+      } else {
+        state.view = state.meta.lastNonDocView || "setup";
+      }
       render();
     });
   }
@@ -1717,6 +1759,7 @@
     presetRowInputs.forEach((node) => {
       node.addEventListener("input", () => {
         readPresetFormFromInputs();
+        syncAdminPresetRemoveButtons();
       });
     });
 
@@ -1744,6 +1787,7 @@
         render();
       });
     });
+    syncAdminPresetRemoveButtons();
 
     const presetSaveButton = document.getElementById("admin-preset-save");
     if (presetSaveButton) {
@@ -2013,6 +2057,25 @@
         distance: String(row && row.distance != null ? row.distance : ""),
       }));
     return normalized.length ? normalized : [createEmptyPresetRow()];
+  }
+
+  function syncAdminPresetRemoveButtons() {
+    const buttons = Array.from(document.querySelectorAll("[data-admin-preset-remove]"));
+    buttons.forEach((button) => {
+      const rawIndex = String(button.getAttribute("data-admin-preset-remove") || "");
+      const index = Number(rawIndex);
+      const row = Number.isFinite(index) && index >= 0 ? state.admin.presetForm.rows[index] : null;
+      const hasContent = Boolean(
+        row
+        && (
+          String(row.route || "").trim() !== ""
+          || String(row.tc || "").trim() !== ""
+          || String(row.distance || "").trim() !== ""
+        )
+      );
+      button.disabled = !hasContent;
+      button.classList.toggle("active", hasContent);
+    });
   }
 
   function presetRowsFromLegs(legs) {
@@ -2712,6 +2775,33 @@
     const tocTodValues = [state.navlog.tocTod.roc, state.navlog.tocTod.rod, state.navlog.tocTod.tocDistance, state.navlog.tocTod.tocTime, state.navlog.tocTod.todDistance, state.navlog.tocTod.todTime];
     const footerValues = [state.navlog.depAtisCode, state.navlog.destinAtisCode];
     return [...headerValues, ...legValues, ...radioValues, ...tocTodValues, ...footerValues].some((value) => String(value || "").trim() !== "");
+  }
+
+  function getMappedAircraftFromRpc(rpcValue) {
+    const key = String(rpcValue || "").trim();
+    return key ? RPC_TO_AIRCRAFT[key] : "";
+  }
+
+  function setLegCasDefault(index, casValue) {
+    const leg = state.navlog.legs[index];
+    if (!leg) return;
+    leg.cas = String(casValue || "");
+    leg._manual = leg._manual || {};
+    leg._derived = leg._derived || {};
+    leg._manual.cas = leg.cas.trim() !== "";
+    delete leg._derived.cas;
+  }
+
+  function applyDefaultCasForAircraft(aircraftType) {
+    const mappedType = String(aircraftType || "").trim();
+    if (mappedType !== "C152") return;
+    if (!Array.isArray(state.navlog.legs) || state.navlog.legs.length === 0) return;
+
+    setLegCasDefault(0, "");
+    if (state.navlog.legs.length > 1) setLegCasDefault(1, "70");
+    for (let index = 2; index < state.navlog.legs.length; index += 1) {
+      setLegCasDefault(index, "85");
+    }
   }
 
   function syncAircraftFuelDefaults() {

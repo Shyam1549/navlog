@@ -521,6 +521,11 @@ select { font: inherit; }
   background: rgba(33, 76, 90, 0.08);
 }
 
+.admin-preset-head > div:first-child {
+  justify-content: flex-start;
+  padding-left: 8px;
+}
+
 .admin-preset-head > div:last-child,
 .admin-airport-head > div:last-child {
   border-right: 0;
@@ -557,6 +562,19 @@ select { font: inherit; }
   border-top: 0;
   border-right: 0;
   border-bottom: 0;
+}
+
+.admin-mini-btn:disabled {
+  background: rgba(46, 41, 35, 0.12);
+  border-color: rgba(46, 41, 35, 0.2);
+  color: rgba(46, 41, 35, 0.45);
+  cursor: not-allowed;
+}
+
+.admin-mini-btn.active {
+  background: #000;
+  color: #fff;
+  border-color: #000;
 }
 
 .admin-subtle-status {
