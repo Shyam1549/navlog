@@ -15,6 +15,9 @@
   };
   const SUPABASE_URL_KEY = "navlog_supabase_url";
   const SUPABASE_ANON_KEY = "navlog_supabase_anon_key";
+  const ADMIN_REMEMBER_KEY = "navlog_admin_remember";
+  const ADMIN_EMAIL_KEY = "navlog_admin_email";
+  const ADMIN_PASSWORD_KEY = "navlog_admin_password";
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
   const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
 
@@ -55,6 +58,11 @@
       airportForm: createEmptyAirportForm(),
       manualHtmlDraft: "",
       privacyHtmlDraft: "",
+      loginEmail: readStoredValue(ADMIN_EMAIL_KEY),
+      loginPassword: readStoredValue(ADMIN_PASSWORD_KEY),
+      rememberLogin: readStoredValue(ADMIN_REMEMBER_KEY) === "1",
+      manualSaveStatus: "",
+      privacySaveStatus: "",
     },
     meta: {
       hasOpenedSheet: false,
@@ -135,10 +143,17 @@
 
   function createEmptyPresetForm() {
     return {
-      name: "",
       departure: "",
       destination: "",
-      legsJson: "[]",
+      rows: [createEmptyPresetRow()],
+    };
+  }
+
+  function createEmptyPresetRow() {
+    return {
+      route: "",
+      tc: "",
+      distance: "",
     };
   }
 
@@ -323,27 +338,6 @@
 
   function renderManualScreen() {
     const customManual = String(state.catalog.content.manualHtml || "").trim();
-    if (customManual) {
-      return `
-        <div class="ui-scale">
-        <main class="entry-page">
-          <section class="topbar centered">
-            <div class="top-side"><button class="back-link" id="back-from-manual">Back</button></div>
-            <div class="top-center">
-              <h1>User Manual</h1>
-              <p class="setup-caption">Formulas, features, limits</p>
-            </div>
-            <div class="top-side right"></div>
-          </section>
-          <section class="setup-card privacy-card">
-            <article class="privacy-content">${customManual}</article>
-          </section>
-          ${renderFrontFooter()}
-          ${renderBugReportModal()}
-        </main>
-        </div>
-      `;
-    }
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -355,72 +349,14 @@
           </div>
           <div class="top-side right"></div>
         </section>
-        <section class="setup-card manual-card">
-          <div class="manual-section">
-            <h3>Variables</h3>
-            <div class="manual-vars">
-              <p><strong>h</strong><span>altitude</span></p>
-              <p><strong>T</strong><span>temperature</span></p>
-              <p><strong>P</strong><span>pressure</span></p>
-              <p><strong>rho</strong><span>air density</span></p>
-              <p><strong>F</strong><span>TAS factor</span></p>
-              <p><strong>Vcas</strong><span>calibrated airspeed</span></p>
-              <p><strong>Vtas</strong><span>true airspeed</span></p>
-              <p><strong>Vgs</strong><span>groundspeed</span></p>
-              <p><strong>W</strong><span>wind speed</span></p>
-              <p><strong>Delta</strong><span>relative wind angle</span></p>
-              <p><strong>WCA</strong><span>wind correction angle</span></p>
-              <p><strong>d</strong><span>distance</span></p>
-              <p><strong>t</strong><span>time</span></p>
-            </div>
-          </div>
-          <div class="manual-section">
-            <h3>Density / TAS Factor</h3>
-            <div class="manual-row"><p class="manual-formula">\\( P_{Pa} = 101325\\left(1 - \\frac{0.0065h_{m}}{288.15}\\right)^{5.2558797} \\)</p><p class="manual-note">Pressure at altitude.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( \\rho_{kg/m^3} = \\frac{P_{Pa}}{287.05\\,(T_{C}+273.15)} \\)</p><p class="manual-note">Air density from pressure + temperature.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( F = \\sqrt{\\frac{1.225}{\\rho_{kg/m^3}}} \\)</p><p class="manual-note">Density factor.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( V_{tas,kts}=V_{cas,kts}\\,F \\quad\\text{and}\\quad V_{cas,kts}=\\frac{V_{tas,kts}}{F} \\)</p><p class="manual-note">Convert CAS and TAS both ways.</p></div>
-          </div>
-          <div class="manual-section">
-            <h3>Wind Triangle</h3>
-            <div class="manual-row"><p class="manual-formula">\\( \\Delta_{deg} = \\theta_{wind,deg}-\\theta_{course,deg} \\)</p><p class="manual-note">Relative wind angle.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( WCA_{deg}=\\arcsin\\!\\left(\\frac{W_{kts}\\sin\\Delta_{deg}}{V_{tas,kts}}\\right) \\)</p><p class="manual-note">Wind correction angle.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( V_{gs,kts}=V_{tas,kts}\\cos(WCA_{deg})-W_{kts}\\cos\\Delta_{deg} \\)</p><p class="manual-note">Track speed over ground.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( W_{kts}=\\frac{V_{tas,kts}\\cos(WCA_{deg})-V_{gs,kts}}{\\cos\\Delta_{deg}} \\)</p><p class="manual-note">Reverse wind (priority formula).</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( W_{kts}=\\frac{V_{tas,kts}\\sin(WCA_{deg})}{\\sin\\Delta_{deg}} \\)</p><p class="manual-note">Fallback wind formula.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( V_{tas,kts}=\\frac{V_{gs,kts}+W_{kts}\\cos\\Delta_{deg}}{\\cos(WCA_{deg})} \\)</p><p class="manual-note">Reverse TAS (priority formula).</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( V_{tas,kts}=\\frac{W_{kts}\\sin\\Delta_{deg}}{\\sin(WCA_{deg})} \\)</p><p class="manual-note">Fallback TAS formula.</p></div>
-          </div>
-          <div class="manual-section">
-            <h3>Leg Time / Distance</h3>
-            <div class="manual-row"><p class="manual-formula">\\( t_{min}=\\frac{d_{NM}}{V_{gs,kts}}\\times 60 \\)</p><p class="manual-note">Time from distance and groundspeed.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( d_{NM}=\\frac{V_{gs,kts}\\,t_{min}}{60} \\)</p><p class="manual-note">Distance from speed and time.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( V_{gs,kts}=\\frac{d_{NM}}{t_{min}/60} \\)</p><p class="manual-note">Groundspeed from distance and time.</p></div>
-          </div>
-          <div class="manual-section">
-            <h3>TOC / TOD</h3>
-            <div class="manual-row"><p class="manual-formula">\\( \\Delta h_{toc,ft}=h_{2,ft}-h_{1,ft} \\)</p><p class="manual-note">Altitude to gain for climb.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( t_{toc,min}=\\frac{\\Delta h_{toc,ft}}{ROC_{ft/min}} \\)</p><p class="manual-note">TOC time.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( d_{toc,NM}=t_{toc,min}\\cdot\\frac{V_{gs,kts}}{60} \\)</p><p class="manual-note">TOC distance.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( \\Delta h_{tod,ft}=h_{secondLast,ft}-h_{last,ft} \\)</p><p class="manual-note">Altitude to lose for descent.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( t_{tod,min}=\\frac{\\Delta h_{tod,ft}}{ROD_{ft/min}} \\)</p><p class="manual-note">TOD time.</p></div>
-            <div class="manual-row"><p class="manual-formula">\\( d_{tod,NM}=t_{tod,min}\\cdot\\frac{V_{gs,kts}}{60} \\)</p><p class="manual-note">TOD distance.</p></div>
-          </div>
-          <div class="manual-section">
-            <h3>Limits / Guards</h3>
-            <div class="manual-row"><p class="manual-formula">Trig tolerance</p><p class="manual-note">Very small sine/cosine values are treated as zero to avoid unstable division.</p></div>
-            <div class="manual-row"><p class="manual-formula">WCA check</p><p class="manual-note">If \\(\\left|\\frac{W\\sin\\Delta}{V_{tas}}\\right| &gt; 1\\), WCA is invalid and "Wind too strong" is shown.</p></div>
-            <div class="manual-row"><p class="manual-formula">Positive GS requirement</p><p class="manual-note">Derived GS must be above zero; impossible wind cases are blocked.</p></div>
-            <div class="manual-row"><p class="manual-formula">TOC default</p><p class="manual-note">If departure elevation is blank, TOC uses 0 for departure elevation.</p></div>
-          </div>
-          <div class="manual-section">
-            <h3>Data Behaviors</h3>
-            <div class="manual-row"><p class="manual-formula">Preset route delete</p><p class="manual-note">If a preset leg is removed, the next leg TC is cleared for manual entry.</p></div>
-            <div class="manual-row"><p class="manual-formula">Airport autofill</p><p class="manual-note">Type airport code and press Enter to auto-fill frequency/remarks.</p></div>
-            <div class="manual-row"><p class="manual-formula">RP-C auto-fill</p><p class="manual-note">Entering RP-C No. auto-fills aircraft type and default GPH/PPH when mapping is available.</p></div>
-            <div class="manual-row"><p class="manual-formula">TOC/TOD edit button</p><p class="manual-note">TOC and TOD fields can be switched to manual mode by clicking their edit button.</p></div>
-            <div class="manual-row"><p class="manual-formula">Distance to go</p><p class="manual-note">If enabled, a remaining-distance value is shown below each waypoint route field.</p></div>
-          </div>
+        <section class="setup-card privacy-card">
+          <article class="privacy-content">
+            ${
+              customManual
+                ? customManual
+                : "<p>Manual content is not available yet. Use admin to add it.</p>"
+            }
+          </article>
         </section>
         ${renderFrontFooter()}
         ${renderBugReportModal()}
@@ -431,27 +367,6 @@
 
   function renderPrivacyScreen() {
     const customPrivacy = String(state.catalog.content.privacyHtml || "").trim();
-    if (customPrivacy) {
-      return `
-        <div class="ui-scale">
-        <main class="entry-page">
-          <section class="topbar centered">
-            <div class="top-side"><button class="back-link" id="back-from-privacy">Back</button></div>
-            <div class="top-center">
-              <h1>Privacy Policy</h1>
-              <p class="setup-caption">Last updated: ${formatPolicyDate()}</p>
-            </div>
-            <div class="top-side right"></div>
-          </section>
-          <section class="setup-card privacy-card">
-            <article class="privacy-content">${customPrivacy}</article>
-          </section>
-          ${renderFrontFooter()}
-          ${renderBugReportModal()}
-        </main>
-        </div>
-      `;
-    }
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -465,23 +380,11 @@
         </section>
         <section class="setup-card privacy-card">
           <article class="privacy-content">
-            <h3>Overview</h3>
-            <p>Navlog is a flight planning utility. We collect only the information needed to run core features and maintain service reliability.</p>
-
-            <h3>Information You Enter</h3>
-            <p>Most planning values you type into Navlog are processed in your browser for calculations. Bug report submissions may include the issue message, optional contact email, and basic technical metadata such as browser type.</p>
-
-            <h3>Bug Report Processing</h3>
-            <p>When you submit a bug report, data is sent to our secure backend endpoint and then routed through our email service provider so we can investigate and respond. Please avoid sharing highly sensitive personal or operational details in reports.</p>
-
-            <h3>Use Of Data</h3>
-            <p>Submitted data is used to provide functionality, diagnose faults, improve product quality, and maintain operational security. We do not sell personal data.</p>
-
-            <h3>Data Retention</h3>
-            <p>Bug report records are retained only as long as reasonably required for support, maintenance, legal obligations, and audit or record-keeping needs.</p>
-
-            <h3>Contact</h3>
-            <p>For privacy questions, submit a bug report and include “Privacy” in your message so it can be prioritized appropriately.</p>
+            ${
+              customPrivacy
+                ? customPrivacy
+                : "<p>Privacy policy content is not available yet. Use admin to add it.</p>"
+            }
           </article>
         </section>
         ${renderFrontFooter()}
@@ -495,6 +398,7 @@
     const hasSupabaseConfig = Boolean(state.admin.supabaseUrl && state.admin.supabaseAnonKey);
     const statusText = state.admin.error || state.admin.notice || (!hasSupabaseConfig ? "Supabase config missing. Set window.NAVLOG_CONFIG in index.html." : "");
     const statusClass = state.admin.error || !hasSupabaseConfig ? "admin-status error" : "admin-status ok";
+    const loading = Boolean(state.admin.loading);
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -510,15 +414,20 @@
           <div class="admin-grid two-col">
             <label class="setup-field">
               <span>Admin email</span>
-              <input id="admin-login-email" type="email" placeholder="admin@example.com" />
+              <input id="admin-login-email" type="email" placeholder="admin@example.com" value="${escapeAttr(state.admin.loginEmail)}" ${loading ? "disabled" : ""} />
             </label>
             <label class="setup-field">
               <span>Password</span>
-              <input id="admin-login-password" type="password" placeholder="••••••••" />
+              <input id="admin-login-password" type="password" placeholder="••••••••" value="${escapeAttr(state.admin.loginPassword)}" ${loading ? "disabled" : ""} />
             </label>
           </div>
-          <div class="entry-actions">
-            <button class="action primary" id="admin-login-submit" ${hasSupabaseConfig ? "" : "disabled"}>Sign in</button>
+          <label class="admin-remember">
+            <input id="admin-login-remember" type="checkbox" ${state.admin.rememberLogin ? "checked" : ""} ${loading ? "disabled" : ""} />
+            <span>Save login info</span>
+          </label>
+          <div class="entry-actions admin-login-actions">
+            <button class="action primary" id="admin-login-submit" ${(hasSupabaseConfig && !loading) ? "" : "disabled"}>${loading ? "Signing in..." : "Sign in"}</button>
+            ${loading ? '<span class="admin-login-spinner" aria-hidden="true"></span>' : ""}
           </div>
           ${statusText ? `<p class="${statusClass}">${escapeHtml(statusText)}</p>` : ""}
         </section>
@@ -535,11 +444,14 @@
     const statusClass = state.admin.error ? "admin-status error" : "admin-status ok";
     const presetLookup = getPresetLookupState();
     const airportLookup = getAirportLookupState();
-    const presetList = state.admin.presets
-      .map((preset) => `<li>${escapeHtml(preset.departure)} to ${escapeHtml(preset.destination)}${preset.name ? ` - ${escapeHtml(preset.name)}` : ""}</li>`)
+    const presetRows = Array.isArray(state.admin.presetForm.rows) && state.admin.presetForm.rows.length
+      ? state.admin.presetForm.rows
+      : [createEmptyPresetRow()];
+    const presetCodeOptions = collectPresetAirportCodes()
+      .map((code) => `<option value="${escapeAttr(code)}"></option>`)
       .join("");
-    const airportList = state.admin.airports
-      .map((airport) => `<li>${escapeHtml(airport.code)}${airport.id ? ` (${escapeHtml(airport.id)})` : ""}</li>`)
+    const airportCodeOptions = state.admin.airports
+      .map((airport) => `<option value="${escapeAttr(airport.code)}"></option>`)
       .join("");
     return `
       <div class="ui-scale">
@@ -551,92 +463,76 @@
             <p class="setup-caption">Presets, airports, manual, privacy</p>
           </div>
           <div class="top-side right">
-            <button class="action" id="admin-refresh-data">Refresh</button>
             <button class="action" id="admin-sign-out">Sign out</button>
           </div>
         </section>
         <section class="setup-card admin-card">
           <div class="manual-section">
             <h3>Route Presets</h3>
+            <datalist id="admin-preset-code-list">${presetCodeOptions}</datalist>
             <div class="admin-grid two-col">
               <label class="setup-field">
                 <span>Departure</span>
-                <input id="admin-preset-departure" value="${escapeAttr(state.admin.presetForm.departure)}" />
+                <input id="admin-preset-departure" list="admin-preset-code-list" value="${escapeAttr(state.admin.presetForm.departure)}" />
               </label>
               <label class="setup-field">
                 <span>Destination</span>
-                <input id="admin-preset-destination" value="${escapeAttr(state.admin.presetForm.destination)}" />
+                <input id="admin-preset-destination" list="admin-preset-code-list" value="${escapeAttr(state.admin.presetForm.destination)}" />
               </label>
-              <label class="setup-field">
-                <span>Preset name</span>
-                <input id="admin-preset-name" value="${escapeAttr(state.admin.presetForm.name)}" />
-              </label>
-              <div class="setup-field admin-lookup-wrap">
-                <span>Status</span>
-                <p class="admin-lookup ${presetLookup.exists ? "ok" : "warn"}">${escapeHtml(presetLookup.message)}</p>
-              </div>
             </div>
-            <label class="setup-field">
-              <span>Legs JSON</span>
-              <textarea id="admin-preset-legs" class="admin-textarea">${escapeHtml(state.admin.presetForm.legsJson)}</textarea>
-            </label>
+            <div class="preset-status ${presetLookup.active ? (presetLookup.exists ? "available" : "missing") : ""}">${presetLookup.active ? (presetLookup.exists ? "preset avbl" : "preset unavbl") : ""}</div>
+            <section class="admin-preset-table">
+              <div class="admin-preset-head">
+                <div>ROUTE</div>
+                <div>TC</div>
+                <div>DIS</div>
+                <div></div>
+              </div>
+              <div class="admin-preset-body">
+                ${presetRows.map((row, index) => `
+                  <div class="admin-preset-row">
+                    <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" />
+                    <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" />
+                    <input data-admin-preset-row="${index}:distance" value="${escapeAttr(row.distance)}" />
+                    <button class="action admin-mini-btn" data-admin-preset-remove="${index}" type="button" aria-label="Remove preset row">-</button>
+                  </div>
+                `).join("")}
+              </div>
+            </section>
             <div class="entry-actions">
-              <button class="action" id="admin-preset-find">Find</button>
-              <button class="action" id="admin-preset-new">Clear</button>
+              <button class="action" id="admin-preset-add-row" type="button">Add row</button>
               <button class="action primary" id="admin-preset-save">Save</button>
               <button class="action" id="admin-preset-delete"${presetLookup.exists ? "" : " disabled"}>Delete</button>
             </div>
-            <p class="admin-meta">Existing presets: ${state.admin.presets.length}</p>
-            <ul class="admin-mini-list">${presetList || "<li>No presets found.</li>"}</ul>
           </div>
           <div class="manual-section">
             <h3>Airports</h3>
-            <div class="admin-grid two-col">
-              <label class="setup-field">
-                <span>Airport code</span>
-                <input id="admin-airport-code" value="${escapeAttr(state.admin.airportForm.code)}" />
-              </label>
-              <div class="setup-field admin-lookup-wrap">
-                <span>Status</span>
-                <p class="admin-lookup ${airportLookup.exists ? "ok" : "warn"}">${escapeHtml(airportLookup.message)}</p>
+            <datalist id="admin-airport-code-list">${airportCodeOptions}</datalist>
+            <div class="preset-status ${airportLookup.active ? (airportLookup.exists ? "available" : "missing") : ""}">${airportLookup.active ? (airportLookup.exists ? "airport avbl" : "airport unavbl") : ""}</div>
+            <section class="admin-airport-table">
+              <div class="admin-airport-head">
+                <div>LOCATION</div>
+                <div>CPT/ATIS</div>
+                <div>DEP/AAP</div>
+                <div>TWR</div>
+                <div>GND</div>
+                <div>FSS</div>
+                <div>REMARKS</div>
               </div>
-              <label class="setup-field">
-                <span>Airport id</span>
-                <input id="admin-airport-id" value="${escapeAttr(state.admin.airportForm.id)}" />
-              </label>
-              <label class="setup-field">
-                <span>CPT/ATIS</span>
+              <div class="admin-airport-row">
+                <input id="admin-airport-code" list="admin-airport-code-list" value="${escapeAttr(state.admin.airportForm.code)}" />
                 <input id="admin-airport-cptAtis" value="${escapeAttr(state.admin.airportForm.cptAtis)}" />
-              </label>
-              <label class="setup-field">
-                <span>DEP/AAP</span>
                 <input id="admin-airport-depAap" value="${escapeAttr(state.admin.airportForm.depAap)}" />
-              </label>
-              <label class="setup-field">
-                <span>TWR</span>
                 <input id="admin-airport-twr" value="${escapeAttr(state.admin.airportForm.twr)}" />
-              </label>
-              <label class="setup-field">
-                <span>GND</span>
                 <input id="admin-airport-gnd" value="${escapeAttr(state.admin.airportForm.gnd)}" />
-              </label>
-              <label class="setup-field">
-                <span>FSS</span>
                 <input id="admin-airport-fss" value="${escapeAttr(state.admin.airportForm.fss)}" />
-              </label>
-            </div>
-            <label class="setup-field">
-              <span>Remarks</span>
-              <input id="admin-airport-remarks" value="${escapeAttr(state.admin.airportForm.remarks)}" />
-            </label>
+                <input id="admin-airport-remarks" value="${escapeAttr(state.admin.airportForm.remarks)}" />
+              </div>
+            </section>
             <div class="entry-actions">
-              <button class="action" id="admin-airport-find">Find</button>
-              <button class="action" id="admin-airport-new">Clear</button>
               <button class="action primary" id="admin-airport-save">Save</button>
               <button class="action" id="admin-airport-delete"${airportLookup.exists ? "" : " disabled"}>Delete</button>
             </div>
-            <p class="admin-meta">Existing airports: ${state.admin.airports.length}</p>
-            <ul class="admin-mini-list">${airportList || "<li>No airports found.</li>"}</ul>
           </div>
           <div class="manual-section">
             <h3>User Manual Content</h3>
@@ -645,7 +541,8 @@
               <textarea id="admin-manual-html" class="admin-textarea admin-textarea-large">${escapeHtml(state.admin.manualHtmlDraft)}</textarea>
             </label>
             <div class="entry-actions">
-              <button class="action primary" id="admin-manual-save">Save manual</button>
+              <button class="action primary" id="admin-manual-save">Save</button>
+              <span class="admin-subtle-status">${escapeHtml(state.admin.manualSaveStatus)}</span>
             </div>
           </div>
           <div class="manual-section">
@@ -655,7 +552,8 @@
               <textarea id="admin-privacy-html" class="admin-textarea admin-textarea-large">${escapeHtml(state.admin.privacyHtmlDraft)}</textarea>
             </label>
             <div class="entry-actions">
-              <button class="action primary" id="admin-privacy-save">Save privacy policy</button>
+              <button class="action primary" id="admin-privacy-save">Save</button>
+              <span class="admin-subtle-status">${escapeHtml(state.admin.privacySaveStatus)}</span>
             </div>
           </div>
           ${statusText ? `<p class="${statusClass}">${escapeHtml(statusText)}</p>` : ""}
@@ -1734,12 +1632,29 @@
       });
     }
 
+    const rememberInput = document.getElementById("admin-login-remember");
+    if (rememberInput) {
+      rememberInput.addEventListener("change", () => {
+        state.admin.rememberLogin = Boolean(rememberInput.checked);
+      });
+    }
+
     const submitButton = document.getElementById("admin-login-submit");
     if (submitButton) {
       submitButton.addEventListener("click", async () => {
         await signInAdmin();
       });
     }
+
+    ["admin-login-email", "admin-login-password"].forEach((id) => {
+      const field = document.getElementById(id);
+      if (!field) return;
+      field.addEventListener("keydown", async (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        await signInAdmin();
+      });
+    });
   }
 
   function wireAdminPanel() {
@@ -1761,37 +1676,50 @@
         await signOutAdmin();
       });
     }
-    const refreshButton = document.getElementById("admin-refresh-data");
-    if (refreshButton) {
-      refreshButton.addEventListener("click", async () => {
-        await loadAdminData();
-      });
-    }
 
-    const presetFindButton = document.getElementById("admin-preset-find");
-    if (presetFindButton) {
-      presetFindButton.addEventListener("click", () => {
-        readPresetFormFromInputs();
-        loadPresetByPair();
-        render();
-      });
-    }
     ["admin-preset-departure", "admin-preset-destination"].forEach((id) => {
       const field = document.getElementById(id);
       if (!field) return;
-      field.addEventListener("change", () => {
+      const onPresetPairChange = () => {
         readPresetFormFromInputs();
+        loadPresetByPair();
         render();
+      };
+      field.addEventListener("change", onPresetPairChange);
+    });
+
+    const presetRowInputs = Array.from(document.querySelectorAll("[data-admin-preset-row]"));
+    presetRowInputs.forEach((node) => {
+      node.addEventListener("input", () => {
+        readPresetFormFromInputs();
       });
     });
-    const presetNewButton = document.getElementById("admin-preset-new");
-    if (presetNewButton) {
-      presetNewButton.addEventListener("click", () => {
-        state.admin.selectedPresetId = "";
-        state.admin.presetForm = createEmptyPresetForm();
+
+    const presetAddRowButton = document.getElementById("admin-preset-add-row");
+    if (presetAddRowButton) {
+      presetAddRowButton.addEventListener("click", () => {
+        readPresetFormFromInputs();
+        state.admin.presetForm.rows.push(createEmptyPresetRow());
         render();
       });
     }
+
+    const presetRemoveButtons = Array.from(document.querySelectorAll("[data-admin-preset-remove]"));
+    presetRemoveButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        readPresetFormFromInputs();
+        const rawIndex = String(button.getAttribute("data-admin-preset-remove") || "");
+        const index = Number(rawIndex);
+        if (!Number.isFinite(index) || index < 0 || index >= state.admin.presetForm.rows.length) return;
+        if (state.admin.presetForm.rows.length === 1) {
+          state.admin.presetForm.rows = [createEmptyPresetRow()];
+        } else {
+          state.admin.presetForm.rows.splice(index, 1);
+        }
+        render();
+      });
+    });
+
     const presetSaveButton = document.getElementById("admin-preset-save");
     if (presetSaveButton) {
       presetSaveButton.addEventListener("click", async () => {
@@ -1807,29 +1735,24 @@
       });
     }
 
-    const airportFindButton = document.getElementById("admin-airport-find");
-    if (airportFindButton) {
-      airportFindButton.addEventListener("click", () => {
+    const airportCodeInput = document.getElementById("admin-airport-code");
+    if (airportCodeInput) {
+      const onAirportCodeChange = () => {
         readAirportFormFromInputs();
         loadAirportByCode();
         render();
-      });
+      };
+      airportCodeInput.addEventListener("change", onAirportCodeChange);
     }
-    const airportCodeInput = document.getElementById("admin-airport-code");
-    if (airportCodeInput) {
-      airportCodeInput.addEventListener("change", () => {
+
+    ["admin-airport-cptAtis", "admin-airport-depAap", "admin-airport-twr", "admin-airport-gnd", "admin-airport-fss", "admin-airport-remarks"].forEach((id) => {
+      const field = document.getElementById(id);
+      if (!field) return;
+      field.addEventListener("input", () => {
         readAirportFormFromInputs();
-        render();
       });
-    }
-    const airportNewButton = document.getElementById("admin-airport-new");
-    if (airportNewButton) {
-      airportNewButton.addEventListener("click", () => {
-        state.admin.selectedAirportCode = "";
-        state.admin.airportForm = createEmptyAirportForm();
-        render();
-      });
-    }
+    });
+
     const airportSaveButton = document.getElementById("admin-airport-save");
     if (airportSaveButton) {
       airportSaveButton.addEventListener("click", async () => {
@@ -1859,6 +1782,21 @@
         const privacyInput = document.getElementById("admin-privacy-html");
         state.admin.privacyHtmlDraft = String(privacyInput ? privacyInput.value : "");
         await saveContentPage("privacy", state.admin.privacyHtmlDraft);
+      });
+    }
+
+    const manualInput = document.getElementById("admin-manual-html");
+    if (manualInput) {
+      manualInput.addEventListener("input", () => {
+        state.admin.manualHtmlDraft = String(manualInput.value || "");
+        state.admin.manualSaveStatus = "";
+      });
+    }
+    const privacyInput = document.getElementById("admin-privacy-html");
+    if (privacyInput) {
+      privacyInput.addEventListener("input", () => {
+        state.admin.privacyHtmlDraft = String(privacyInput.value || "");
+        state.admin.privacySaveStatus = "";
       });
     }
   }
@@ -1902,8 +1840,13 @@
     }
     const emailInput = document.getElementById("admin-login-email");
     const passwordInput = document.getElementById("admin-login-password");
+    const rememberInput = document.getElementById("admin-login-remember");
     const email = String(emailInput ? emailInput.value : "").trim();
     const password = String(passwordInput ? passwordInput.value : "");
+    const rememberLogin = Boolean(rememberInput ? rememberInput.checked : state.admin.rememberLogin);
+    state.admin.loginEmail = email;
+    state.admin.loginPassword = password;
+    state.admin.rememberLogin = rememberLogin;
     if (!email || !password) {
       state.admin.error = "Email and password are required.";
       render();
@@ -1917,6 +1860,15 @@
       const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
       if (error) throw error;
       state.admin.session = data ? data.session : null;
+      if (rememberLogin) {
+        writeStoredValue(ADMIN_REMEMBER_KEY, "1");
+        writeStoredValue(ADMIN_EMAIL_KEY, email);
+        writeStoredValue(ADMIN_PASSWORD_KEY, password);
+      } else {
+        writeStoredValue(ADMIN_REMEMBER_KEY, "");
+        writeStoredValue(ADMIN_EMAIL_KEY, "");
+        writeStoredValue(ADMIN_PASSWORD_KEY, "");
+      }
       await loadAdminData();
       state.view = "admin";
       state.admin.notice = "Signed in successfully.";
@@ -1993,9 +1945,12 @@
       state.admin.privacyHtmlDraft = state.catalog.content.privacyHtml;
 
       if (state.admin.selectedPresetId) selectPresetForEditing(state.admin.selectedPresetId);
-      if (state.admin.selectedAirportCode) selectAirportForEditing(state.admin.selectedAirportCode);
+      else loadPresetByPair();
 
-      state.admin.notice = "Admin data loaded.";
+      if (state.admin.selectedAirportCode) selectAirportForEditing(state.admin.selectedAirportCode);
+      else if (state.admin.airportForm.code) loadAirportByCode();
+
+      state.admin.notice = "";
     } catch (error) {
       state.admin.error = error && error.message ? error.message : "Could not load admin data.";
     } finally {
@@ -2005,16 +1960,64 @@
   }
 
   function readPresetFormFromInputs() {
-    const name = document.getElementById("admin-preset-name");
-    const departure = document.getElementById("admin-preset-departure");
-    const destination = document.getElementById("admin-preset-destination");
-    const legs = document.getElementById("admin-preset-legs");
+    const departureInput = document.getElementById("admin-preset-departure");
+    const destinationInput = document.getElementById("admin-preset-destination");
+    const rowInputs = Array.from(document.querySelectorAll("[data-admin-preset-row]"));
+    const rows = [];
+    rowInputs.forEach((node) => {
+      const key = String(node.getAttribute("data-admin-preset-row") || "");
+      const [indexText, field] = key.split(":");
+      const index = Number(indexText);
+      if (!Number.isFinite(index) || index < 0 || !field) return;
+      if (!rows[index]) rows[index] = createEmptyPresetRow();
+      rows[index][field] = String(node.value || "");
+    });
     state.admin.presetForm = {
-      name: String(name ? name.value : "").trim(),
-      departure: normalizeCode(departure ? departure.value : ""),
-      destination: normalizeCode(destination ? destination.value : ""),
-      legsJson: String(legs ? legs.value : "[]"),
+      departure: normalizeCode(departureInput ? departureInput.value : state.admin.presetForm.departure),
+      destination: normalizeCode(destinationInput ? destinationInput.value : state.admin.presetForm.destination),
+      rows: normalizePresetRows(rows.length ? rows : state.admin.presetForm.rows),
     };
+  }
+
+  function normalizePresetRows(rows) {
+    const source = Array.isArray(rows) ? rows : [];
+    const normalized = source
+      .map((row) => ({
+        route: String(row && row.route != null ? row.route : ""),
+        tc: String(row && row.tc != null ? row.tc : ""),
+        distance: String(row && row.distance != null ? row.distance : ""),
+      }));
+    return normalized.length ? normalized : [createEmptyPresetRow()];
+  }
+
+  function presetRowsFromLegs(legs) {
+    if (!Array.isArray(legs) || legs.length === 0) return [createEmptyPresetRow()];
+    return normalizePresetRows(
+      legs.map((leg) => ({
+        route: leg && leg.route != null ? leg.route : "",
+        tc: leg && leg.tc != null ? leg.tc : "",
+        distance: leg && leg.distance != null ? leg.distance : "",
+      })),
+    );
+  }
+
+  function presetLegsFromRows(rows) {
+    const source = Array.isArray(rows) ? rows : [];
+    const legs = [];
+    source.forEach((row) => {
+      const route = String(row && row.route != null ? row.route : "").trim();
+      const tcRaw = String(row && row.tc != null ? row.tc : "").trim();
+      const distanceRaw = String(row && row.distance != null ? row.distance : "").trim();
+      if (!route && !tcRaw && !distanceRaw) return;
+      const leg = {};
+      if (route) leg.route = route;
+      const tc = num(tcRaw);
+      const distance = num(distanceRaw);
+      if (tc != null) leg.tc = roundHalfUp(tc);
+      if (distance != null) leg.distance = distance;
+      legs.push(leg);
+    });
+    return legs;
   }
 
   function readAirportFormFromInputs() {
@@ -2022,9 +2025,10 @@
       const node = document.getElementById(id);
       return String(node ? node.value : "");
     };
+    const code = get("admin-airport-code");
     state.admin.airportForm = normalizeAirportRecord({
-      id: get("admin-airport-id"),
-      code: get("admin-airport-code"),
+      id: code,
+      code,
       cptAtis: get("admin-airport-cptAtis"),
       depAap: get("admin-airport-depAap"),
       twr: get("admin-airport-twr"),
@@ -2042,11 +2046,21 @@
       return;
     }
     state.admin.presetForm = {
-      name: String(selected.name || ""),
       departure: normalizeCode(selected.departure),
       destination: normalizeCode(selected.destination),
-      legsJson: JSON.stringify(selected.legs || [], null, 2),
+      rows: presetRowsFromLegs(selected.legs),
     };
+  }
+
+  function collectPresetAirportCodes() {
+    const seen = new Set();
+    state.admin.presets.forEach((preset) => {
+      const dep = normalizeCode(preset.departure);
+      const dest = normalizeCode(preset.destination);
+      if (dep) seen.add(dep);
+      if (dest) seen.add(dest);
+    });
+    return Array.from(seen).sort();
   }
 
   function findPresetByPair(departure, destination) {
@@ -2059,8 +2073,9 @@
   function loadPresetByPair() {
     const match = findPresetByPair(state.admin.presetForm.departure, state.admin.presetForm.destination);
     if (!match) {
+      const hadSelection = Boolean(state.admin.selectedPresetId);
       state.admin.selectedPresetId = "";
-      if (!state.admin.presetForm.legsJson.trim()) state.admin.presetForm.legsJson = "[]";
+      state.admin.presetForm.rows = hadSelection ? [createEmptyPresetRow()] : normalizePresetRows(state.admin.presetForm.rows);
       return;
     }
     selectPresetForEditing(match.id);
@@ -2069,17 +2084,21 @@
   function getPresetLookupState() {
     const dep = normalizeCode(state.admin.presetForm.departure);
     const dest = normalizeCode(state.admin.presetForm.destination);
-    if (!dep || !dest) return { exists: false, message: "Enter DEP and ARR to check existing preset." };
+    if (!dep || !dest) return { active: false, exists: false, message: "" };
     const match = findPresetByPair(dep, dest);
-    if (match) return { exists: true, message: `Existing preset found (${match.name || `${dep} to ${dest}`}).` };
-    return { exists: false, message: "No preset found for this DEP/ARR pair. Saving will create one." };
+    if (match) return { active: true, exists: true, message: `Existing preset found (${match.name || `${dep} to ${dest}`}).` };
+    return { active: true, exists: false, message: "No preset found for this DEP/ARR pair. Saving will create one." };
   }
 
   function selectAirportForEditing(code) {
     state.admin.selectedAirportCode = normalizeCode(code);
     const selected = state.admin.airports.find((airport) => airport.code === state.admin.selectedAirportCode);
     if (!selected) {
-      state.admin.airportForm = createEmptyAirportForm();
+      state.admin.airportForm = {
+        ...createEmptyAirportForm(),
+        code: state.admin.selectedAirportCode,
+        id: state.admin.selectedAirportCode,
+      };
       return;
     }
     state.admin.airportForm = normalizeAirportRecord(selected);
@@ -2096,10 +2115,10 @@
 
   function getAirportLookupState() {
     const code = normalizeCode(state.admin.airportForm.code);
-    if (!code) return { exists: false, message: "Enter airport code to check existing record." };
+    if (!code) return { active: false, exists: false, message: "Enter airport code to check existing record." };
     const match = state.admin.airports.find((airport) => airport.code === code);
-    if (match) return { exists: true, message: `Existing airport found (${match.code}).` };
-    return { exists: false, message: "No airport found for this code. Saving will create one." };
+    if (match) return { active: true, exists: true, message: `Existing airport found (${match.code}).` };
+    return { active: true, exists: false, message: "No airport found for this code. Saving will create one." };
   }
 
   async function savePresetFromAdmin() {
@@ -2108,29 +2127,22 @@
       render();
       return;
     }
-    let parsedLegs = [];
-    try {
-      parsedLegs = JSON.parse(state.admin.presetForm.legsJson || "[]");
-    } catch {
-      state.admin.error = "Preset legs JSON is invalid.";
-      state.admin.notice = "";
-      render();
-      return;
-    }
-    if (!Array.isArray(parsedLegs)) {
-      state.admin.error = "Preset legs JSON must be an array.";
-      state.admin.notice = "";
-      render();
-      return;
-    }
+    const rows = normalizePresetRows(state.admin.presetForm.rows);
+    const parsedLegs = presetLegsFromRows(rows);
     const payload = {
-      name: state.admin.presetForm.name || `${state.admin.presetForm.departure} to ${state.admin.presetForm.destination}`,
+      name: `${state.admin.presetForm.departure} to ${state.admin.presetForm.destination}`,
       departure: normalizeCode(state.admin.presetForm.departure),
       destination: normalizeCode(state.admin.presetForm.destination),
       legs_json: parsedLegs,
     };
     if (!payload.departure || !payload.destination) {
       state.admin.error = "Preset departure and destination are required.";
+      state.admin.notice = "";
+      render();
+      return;
+    }
+    if (!parsedLegs.length) {
+      state.admin.error = "Add at least one ROUTE/TC/DIS row before saving.";
       state.admin.notice = "";
       render();
       return;
@@ -2147,9 +2159,11 @@
         result = await supabaseClient.from("route_presets").insert(payload).select().single();
       }
       if (result.error) throw result.error;
-      state.admin.notice = "Preset saved.";
       if (result.data && result.data.id) state.admin.selectedPresetId = String(result.data.id);
+      state.admin.presetForm.rows = presetRowsFromLegs(parsedLegs);
       await loadAdminData();
+      state.admin.notice = "Preset saved.";
+      render();
     } catch (error) {
       state.admin.error = error && error.message ? error.message : "Could not save preset.";
       render();
@@ -2172,8 +2186,9 @@
       if (error) throw error;
       state.admin.selectedPresetId = "";
       state.admin.presetForm = createEmptyPresetForm();
-      state.admin.notice = "Preset deleted.";
       await loadAdminData();
+      state.admin.notice = "Preset deleted.";
+      render();
     } catch (error) {
       state.admin.error = error && error.message ? error.message : "Could not delete preset.";
       render();
@@ -2209,8 +2224,9 @@
       const { error } = await supabaseClient.from("airports").upsert(payload, { onConflict: "code" });
       if (error) throw error;
       state.admin.selectedAirportCode = airport.code;
-      state.admin.notice = "Airport saved.";
       await loadAdminData();
+      state.admin.notice = "Airport saved.";
+      render();
     } catch (error) {
       state.admin.error = error && error.message ? error.message : "Could not save airport.";
       render();
@@ -2232,8 +2248,9 @@
       if (error) throw error;
       state.admin.selectedAirportCode = "";
       state.admin.airportForm = createEmptyAirportForm();
-      state.admin.notice = "Airport deleted.";
       await loadAdminData();
+      state.admin.notice = "Airport deleted.";
+      render();
     } catch (error) {
       state.admin.error = error && error.message ? error.message : "Could not delete airport.";
       render();
@@ -2255,11 +2272,20 @@
       const { error } = await supabaseClient.from("content_pages").upsert(payload, { onConflict: "key" });
       if (error) throw error;
       state.admin.notice = `${pageKey} content saved.`;
+      if (pageKey === "manual") state.admin.manualSaveStatus = `Saved ${formatAdminSaveTime()}`;
+      if (pageKey === "privacy") state.admin.privacySaveStatus = `Saved ${formatAdminSaveTime()}`;
       await loadAdminData();
     } catch (error) {
       state.admin.error = error && error.message ? error.message : `Could not save ${pageKey} content.`;
+      if (pageKey === "manual") state.admin.manualSaveStatus = "Save failed";
+      if (pageKey === "privacy") state.admin.privacySaveStatus = "Save failed";
       render();
     }
+  }
+
+  function formatAdminSaveTime() {
+    const now = new Date();
+    return now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   }
 
   function handleBugReportEscape(event) {

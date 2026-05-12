@@ -32,7 +32,7 @@ select { font: inherit; }
 .page {
   width: min(1320px, 100%);
   margin: 0 auto;
-  min-height: calc(100vh - 56px);
+  min-height: calc((100vh - 56px) / var(--ui-scale));
   display: flex;
   flex-direction: column;
 }
@@ -386,6 +386,39 @@ select { font: inherit; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.admin-remember {
+  margin-top: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  text-transform: uppercase;
+}
+
+.admin-remember input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.admin-login-actions {
+  align-items: center;
+}
+
+.admin-login-spinner {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 2px solid rgba(33, 76, 90, 0.25);
+  border-top-color: var(--accent);
+  animation: navlog-spin 0.85s linear infinite;
+}
+
+@keyframes navlog-spin {
+  to { transform: rotate(360deg); }
+}
+
 .admin-divider {
   margin: 8px 0;
   border-top: 1px dashed rgba(46, 41, 35, 0.26);
@@ -452,6 +485,87 @@ select { font: inherit; }
 
 .admin-mini-list li {
   margin: 2px 0;
+}
+
+.admin-preset-table,
+.admin-airport-table {
+  margin-top: 10px;
+  border: 2px solid rgba(46, 41, 35, 0.18);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.admin-preset-head,
+.admin-preset-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 0.75fr) minmax(0, 0.75fr) 42px;
+}
+
+.admin-airport-head,
+.admin-airport-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.admin-preset-head > div,
+.admin-airport-head > div {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  border-right: 1px solid rgba(46, 41, 35, 0.16);
+  background: rgba(33, 76, 90, 0.08);
+}
+
+.admin-preset-head > div:last-child,
+.admin-airport-head > div:last-child {
+  border-right: 0;
+}
+
+.admin-preset-row,
+.admin-airport-row {
+  border-top: 1px solid rgba(46, 41, 35, 0.14);
+}
+
+.admin-preset-row input,
+.admin-airport-row input {
+  width: 100%;
+  min-height: 42px;
+  border: 0;
+  border-right: 1px solid rgba(46, 41, 35, 0.14);
+  padding: 8px 10px;
+  background: transparent;
+}
+
+.admin-preset-row input:last-of-type {
+  border-right: 1px solid rgba(46, 41, 35, 0.14);
+}
+
+.admin-airport-row input:last-child {
+  border-right: 0;
+}
+
+.admin-mini-btn {
+  border-radius: 0;
+  min-height: 42px;
+  min-width: 42px;
+  padding: 0;
+  border-top: 0;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.admin-subtle-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.02em;
 }
 
 .preset-status {
@@ -1229,6 +1343,21 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   .radio-row input {
     min-height: 72px;
     font-size: 0.82rem;
+  }
+
+  .admin-preset-table,
+  .admin-airport-table {
+    overflow-x: auto;
+  }
+
+  .admin-preset-head,
+  .admin-preset-row {
+    min-width: 520px;
+  }
+
+  .admin-airport-head,
+  .admin-airport-row {
+    min-width: 860px;
   }
 }
 
