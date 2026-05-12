@@ -77,6 +77,7 @@
       privacySaveStatus: "",
       announcementDrafts: [createEmptyAnnouncementDraft()],
       announcementSaveStatus: "",
+      panel: "dashboard",
     },
     meta: {
       hasOpenedSheet: false,
@@ -190,9 +191,12 @@
       id: createAnnouncementId(),
       heading: "",
       body: "",
-      startAt: "",
-      endAt: "",
+      startDate: "",
+      startTimeUtc: "",
+      endDate: "",
+      endTimeUtc: "",
       permanent: false,
+      collapsed: false,
     };
   }
 
@@ -504,6 +508,7 @@
     if (!state.admin.session) return renderAdminLoginScreen();
     const statusText = state.admin.error || state.admin.notice;
     const statusClass = state.admin.error ? "admin-status error" : "admin-status ok";
+    const panel = String(state.admin.panel || "dashboard");
     const presetLookup = getPresetLookupState();
     const airportLookup = getAirportLookupState();
     const presetRows = Array.isArray(state.admin.presetForm.rows) && state.admin.presetForm.rows.length
@@ -515,6 +520,15 @@
     const airportCodeOptions = state.admin.airports
       .map((airport) => `<option value="${escapeAttr(airport.code)}"></option>`)
       .join("");
+    const panelButtons = [
+      { id: "dashboard", label: "Overview" },
+      { id: "presets", label: "Presets" },
+      { id: "airports", label: "Airport Info" },
+      { id: "announcements", label: "Announcements" },
+      { id: "manual", label: "User Manual" },
+      { id: "privacy", label: "Privacy Policy" },
+    ];
+    const vercelAnalyticsUrl = String(readSupabaseConfigValue("vercelAnalyticsUrl") || "https://vercel.com/dashboard/analytics");
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -528,7 +542,14 @@
           </div>
         </section>
         <section class="setup-card admin-card">
-          <div class="manual-section">
+          <div class="admin-shell">
+            <aside class="admin-menu">
+              ${panelButtons.map((item) => `
+                <button class="admin-menu-btn${panel === item.id ? " active" : ""}" data-admin-panel="${item.id}" type="button">${item.label}</button>
+              `).join("")}
+            </aside>
+            <div class="admin-panel-wrap">
+          <div class="manual-section${panel === "presets" ? "" : " hidden"}">
             <h3>Route Presets</h3>
             <datalist id="admin-preset-code-list">${presetCodeOptions}</datalist>
             <div class="admin-grid two-col">
@@ -570,7 +591,7 @@
               <button class="action" id="admin-preset-delete"${presetLookup.exists ? "" : " disabled"}>Delete</button>
             </div>
           </div>
-          <div class="manual-section">
+          <div class="manual-section${panel === "airports" ? "" : " hidden"}">
             <h3>Airport Information</h3>
             <datalist id="admin-airport-code-list">${airportCodeOptions}</datalist>
             <div class="preset-status ${airportLookup.active ? (airportLookup.exists ? "available" : "missing") : ""}">${airportLookup.active ? (airportLookup.exists ? "airport avbl" : "airport unavbl") : ""}</div>
@@ -599,27 +620,27 @@
               <button class="action" id="admin-airport-delete"${airportLookup.exists ? "" : " disabled"}>Delete</button>
             </div>
           </div>
-          <div class="manual-section">
-            <h3>Announcement</h3>
+          <div class="manual-section${panel === "announcements" ? "" : " hidden"}">
+            <div class="admin-announcement-title-row">
+              <h3>Announcements</h3>
+              <button class="action" id="admin-announcement-add">Add</button>
+            </div>
             <section class="admin-announcement-list">
               ${state.admin.announcementDrafts.map((draft, index) => `
-                <article class="admin-announcement-item">
+                <article class="admin-announcement-item${draft.collapsed ? " collapsed" : ""}">
                   <div class="admin-announcement-item-head">
-                    <strong>#${index + 1}</strong>
+                    <button class="admin-announcement-toggle" data-admin-announcement-toggle="${index}" type="button" aria-label="Expand or collapse announcement">
+                      <span class="admin-announcement-arrow">▾</span>
+                      <span class="admin-announcement-preview">${escapeHtml(String(draft.heading || "").trim() || `Announcement ${index + 1}`)}</span>
+                    </button>
                     <button class="action admin-mini-btn${state.admin.announcementDrafts.length > 1 ? " active" : ""}" data-admin-announcement-remove="${index}" type="button" ${state.admin.announcementDrafts.length > 1 ? "" : "disabled"}>-</button>
                   </div>
-                  <div class="admin-grid two-col">
+                  <div class="admin-announcement-body-wrap">
+                  <div class="admin-grid one-col">
                     <label class="setup-field">
                       <span>Heading</span>
                       <input data-admin-announcement-field="${index}:heading" value="${escapeAttr(draft.heading)}" />
                     </label>
-                    <div class="setup-field">
-                      <span>Permanent</span>
-                      <label class="admin-toggle-line">
-                        <input data-admin-announcement-field="${index}:permanent" type="checkbox" ${draft.permanent ? "checked" : ""} />
-                        <span>Permanent announcement</span>
-                      </label>
-                    </div>
                   </div>
                   <label class="setup-field">
                     <span>Body</span>
@@ -627,24 +648,34 @@
                   </label>
                   <div class="admin-grid two-col">
                     <label class="setup-field">
-                      <span>Start Date & Time</span>
-                      <input data-admin-announcement-field="${index}:startAt" type="datetime-local" value="${escapeAttr(formatDatetimeLocalValue(draft.startAt))}" />
+                      <span>Start (Y/M/D) / UTC</span>
+                      <div class="admin-inline-inputs">
+                        <input data-admin-announcement-field="${index}:startDate" value="${escapeAttr(formatAnnouncementDateInput(draft.startDate))}" placeholder="yyyy/mm/dd" ${draft.permanent ? "disabled" : ""} />
+                        <input data-admin-announcement-field="${index}:startTimeUtc" value="${escapeAttr(formatAnnouncementTimeInput(draft.startTimeUtc))}" placeholder="hh:mm" ${draft.permanent ? "disabled" : ""} />
+                      </div>
                     </label>
                     <label class="setup-field">
-                      <span>End Date & Time</span>
-                      <input data-admin-announcement-field="${index}:endAt" type="datetime-local" value="${escapeAttr(formatDatetimeLocalValue(draft.endAt))}" />
+                      <span>End (Y/M/D) / UTC</span>
+                      <div class="admin-inline-inputs">
+                        <input data-admin-announcement-field="${index}:endDate" value="${escapeAttr(formatAnnouncementDateInput(draft.endDate))}" placeholder="yyyy/mm/dd" ${draft.permanent ? "disabled" : ""} />
+                        <input data-admin-announcement-field="${index}:endTimeUtc" value="${escapeAttr(formatAnnouncementTimeInput(draft.endTimeUtc))}" placeholder="hh:mm" ${draft.permanent ? "disabled" : ""} />
+                      </div>
                     </label>
+                  </div>
+                  <label class="admin-toggle-line">
+                    <input data-admin-announcement-field="${index}:permanent" type="checkbox" ${draft.permanent ? "checked" : ""} />
+                    <span>Permanent announcement</span>
+                  </label>
+                  <div class="entry-actions">
+                    <button class="action primary" data-admin-announcement-save="${index}" type="button">Save</button>
+                  </div>
                   </div>
                 </article>
               `).join("")}
             </section>
-            <div class="entry-actions">
-              <button class="action" id="admin-announcement-add">Add announcement</button>
-              <button class="action primary" id="admin-announcement-save">Save</button>
-              <span class="admin-subtle-status">${escapeHtml(state.admin.announcementSaveStatus)}</span>
-            </div>
+            <span class="admin-subtle-status">${escapeHtml(state.admin.announcementSaveStatus)}</span>
           </div>
-          <div class="manual-section">
+          <div class="manual-section${panel === "manual" ? "" : " hidden"}">
             <h3>User Manual Content</h3>
             <label class="setup-field">
               <textarea id="admin-manual-html" class="admin-textarea admin-textarea-large">${escapeHtml(state.admin.manualHtmlDraft)}</textarea>
@@ -654,7 +685,7 @@
               <span class="admin-subtle-status">${escapeHtml(state.admin.manualSaveStatus)}</span>
             </div>
           </div>
-          <div class="manual-section">
+          <div class="manual-section${panel === "privacy" ? "" : " hidden"}">
             <h3>Privacy Policy Content</h3>
             <label class="setup-field">
               <textarea id="admin-privacy-html" class="admin-textarea admin-textarea-large">${escapeHtml(state.admin.privacyHtmlDraft)}</textarea>
@@ -663,6 +694,17 @@
               <button class="action primary" id="admin-privacy-save">Save</button>
               <span class="admin-subtle-status">${escapeHtml(state.admin.privacySaveStatus)}</span>
             </div>
+          </div>
+          <div class="manual-section${panel === "dashboard" ? "" : " hidden"}">
+            <h3>Overview</h3>
+            <p class="setup-caption">Select a section from the left menu to manage content.</p>
+            <div class="admin-analytics-card">
+              <h4>Vercel Analytics</h4>
+              <p>Open your analytics dashboard to view traffic, performance, and trends.</p>
+              <a class="action primary admin-link-btn" href="${escapeAttr(vercelAnalyticsUrl)}" target="_blank" rel="noreferrer">Open Analytics</a>
+            </div>
+          </div>
+          </div>
           </div>
           ${statusText ? `<p class="${statusClass}">${escapeHtml(statusText)}</p>` : ""}
         </section>
@@ -1902,6 +1944,15 @@
         await signOutAdmin();
       });
     }
+    const adminPanelButtons = Array.from(document.querySelectorAll("[data-admin-panel]"));
+    adminPanelButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const nextPanel = String(button.getAttribute("data-admin-panel") || "");
+        if (!nextPanel || nextPanel === state.admin.panel) return;
+        state.admin.panel = nextPanel;
+        render();
+      });
+    });
 
     ["admin-preset-departure", "admin-preset-destination"].forEach((id) => {
       const field = document.getElementById(id);
@@ -2037,15 +2088,27 @@
     }
     const announcementRemoveButtons = Array.from(document.querySelectorAll("[data-admin-announcement-remove]"));
     announcementRemoveButtons.forEach((button) => {
-      button.addEventListener("click", () => {
+      button.addEventListener("click", async () => {
         const rawIndex = String(button.getAttribute("data-admin-announcement-remove") || "");
         const index = Number(rawIndex);
         if (!Number.isFinite(index) || index < 0 || index >= state.admin.announcementDrafts.length) return;
+        if (!window.confirm("Are you sure you want to delete this announcement?")) return;
         if (state.admin.announcementDrafts.length === 1) {
           state.admin.announcementDrafts = [createEmptyAnnouncementDraft()];
         } else {
           state.admin.announcementDrafts.splice(index, 1);
         }
+        state.admin.announcementSaveStatus = "";
+        await persistAnnouncementsToDatabase(normalizeAnnouncementDrafts(state.admin.announcementDrafts, false), "Saved");
+      });
+    });
+    const announcementToggleButtons = Array.from(document.querySelectorAll("[data-admin-announcement-toggle]"));
+    announcementToggleButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const rawIndex = String(button.getAttribute("data-admin-announcement-toggle") || "");
+        const index = Number(rawIndex);
+        if (!Number.isFinite(index) || index < 0 || index >= state.admin.announcementDrafts.length) return;
+        state.admin.announcementDrafts[index].collapsed = !state.admin.announcementDrafts[index].collapsed;
         render();
       });
     });
@@ -2054,21 +2117,28 @@
       field.addEventListener("input", () => {
         readAnnouncementDraftsFromInputs();
         state.admin.announcementSaveStatus = "";
+        const key = String(field.getAttribute("data-admin-announcement-field") || "");
+        const [indexText, prop] = key.split(":");
+        const index = Number(indexText);
+        if (prop === "permanent" && Number.isFinite(index) && state.admin.announcementDrafts[index]) render();
       });
       if (String(field.getAttribute("type") || "").toLowerCase() === "checkbox") {
         field.addEventListener("change", () => {
           readAnnouncementDraftsFromInputs();
           state.admin.announcementSaveStatus = "";
+          render();
         });
       }
     });
-    const announcementSaveButton = document.getElementById("admin-announcement-save");
-    if (announcementSaveButton) {
-      announcementSaveButton.addEventListener("click", async () => {
+    const announcementSaveButtons = Array.from(document.querySelectorAll("[data-admin-announcement-save]"));
+    announcementSaveButtons.forEach((button) => {
+      button.addEventListener("click", async () => {
         readAnnouncementDraftsFromInputs();
-        await saveAnnouncementsFromAdmin();
+        const rawIndex = String(button.getAttribute("data-admin-announcement-save") || "");
+        const index = Number(rawIndex);
+        await saveAnnouncementByIndex(index);
       });
-    }
+    });
   }
 
   async function connectSupabaseClient(forceRecreate) {
@@ -2141,6 +2211,7 @@
       }
       await loadAdminData();
       state.view = "admin";
+      state.admin.panel = "dashboard";
       state.admin.notice = "";
     } catch (error) {
       state.admin.error = error && error.message ? error.message : "Admin sign-in failed.";
@@ -2237,6 +2308,7 @@
   }
 
   function readAnnouncementDraftsFromInputs() {
+    const previous = Array.isArray(state.admin.announcementDrafts) ? state.admin.announcementDrafts : [];
     const fields = Array.from(document.querySelectorAll("[data-admin-announcement-field]"));
     const byIndex = [];
     fields.forEach((field) => {
@@ -2245,6 +2317,7 @@
       const index = Number(indexText);
       if (!Number.isFinite(index) || index < 0 || !prop) return;
       if (!byIndex[index]) byIndex[index] = createEmptyAnnouncementDraft();
+      if (previous[index]) byIndex[index].collapsed = Boolean(previous[index].collapsed);
       if (prop === "permanent") {
         byIndex[index][prop] = Boolean(field.checked);
       } else {
@@ -2578,38 +2651,94 @@
 
   function normalizeAnnouncementDrafts(items, ensureOne = true) {
     const source = Array.isArray(items) ? items : [];
-    const normalized = source.map((item) => ({
-      id: String(item && item.id ? item.id : createAnnouncementId()),
-      heading: String(item && item.heading ? item.heading : ""),
-      body: String(item && item.body ? item.body : ""),
-      startAt: normalizeDatetimeLocalInput(item && item.startAt ? item.startAt : ""),
-      endAt: normalizeDatetimeLocalInput(item && item.endAt ? item.endAt : ""),
-      permanent: Boolean(item && item.permanent),
-    }));
+    const normalized = source.map((item) => {
+      const startParts = extractAnnouncementParts(item && item.startAt ? item.startAt : "", item && item.startDate ? item.startDate : "", item && item.startTimeUtc ? item.startTimeUtc : "");
+      const endParts = extractAnnouncementParts(item && item.endAt ? item.endAt : "", item && item.endDate ? item.endDate : "", item && item.endTimeUtc ? item.endTimeUtc : "");
+      return {
+        id: String(item && item.id ? item.id : createAnnouncementId()),
+        heading: String(item && item.heading ? item.heading : ""),
+        body: String(item && item.body ? item.body : ""),
+        startDate: startParts.date,
+        startTimeUtc: startParts.time,
+        endDate: endParts.date,
+        endTimeUtc: endParts.time,
+        permanent: Boolean(item && item.permanent),
+        collapsed: Boolean(item && item.collapsed),
+      };
+    });
     if (normalized.length) return normalized;
     return ensureOne ? [createEmptyAnnouncementDraft()] : [];
   }
 
-  function normalizeDatetimeLocalInput(value) {
+  function normalizeAnnouncementDateInput(value) {
+    const text = String(value || "").trim().replaceAll("-", "/");
+    if (!text) return "";
+    const match = text.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+    if (!match) return "";
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return "";
+    if (month < 1 || month > 12 || day < 1 || day > 31) return "";
+    return `${String(year).padStart(4, "0")}/${String(month).padStart(2, "0")}/${String(day).padStart(2, "0")}`;
+  }
+
+  function normalizeAnnouncementTimeInput(value) {
     const text = String(value || "").trim();
     if (!text) return "";
-    const asDate = new Date(text);
-    if (!Number.isFinite(asDate.getTime())) return "";
-    return toDatetimeLocalValue(asDate);
+    const match = text.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) return "";
+    const hours = Number(match[1]);
+    const minutes = Number(match[2]);
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return "";
+    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return "";
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
   }
 
-  function toDatetimeLocalValue(dateObj) {
-    if (!(dateObj instanceof Date) || !Number.isFinite(dateObj.getTime())) return "";
-    const year = dateObj.getFullYear();
-    const month = String(dateObj.getMonth() + 1).padStart(2, "0");
-    const day = String(dateObj.getDate()).padStart(2, "0");
-    const hour = String(dateObj.getHours()).padStart(2, "0");
-    const minute = String(dateObj.getMinutes()).padStart(2, "0");
-    return `${year}-${month}-${day}T${hour}:${minute}`;
+  function parseUtcIsoToAnnouncementParts(isoText) {
+    const text = String(isoText || "").trim();
+    if (!text) return { date: "", time: "" };
+    const dateObj = new Date(text);
+    if (!Number.isFinite(dateObj.getTime())) return { date: "", time: "" };
+    const year = String(dateObj.getUTCFullYear()).padStart(4, "0");
+    const month = String(dateObj.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(dateObj.getUTCDate()).padStart(2, "0");
+    const hour = String(dateObj.getUTCHours()).padStart(2, "0");
+    const minute = String(dateObj.getUTCMinutes()).padStart(2, "0");
+    return { date: `${year}/${month}/${day}`, time: `${hour}:${minute}` };
   }
 
-  function formatDatetimeLocalValue(value) {
-    return normalizeDatetimeLocalInput(value);
+  function extractAnnouncementParts(isoText, dateText, timeText) {
+    const normalizedDate = normalizeAnnouncementDateInput(dateText);
+    const normalizedTime = normalizeAnnouncementTimeInput(timeText);
+    if (normalizedDate || normalizedTime) return { date: normalizedDate, time: normalizedTime };
+    return parseUtcIsoToAnnouncementParts(isoText);
+  }
+
+  function announcementPartsToUtcIso(dateText, timeText) {
+    const date = normalizeAnnouncementDateInput(dateText);
+    const time = normalizeAnnouncementTimeInput(timeText);
+    if (!date || !time) return "";
+    const match = date.match(/^(\d{4})\/(\d{2})\/(\d{2})$/);
+    if (!match) return "";
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    const timeMatch = time.match(/^(\d{2}):(\d{2})$/);
+    if (!timeMatch) return "";
+    const hour = Number(timeMatch[1]);
+    const minute = Number(timeMatch[2]);
+    const utcMs = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+    if (!Number.isFinite(utcMs)) return "";
+    return new Date(utcMs).toISOString();
+  }
+
+  function formatAnnouncementDateInput(value) {
+    return normalizeAnnouncementDateInput(value);
+  }
+
+  function formatAnnouncementTimeInput(value) {
+    return normalizeAnnouncementTimeInput(value);
   }
 
   function parseAnnouncementsContent(raw) {
@@ -2627,8 +2756,10 @@
   function isAnnouncementActive(item, nowMs) {
     if (!item) return false;
     if (item.permanent) return true;
-    const startMs = item.startAt ? new Date(item.startAt).getTime() : Number.NaN;
-    const endMs = item.endAt ? new Date(item.endAt).getTime() : Number.NaN;
+    const startAt = announcementPartsToUtcIso(item.startDate, item.startTimeUtc);
+    const endAt = announcementPartsToUtcIso(item.endDate, item.endTimeUtc);
+    const startMs = startAt ? new Date(startAt).getTime() : Number.NaN;
+    const endMs = endAt ? new Date(endAt).getTime() : Number.NaN;
     const hasStart = Number.isFinite(startMs);
     const hasEnd = Number.isFinite(endMs);
     if (hasStart && nowMs < startMs) return false;
@@ -2638,7 +2769,7 @@
 
   function computeAnnouncementSignature(items) {
     return (Array.isArray(items) ? items : [])
-      .map((item) => `${item.id}|${item.heading}|${item.body}|${item.startAt}|${item.endAt}|${item.permanent ? 1 : 0}`)
+      .map((item) => `${item.id}|${item.heading}|${item.body}|${item.startDate}|${item.startTimeUtc}|${item.endDate}|${item.endTimeUtc}|${item.permanent ? 1 : 0}`)
       .join("||");
   }
 
@@ -2991,15 +3122,26 @@
     }
   }
 
-  async function saveAnnouncementsFromAdmin() {
-    const normalized = normalizeAnnouncementDrafts(state.admin.announcementDrafts).filter((item) => {
-      return String(item.heading || "").trim() !== "" || String(item.body || "").trim() !== "";
-    });
+  function serializeAnnouncementForStorage(item) {
+    return {
+      id: String(item && item.id ? item.id : createAnnouncementId()),
+      heading: String(item && item.heading ? item.heading : ""),
+      body: String(item && item.body ? item.body : ""),
+      startAt: announcementPartsToUtcIso(item && item.startDate ? item.startDate : "", item && item.startTimeUtc ? item.startTimeUtc : ""),
+      endAt: announcementPartsToUtcIso(item && item.endDate ? item.endDate : "", item && item.endTimeUtc ? item.endTimeUtc : ""),
+      permanent: Boolean(item && item.permanent),
+    };
+  }
+
+  async function persistAnnouncementsToDatabase(drafts, successPrefix) {
+    const normalized = normalizeAnnouncementDrafts(drafts, false)
+      .filter((item) => String(item.heading || "").trim() !== "" || String(item.body || "").trim() !== "")
+      .map((item) => serializeAnnouncementForStorage(item));
     const payload = JSON.stringify(normalized);
     const ok = await connectSupabaseClient(false);
     if (!ok) {
       render();
-      return;
+      return false;
     }
     state.admin.error = "";
     state.admin.notice = "";
@@ -3009,14 +3151,41 @@
         { onConflict: "key" },
       );
       if (error) throw error;
-      state.admin.announcementSaveStatus = `Saved ${formatAdminSaveTime()}`;
+      state.admin.announcementSaveStatus = `${successPrefix || "Saved"} ${formatAdminSaveTime()}`;
+      state.admin.error = "";
       await loadAdminData();
       evaluateAnnouncementsPrompt();
+      return true;
     } catch (error) {
       state.admin.error = error && error.message ? error.message : "Could not save announcements.";
       state.admin.announcementSaveStatus = "Save failed";
       render();
+      return false;
     }
+  }
+
+  async function saveAnnouncementByIndex(index) {
+    const normalizedAll = normalizeAnnouncementDrafts(state.admin.announcementDrafts);
+    if (!Number.isFinite(index) || index < 0 || index >= normalizedAll.length) return;
+    const target = normalizedAll[index];
+    const hasContent = String(target.heading || "").trim() !== "" || String(target.body || "").trim() !== "";
+    if (!hasContent) {
+      state.admin.error = "Heading or body is required before saving.";
+      state.admin.announcementSaveStatus = "";
+      render();
+      return;
+    }
+    if (!target.permanent) {
+      const hasStart = Boolean(announcementPartsToUtcIso(target.startDate, target.startTimeUtc));
+      const hasEnd = Boolean(announcementPartsToUtcIso(target.endDate, target.endTimeUtc));
+      if (!hasStart && !hasEnd) {
+        state.admin.error = "Set start or end date/time, or enable Permanent.";
+        state.admin.announcementSaveStatus = "";
+        render();
+        return;
+      }
+    }
+    await persistAnnouncementsToDatabase(normalizedAll, "Saved");
   }
 
   function formatAdminSaveTime() {
