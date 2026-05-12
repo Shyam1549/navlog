@@ -40,6 +40,7 @@
         manualHtml: "",
         privacyHtml: "",
         announcements: [],
+        additionalInfoTable: [],
       },
     },
     announcement: {
@@ -78,6 +79,8 @@
       announcementDrafts: [createEmptyAnnouncementDraft()],
       announcementSaveStatus: "",
       panel: "dashboard",
+      additionalInfoDraft: [],
+      additionalInfoSaveStatus: "",
     },
     meta: {
       hasOpenedSheet: false,
@@ -206,6 +209,19 @@
     return `ann_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
+  function createEmptyAdditionalInfoTable() {
+    return Array.from({ length: 9 }, () => Array.from({ length: 19 }, () => ""));
+  }
+
+  function normalizeAdditionalInfoTable(value) {
+    const source = Array.isArray(value) ? value : [];
+    const rows = Array.from({ length: 9 }, (_, rowIndex) => {
+      const row = Array.isArray(source[rowIndex]) ? source[rowIndex] : [];
+      return Array.from({ length: 19 }, (_, colIndex) => String(row[colIndex] || ""));
+    });
+    return rows;
+  }
+
   function readStoredValue(key) {
     try {
       return String(window.localStorage.getItem(key) || "");
@@ -261,6 +277,7 @@
     if (state.view === "setup") app.innerHTML = renderSetupScreen();
     else if (state.view === "manual") app.innerHTML = renderManualScreen();
     else if (state.view === "privacy") app.innerHTML = renderPrivacyScreen();
+    else if (state.view === "additional-info") app.innerHTML = renderAdditionalInfoScreen();
     else if (state.view === "admin-login") app.innerHTML = renderAdminLoginScreen();
     else if (state.view === "admin") app.innerHTML = renderAdminScreen();
     else app.innerHTML = renderNavlogScreen();
@@ -268,6 +285,7 @@
     if (state.view === "setup") wireSetup();
     else if (state.view === "manual") wireManual();
     else if (state.view === "privacy") wirePrivacy();
+    else if (state.view === "additional-info") wireAdditionalInfo();
     else if (state.view === "admin-login") wireAdminLogin();
     else if (state.view === "admin") wireAdminPanel();
     else wireNavlog();
@@ -337,6 +355,7 @@
         <div class="front-footer-links">
           <button class="footer-link" id="open-bug-report" type="button">Bug report</button>
           <button class="footer-link" id="open-manual" type="button">User manual</button>
+          <button class="footer-link" id="open-additional-info" type="button">Additional Information</button>
           <button class="footer-link" id="open-privacy" type="button">Privacy policy</button>
         </div>
         <p class="front-footer-copy">© ${year} Navlog. All rights reserved.</p>
@@ -461,6 +480,35 @@
     `;
   }
 
+  function renderAdditionalInfoScreen() {
+    const table = normalizeAdditionalInfoTable(state.catalog.content.additionalInfoTable);
+    return `
+      <div class="ui-scale">
+      <main class="entry-page">
+        <section class="topbar centered">
+          <div class="top-side"><button class="back-link" id="back-from-additional-info">Back</button></div>
+          <div class="top-center">
+            <h1>Aircraft Information</h1>
+          </div>
+          <div class="top-side right"></div>
+        </section>
+        <section class="setup-card privacy-card">
+          <div class="additional-info-wrap">
+            <table class="additional-info-table">
+              <tbody>
+                ${table.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}
+              </tbody>
+            </table>
+          </div>
+        </section>
+        ${renderFrontFooter()}
+        ${renderBugReportModal()}
+        ${renderAnnouncementModal()}
+      </main>
+      </div>
+    `;
+  }
+
   function renderAdminLoginScreen() {
     const hasSupabaseConfig = Boolean(state.admin.supabaseUrl && state.admin.supabaseAnonKey);
     const statusText = state.admin.error || state.admin.notice || (!hasSupabaseConfig ? "Supabase config missing. Set window.NAVLOG_CONFIG in index.html." : "");
@@ -527,6 +575,7 @@
       { id: "presets", label: "Presets" },
       { id: "airports", label: "Airport Info" },
       { id: "announcements", label: "Announcements" },
+      { id: "additional-info", label: "Additional Info" },
       { id: "manual", label: "User Manual" },
       { id: "privacy", label: "Privacy Policy" },
     ];
@@ -697,13 +746,29 @@
               <span class="admin-subtle-status">${escapeHtml(state.admin.privacySaveStatus)}</span>
             </div>
           </div>
+          <div class="manual-section${panel === "additional-info" ? "" : " hidden"}">
+            <h3>Additional Information</h3><br>
+            <div class="additional-info-wrap">
+              <table class="additional-info-table editable">
+                <tbody>
+                  ${normalizeAdditionalInfoTable(state.admin.additionalInfoDraft).map((row, rowIndex) => `
+                    <tr>
+                      ${row.map((cell, colIndex) => `<td><input data-admin-additional="${rowIndex}:${colIndex}" value="${escapeAttr(cell)}" /></td>`).join("")}
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
+            </div>
+            <div class="entry-actions">
+              <button class="action primary" id="admin-additional-save">Save</button>
+              <span class="admin-subtle-status">${escapeHtml(state.admin.additionalInfoSaveStatus)}</span>
+            </div>
+          </div>
           <div class="manual-section${panel === "dashboard" ? "" : " hidden"}">
             <h3>Overview</h3><br>
-            <p class="setup-caption">Select a section from the left menu to manage content. Or play a quick game.</p>
+            <p class="setup-caption">Select a section from the left menu to manage content.</p>
             <div class="admin-game-card">
-              <h4>Mini Runner</h4>
-              <p>Press Space to jump over blocks.</p>
-              <canvas id="admin-mini-game" width="560" height="180" aria-label="Mini runner game"></canvas>
+              <canvas id="admin-mini-game" width="980" height="180" aria-label="Mini runner game"></canvas>
               <div class="entry-actions">
                 <button class="action primary" id="admin-game-start" type="button">Start</button>
                 <span class="admin-subtle-status" id="admin-game-status"></span>
@@ -1708,7 +1773,7 @@
     const openManualButton = document.getElementById("open-manual");
     if (openManualButton) {
       openManualButton.addEventListener("click", () => {
-        if (state.view === "manual" || state.view === "privacy") {
+        if (state.view === "manual" || state.view === "privacy" || state.view === "additional-info") {
           state.meta.docBackView = state.view;
         } else {
           state.meta.lastNonDocView = state.view;
@@ -1721,13 +1786,26 @@
     const openPrivacyButton = document.getElementById("open-privacy");
     if (openPrivacyButton) {
       openPrivacyButton.addEventListener("click", () => {
-        if (state.view === "manual" || state.view === "privacy") {
+        if (state.view === "manual" || state.view === "privacy" || state.view === "additional-info") {
           state.meta.docBackView = state.view;
         } else {
           state.meta.lastNonDocView = state.view;
           state.meta.docBackView = "";
         }
         state.view = "privacy";
+        render();
+      });
+    }
+    const openAdditionalButton = document.getElementById("open-additional-info");
+    if (openAdditionalButton) {
+      openAdditionalButton.addEventListener("click", () => {
+        if (state.view === "manual" || state.view === "privacy" || state.view === "additional-info") {
+          state.meta.docBackView = state.view;
+        } else {
+          state.meta.lastNonDocView = state.view;
+          state.meta.docBackView = "";
+        }
+        state.view = "additional-info";
         render();
       });
     }
@@ -1852,6 +1930,20 @@
 
   function wirePrivacy() {
     const backButton = document.getElementById("back-from-privacy");
+    if (!backButton) return;
+    backButton.addEventListener("click", () => {
+      if (state.meta.docBackView) {
+        state.view = state.meta.docBackView;
+        state.meta.docBackView = "";
+      } else {
+        state.view = state.meta.lastNonDocView || "setup";
+      }
+      render();
+    });
+  }
+
+  function wireAdditionalInfo() {
+    const backButton = document.getElementById("back-from-additional-info");
     if (!backButton) return;
     backButton.addEventListener("click", () => {
       if (state.meta.docBackView) {
@@ -2143,6 +2235,20 @@
         await saveAnnouncementByIndex(index);
       });
     });
+    const additionalInputs = Array.from(document.querySelectorAll("[data-admin-additional]"));
+    additionalInputs.forEach((input) => {
+      input.addEventListener("input", () => {
+        readAdditionalInfoFromInputs();
+        state.admin.additionalInfoSaveStatus = "";
+      });
+    });
+    const additionalSaveButton = document.getElementById("admin-additional-save");
+    if (additionalSaveButton) {
+      additionalSaveButton.addEventListener("click", async () => {
+        readAdditionalInfoFromInputs();
+        await saveAdditionalInfoFromAdmin();
+      });
+    }
   }
 
   function initAdminMiniGame() {
@@ -2424,6 +2530,7 @@
       state.catalog.content.manualHtml = contentMap.manual || "";
       state.catalog.content.privacyHtml = contentMap.privacy || "";
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
+      state.catalog.content.additionalInfoTable = parseAdditionalInfoContent(contentMap.additional_info || "");
       state.admin.manualHtmlDraft = contentHtmlToEditorText("manual", state.catalog.content.manualHtml);
       state.admin.privacyHtmlDraft = contentHtmlToEditorText("privacy", state.catalog.content.privacyHtml);
       state.admin.manualDraftBaselineHtml = state.catalog.content.manualHtml;
@@ -2431,6 +2538,7 @@
       state.admin.manualDraftBaselineText = state.admin.manualHtmlDraft;
       state.admin.privacyDraftBaselineText = state.admin.privacyHtmlDraft;
       state.admin.announcementDrafts = normalizeAnnouncementDrafts(state.catalog.content.announcements, false);
+      state.admin.additionalInfoDraft = normalizeAdditionalInfoTable(state.catalog.content.additionalInfoTable);
       evaluateAnnouncementsPrompt();
 
       if (state.admin.selectedPresetId) selectPresetForEditing(state.admin.selectedPresetId);
@@ -2446,6 +2554,21 @@
       state.admin.loading = false;
       render();
     }
+  }
+
+  function readAdditionalInfoFromInputs() {
+    const rows = createEmptyAdditionalInfoTable();
+    const inputs = Array.from(document.querySelectorAll("[data-admin-additional]"));
+    inputs.forEach((input) => {
+      const key = String(input.getAttribute("data-admin-additional") || "");
+      const [rowText, colText] = key.split(":");
+      const row = Number(rowText);
+      const col = Number(colText);
+      if (!Number.isFinite(row) || !Number.isFinite(col)) return;
+      if (row < 0 || row >= 9 || col < 0 || col >= 19) return;
+      rows[row][col] = String(input.value || "");
+    });
+    state.admin.additionalInfoDraft = rows;
   }
 
   function readAnnouncementDraftsFromInputs() {
@@ -2894,6 +3017,17 @@
     }
   }
 
+  function parseAdditionalInfoContent(raw) {
+    const text = String(raw || "").trim();
+    if (!text) return createEmptyAdditionalInfoTable();
+    try {
+      const parsed = JSON.parse(text);
+      return normalizeAdditionalInfoTable(parsed);
+    } catch {
+      return createEmptyAdditionalInfoTable();
+    }
+  }
+
   function isAnnouncementActive(item, nowMs) {
     if (!item) return false;
     if (item.permanent) return true;
@@ -3327,6 +3461,30 @@
       }
     }
     await persistAnnouncementsToDatabase(normalizedAll, "Saved");
+  }
+
+  async function saveAdditionalInfoFromAdmin() {
+    const ok = await connectSupabaseClient(false);
+    if (!ok) {
+      render();
+      return;
+    }
+    state.admin.error = "";
+    state.admin.notice = "";
+    try {
+      const body = JSON.stringify(normalizeAdditionalInfoTable(state.admin.additionalInfoDraft));
+      const { error } = await supabaseClient.from("content_pages").upsert(
+        { key: "additional_info", body_html: body },
+        { onConflict: "key" },
+      );
+      if (error) throw error;
+      state.admin.additionalInfoSaveStatus = `Saved ${formatAdminSaveTime()}`;
+      await loadAdminData();
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Could not save additional information.";
+      state.admin.additionalInfoSaveStatus = "Save failed";
+      render();
+    }
   }
 
   function formatAdminSaveTime() {
@@ -4100,6 +4258,7 @@
       if (typeof contentMap.manual === "string") state.catalog.content.manualHtml = contentMap.manual;
       if (typeof contentMap.privacy === "string") state.catalog.content.privacyHtml = contentMap.privacy;
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
+      state.catalog.content.additionalInfoTable = parseAdditionalInfoContent(contentMap.additional_info || "");
     } finally {
       loadingPublicCatalog = false;
     }

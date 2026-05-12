@@ -1410,6 +1410,15 @@ select { font: inherit; }
   color: rgba(46, 41, 35, 0.56);
 }
 
+.admin-announcement-item .setup-field input,
+.admin-announcement-item .setup-field textarea {
+  min-height: 42px;
+}
+
+.admin-announcement-item .setup-field textarea {
+  min-height: 84px;
+}
+
 .admin-game-card {
   border: 1px solid rgba(46, 41, 35, 0.18);
   border-radius: 12px;
@@ -1429,7 +1438,6 @@ select { font: inherit; }
 
 .admin-game-card canvas {
   width: 100%;
-  max-width: 560px;
   border: 1px solid rgba(46, 41, 35, 0.16);
   border-radius: 10px;
   background: #f4ecdd;
@@ -1438,6 +1446,41 @@ select { font: inherit; }
 
 .admin-title-gap > span {
   margin-bottom: 4px;
+}
+
+.additional-info-wrap {
+  overflow: auto;
+  border: 1px solid rgba(46, 41, 35, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.additional-info-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 1280px;
+}
+
+.additional-info-table td {
+  border: 1px solid rgba(46, 41, 35, 0.16);
+  padding: 6px 8px;
+  font-size: 0.84rem;
+  min-width: 72px;
+  height: 36px;
+  vertical-align: middle;
+}
+
+.additional-info-table.editable td {
+  padding: 0;
+}
+
+.additional-info-table.editable td input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  min-height: 36px;
+  padding: 6px 8px;
+  font-size: 0.84rem;
 }
 
 .route-dtg {
