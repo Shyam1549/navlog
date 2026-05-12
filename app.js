@@ -21,7 +21,7 @@
   const ANNOUNCEMENT_SEEN_KEY = "navlog_announcement_seen_signature";
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
   const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
-  const ADDITIONAL_INFO_ROWS = 19;
+  const ADDITIONAL_INFO_DEFAULT_ROWS = 19;
   const ADDITIONAL_INFO_DEFAULT_COLS = 9;
 
   const app = document.getElementById("app");
@@ -211,9 +211,16 @@
     return `ann_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   }
 
-  function createEmptyAdditionalInfoTable(columnCount = ADDITIONAL_INFO_DEFAULT_COLS) {
+  function createEmptyAdditionalInfoTable(rowCount = ADDITIONAL_INFO_DEFAULT_ROWS, columnCount = ADDITIONAL_INFO_DEFAULT_COLS) {
+    const rows = Math.max(1, Number(rowCount) || ADDITIONAL_INFO_DEFAULT_ROWS);
     const cols = Math.max(1, Number(columnCount) || ADDITIONAL_INFO_DEFAULT_COLS);
-    return Array.from({ length: ADDITIONAL_INFO_ROWS }, () => Array.from({ length: cols }, () => ""));
+    return Array.from({ length: rows }, () => Array.from({ length: cols }, () => ""));
+  }
+
+  function getAdditionalInfoRowCount(value) {
+    const source = Array.isArray(value) ? value : [];
+    const detected = source.length;
+    return Math.max(1, detected || ADDITIONAL_INFO_DEFAULT_ROWS);
   }
 
   function getAdditionalInfoColumnCount(value) {
@@ -225,12 +232,15 @@
     return Math.max(1, detected || ADDITIONAL_INFO_DEFAULT_COLS);
   }
 
-  function normalizeAdditionalInfoTable(value, fallbackCols = 1) {
+  function normalizeAdditionalInfoTable(value, fallbackRows = 1, fallbackCols = 1) {
     const source = Array.isArray(value) ? value : [];
+    const detectedRows = getAdditionalInfoRowCount(source);
     const detectedCols = getAdditionalInfoColumnCount(source);
+    const fallbackRowCount = Math.max(1, Number(fallbackRows) || 1);
     const fallback = Math.max(1, Number(fallbackCols) || ADDITIONAL_INFO_DEFAULT_COLS);
+    const rowsCount = Math.max(detectedRows, fallbackRowCount);
     const cols = Math.max(detectedCols, fallback);
-    const rows = Array.from({ length: ADDITIONAL_INFO_ROWS }, (_, rowIndex) => {
+    const rows = Array.from({ length: rowsCount }, (_, rowIndex) => {
       const row = Array.isArray(source[rowIndex]) ? source[rowIndex] : [];
       return Array.from({ length: cols }, (_, colIndex) => String(row[colIndex] || ""));
     });
@@ -238,9 +248,20 @@
   }
 
   function resizeAdditionalInfoColumns(value, nextCols) {
+    const currentRows = getAdditionalInfoRowCount(value);
     const cols = Math.max(1, Number(nextCols) || 1);
-    const source = normalizeAdditionalInfoTable(value, cols);
-    return Array.from({ length: ADDITIONAL_INFO_ROWS }, (_, rowIndex) => {
+    const source = normalizeAdditionalInfoTable(value, currentRows, cols);
+    return Array.from({ length: currentRows }, (_, rowIndex) => {
+      const row = source[rowIndex] || [];
+      return Array.from({ length: cols }, (_, colIndex) => String(row[colIndex] || ""));
+    });
+  }
+
+  function resizeAdditionalInfoRows(value, nextRows) {
+    const rows = Math.max(1, Number(nextRows) || 1);
+    const cols = getAdditionalInfoColumnCount(value);
+    const source = normalizeAdditionalInfoTable(value, rows, cols);
+    return Array.from({ length: rows }, (_, rowIndex) => {
       const row = source[rowIndex] || [];
       return Array.from({ length: cols }, (_, colIndex) => String(row[colIndex] || ""));
     });
@@ -505,7 +526,9 @@
   }
 
   function renderAdditionalInfoScreen() {
-    const table = normalizeAdditionalInfoTable(state.catalog.content.additionalInfoTable);
+    const sourceRows = getAdditionalInfoRowCount(state.catalog.content.additionalInfoTable);
+    const sourceCols = getAdditionalInfoColumnCount(state.catalog.content.additionalInfoTable);
+    const table = normalizeAdditionalInfoTable(state.catalog.content.additionalInfoTable, sourceRows, sourceCols);
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -774,14 +797,18 @@
           <div class="manual-section${panel === "additional-info" ? "" : " hidden"}">
             <h3>Additional Information</h3><br>
             <div class="entry-actions additional-info-controls">
-              <button class="action" id="admin-additional-add-col" type="button">+ Column</button>
-              <button class="action" id="admin-additional-remove-col" type="button">- Column</button>
-              <span class="admin-subtle-status">Columns: ${getAdditionalInfoColumnCount(state.admin.additionalInfoDraft)}</span>
+              <button class="action" id="admin-additional-add-col" type="button">+ Vertical</button>
+              <button class="action" id="admin-additional-remove-col" type="button">- Vertical</button>
+              <span class="admin-subtle-status">Vertical: ${getAdditionalInfoRowCount(state.admin.additionalInfoDraft)}</span>
             </div>
             <div class="additional-info-wrap">
               <table class="additional-info-table editable">
                 <tbody>
-                  ${normalizeAdditionalInfoTable(state.admin.additionalInfoDraft).map((row, rowIndex) => `
+                  ${normalizeAdditionalInfoTable(
+                    state.admin.additionalInfoDraft,
+                    getAdditionalInfoRowCount(state.admin.additionalInfoDraft),
+                    getAdditionalInfoColumnCount(state.admin.additionalInfoDraft),
+                  ).map((row, rowIndex) => `
                     <tr>
                       ${row.map((cell, colIndex) => `<td><input data-admin-additional="${rowIndex}:${colIndex}" value="${escapeAttr(cell)}" /></td>`).join("")}
                     </tr>
@@ -2275,16 +2302,16 @@
     const additionalAddColButton = document.getElementById("admin-additional-add-col");
     if (additionalAddColButton) {
       additionalAddColButton.addEventListener("click", () => {
-        const currentCols = getAdditionalInfoColumnCount(state.admin.additionalInfoDraft);
-        state.admin.additionalInfoDraft = resizeAdditionalInfoColumns(state.admin.additionalInfoDraft, currentCols + 1);
+        const currentRows = getAdditionalInfoRowCount(state.admin.additionalInfoDraft);
+        state.admin.additionalInfoDraft = resizeAdditionalInfoRows(state.admin.additionalInfoDraft, currentRows + 1);
         render();
       });
     }
     const additionalRemoveColButton = document.getElementById("admin-additional-remove-col");
     if (additionalRemoveColButton) {
       additionalRemoveColButton.addEventListener("click", () => {
-        const currentCols = getAdditionalInfoColumnCount(state.admin.additionalInfoDraft);
-        state.admin.additionalInfoDraft = resizeAdditionalInfoColumns(state.admin.additionalInfoDraft, currentCols - 1);
+        const currentRows = getAdditionalInfoRowCount(state.admin.additionalInfoDraft);
+        state.admin.additionalInfoDraft = resizeAdditionalInfoRows(state.admin.additionalInfoDraft, currentRows - 1);
         render();
       });
     }
@@ -2613,22 +2640,30 @@
 
   function readAdditionalInfoFromInputs() {
     const inputs = Array.from(document.querySelectorAll("[data-admin-additional]"));
+    const maxRowFromInputs = inputs.reduce((max, input) => {
+      const key = String(input.getAttribute("data-admin-additional") || "");
+      const parts = key.split(":");
+      const row = Number(parts[0]);
+      return Number.isFinite(row) ? Math.max(max, row) : max;
+    }, -1);
     const maxColFromInputs = inputs.reduce((max, input) => {
       const key = String(input.getAttribute("data-admin-additional") || "");
       const parts = key.split(":");
       const col = Number(parts[1]);
       return Number.isFinite(col) ? Math.max(max, col) : max;
     }, -1);
+    const fallbackRows = getAdditionalInfoRowCount(state.admin.additionalInfoDraft);
     const fallbackCols = getAdditionalInfoColumnCount(state.admin.additionalInfoDraft);
+    const rowCount = Math.max(1, maxRowFromInputs + 1, fallbackRows);
     const colCount = Math.max(1, maxColFromInputs + 1, fallbackCols);
-    const rows = createEmptyAdditionalInfoTable(colCount);
+    const rows = createEmptyAdditionalInfoTable(rowCount, colCount);
     inputs.forEach((input) => {
       const key = String(input.getAttribute("data-admin-additional") || "");
       const [rowText, colText] = key.split(":");
       const row = Number(rowText);
       const col = Number(colText);
       if (!Number.isFinite(row) || !Number.isFinite(col)) return;
-      if (row < 0 || row >= ADDITIONAL_INFO_ROWS || col < 0 || col >= colCount) return;
+      if (row < 0 || row >= rowCount || col < 0 || col >= colCount) return;
       rows[row][col] = String(input.value || "");
     });
     state.admin.additionalInfoDraft = rows;

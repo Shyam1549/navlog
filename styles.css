@@ -1480,15 +1480,15 @@ select { font: inherit; }
 
 .additional-info-table.editable td {
   padding: 0;
-  height: var(--additional-info-cell-height);
+  height: calc(var(--additional-info-cell-height) - 2px);
 }
 
 .additional-info-table.editable td input {
   width: 100%;
   border: 0;
   background: transparent;
-  min-height: var(--additional-info-cell-height);
-  height: var(--additional-info-cell-height);
+  min-height: calc(var(--additional-info-cell-height) - 2px);
+  height: calc(var(--additional-info-cell-height) - 2px);
   padding: 0 6px;
   line-height: 1.15;
   font-size: 0.84rem;
