@@ -1381,6 +1381,8 @@ select { font: inherit; }
   max-height: 900px;
   opacity: 1;
   transition: max-height 0.24s ease, opacity 0.2s ease;
+  display: grid;
+  gap: 8px;
 }
 
 .admin-announcement-item.collapsed .admin-announcement-body-wrap {
@@ -1393,6 +1395,14 @@ select { font: inherit; }
   display: grid;
   grid-template-columns: minmax(0, 1fr) 112px;
   gap: 8px;
+}
+
+.admin-announcement-datetime {
+  gap: 4px;
+}
+
+.admin-announcement-datetime > span {
+  margin: 2px 0 0;
 }
 
 .admin-announcement-item input:disabled {
@@ -1419,6 +1429,14 @@ select { font: inherit; }
 
 .admin-link-btn {
   text-decoration: none;
+}
+
+.admin-analytics-frame {
+  width: 100%;
+  min-height: 520px;
+  border: 1px solid rgba(46, 41, 35, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .route-dtg {

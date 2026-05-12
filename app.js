@@ -626,14 +626,14 @@
               <button class="action" id="admin-announcement-add">Add</button>
             </div>
             <section class="admin-announcement-list">
-              ${state.admin.announcementDrafts.map((draft, index) => `
+              ${state.admin.announcementDrafts.length ? state.admin.announcementDrafts.map((draft, index) => `
                 <article class="admin-announcement-item${draft.collapsed ? " collapsed" : ""}">
                   <div class="admin-announcement-item-head">
                     <button class="admin-announcement-toggle" data-admin-announcement-toggle="${index}" type="button" aria-label="Expand or collapse announcement">
                       <span class="admin-announcement-arrow">▾</span>
-                      <span class="admin-announcement-preview">${escapeHtml(String(draft.heading || "").trim() || `Announcement ${index + 1}`)}</span>
+                      <span class="admin-announcement-preview">${escapeHtml(String(draft.heading || "").trim())}</span>
                     </button>
-                    <button class="action admin-mini-btn${state.admin.announcementDrafts.length > 1 ? " active" : ""}" data-admin-announcement-remove="${index}" type="button" ${state.admin.announcementDrafts.length > 1 ? "" : "disabled"}>-</button>
+                    <button class="action admin-mini-btn active" data-admin-announcement-remove="${index}" type="button">-</button>
                   </div>
                   <div class="admin-announcement-body-wrap">
                   <div class="admin-grid one-col">
@@ -647,14 +647,14 @@
                     <textarea data-admin-announcement-field="${index}:body" class="admin-textarea">${escapeHtml(draft.body)}</textarea>
                   </label>
                   <div class="admin-grid two-col">
-                    <label class="setup-field">
+                    <label class="setup-field admin-announcement-datetime">
                       <span>Start (Y/M/D) / UTC</span>
                       <div class="admin-inline-inputs">
                         <input data-admin-announcement-field="${index}:startDate" value="${escapeAttr(formatAnnouncementDateInput(draft.startDate))}" placeholder="yyyy/mm/dd" ${draft.permanent ? "disabled" : ""} />
                         <input data-admin-announcement-field="${index}:startTimeUtc" value="${escapeAttr(formatAnnouncementTimeInput(draft.startTimeUtc))}" placeholder="hh:mm" ${draft.permanent ? "disabled" : ""} />
                       </div>
                     </label>
-                    <label class="setup-field">
+                    <label class="setup-field admin-announcement-datetime">
                       <span>End (Y/M/D) / UTC</span>
                       <div class="admin-inline-inputs">
                         <input data-admin-announcement-field="${index}:endDate" value="${escapeAttr(formatAnnouncementDateInput(draft.endDate))}" placeholder="yyyy/mm/dd" ${draft.permanent ? "disabled" : ""} />
@@ -671,7 +671,7 @@
                   </div>
                   </div>
                 </article>
-              `).join("")}
+              `).join("") : '<p class="setup-caption">No announcements yet. Click Add to create one.</p>'}
             </section>
             <span class="admin-subtle-status">${escapeHtml(state.admin.announcementSaveStatus)}</span>
           </div>
@@ -700,8 +700,14 @@
             <p class="setup-caption">Select a section from the left menu to manage content.</p>
             <div class="admin-analytics-card">
               <h4>Vercel Analytics</h4>
-              <p>Open your analytics dashboard to view traffic, performance, and trends.</p>
-              <a class="action primary admin-link-btn" href="${escapeAttr(vercelAnalyticsUrl)}" target="_blank" rel="noreferrer">Open Analytics</a>
+              <p>Embedded analytics view.</p>
+              <iframe
+                class="admin-analytics-frame"
+                src="${escapeAttr(vercelAnalyticsUrl)}"
+                title="Vercel Analytics"
+                loading="lazy"
+                referrerpolicy="no-referrer"
+              ></iframe>
             </div>
           </div>
           </div>
@@ -2093,11 +2099,7 @@
         const index = Number(rawIndex);
         if (!Number.isFinite(index) || index < 0 || index >= state.admin.announcementDrafts.length) return;
         if (!window.confirm("Are you sure you want to delete this announcement?")) return;
-        if (state.admin.announcementDrafts.length === 1) {
-          state.admin.announcementDrafts = [createEmptyAnnouncementDraft()];
-        } else {
-          state.admin.announcementDrafts.splice(index, 1);
-        }
+        state.admin.announcementDrafts.splice(index, 1);
         state.admin.announcementSaveStatus = "";
         await persistAnnouncementsToDatabase(normalizeAnnouncementDrafts(state.admin.announcementDrafts, false), "Saved");
       });
@@ -2289,7 +2291,7 @@
       state.admin.privacyDraftBaselineHtml = state.catalog.content.privacyHtml;
       state.admin.manualDraftBaselineText = state.admin.manualHtmlDraft;
       state.admin.privacyDraftBaselineText = state.admin.privacyHtmlDraft;
-      state.admin.announcementDrafts = normalizeAnnouncementDrafts(state.catalog.content.announcements);
+      state.admin.announcementDrafts = normalizeAnnouncementDrafts(state.catalog.content.announcements, false);
       evaluateAnnouncementsPrompt();
 
       if (state.admin.selectedPresetId) selectPresetForEditing(state.admin.selectedPresetId);
@@ -2324,7 +2326,7 @@
         byIndex[index][prop] = String(field.value || "");
       }
     });
-    state.admin.announcementDrafts = normalizeAnnouncementDrafts(byIndex);
+    state.admin.announcementDrafts = normalizeAnnouncementDrafts(byIndex, false);
   }
 
   function readPresetFormFromInputs() {
