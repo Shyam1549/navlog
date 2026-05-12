@@ -58,6 +58,10 @@
       airportForm: createEmptyAirportForm(),
       manualHtmlDraft: "",
       privacyHtmlDraft: "",
+      manualDraftBaselineText: "",
+      privacyDraftBaselineText: "",
+      manualDraftBaselineHtml: "",
+      privacyDraftBaselineHtml: "",
       loginEmail: readStoredValue(ADMIN_EMAIL_KEY),
       loginPassword: readStoredValue(ADMIN_PASSWORD_KEY),
       rememberLogin: readStoredValue(ADMIN_REMEMBER_KEY) === "1",
@@ -541,7 +545,7 @@
           <div class="manual-section">
             <h3>User Manual Content</h3>
             <label class="setup-field">
-              <span>Manual HTML</span>
+              <span>Manual Text</span>
               <textarea id="admin-manual-html" class="admin-textarea admin-textarea-large">${escapeHtml(state.admin.manualHtmlDraft)}</textarea>
             </label>
             <div class="entry-actions">
@@ -552,7 +556,7 @@
           <div class="manual-section">
             <h3>Privacy Policy Content</h3>
             <label class="setup-field">
-              <span>Privacy HTML</span>
+              <span>Privacy Text</span>
               <textarea id="admin-privacy-html" class="admin-textarea admin-textarea-large">${escapeHtml(state.admin.privacyHtmlDraft)}</textarea>
             </label>
             <div class="entry-actions">
@@ -1859,7 +1863,7 @@
       manualSaveButton.addEventListener("click", async () => {
         const manualInput = document.getElementById("admin-manual-html");
         state.admin.manualHtmlDraft = String(manualInput ? manualInput.value : "");
-        await saveContentPage("manual", state.admin.manualHtmlDraft);
+        await saveContentPage("manual", resolveAdminContentHtmlForSave("manual", state.admin.manualHtmlDraft));
       });
     }
     const privacySaveButton = document.getElementById("admin-privacy-save");
@@ -1867,7 +1871,7 @@
       privacySaveButton.addEventListener("click", async () => {
         const privacyInput = document.getElementById("admin-privacy-html");
         state.admin.privacyHtmlDraft = String(privacyInput ? privacyInput.value : "");
-        await saveContentPage("privacy", state.admin.privacyHtmlDraft);
+        await saveContentPage("privacy", resolveAdminContentHtmlForSave("privacy", state.admin.privacyHtmlDraft));
       });
     }
 
@@ -2027,8 +2031,12 @@
       state.catalog.airports = state.admin.airports.map((airport) => ({ ...airport }));
       state.catalog.content.manualHtml = contentMap.manual || "";
       state.catalog.content.privacyHtml = contentMap.privacy || "";
-      state.admin.manualHtmlDraft = state.catalog.content.manualHtml;
-      state.admin.privacyHtmlDraft = state.catalog.content.privacyHtml;
+      state.admin.manualHtmlDraft = contentHtmlToEditorText("manual", state.catalog.content.manualHtml);
+      state.admin.privacyHtmlDraft = contentHtmlToEditorText("privacy", state.catalog.content.privacyHtml);
+      state.admin.manualDraftBaselineHtml = state.catalog.content.manualHtml;
+      state.admin.privacyDraftBaselineHtml = state.catalog.content.privacyHtml;
+      state.admin.manualDraftBaselineText = state.admin.manualHtmlDraft;
+      state.admin.privacyDraftBaselineText = state.admin.privacyHtmlDraft;
 
       if (state.admin.selectedPresetId) selectPresetForEditing(state.admin.selectedPresetId);
       else loadPresetByPair();
@@ -2361,6 +2369,301 @@
       state.admin.error = error && error.message ? error.message : "Could not delete airport.";
       render();
     }
+  }
+
+  function normalizeEditorText(value) {
+    return String(value || "").replace(/\r\n?/g, "\n");
+  }
+
+  function normalizeEditorComparison(value) {
+    return normalizeEditorText(value).trim();
+  }
+
+  function createHtmlContainer(html) {
+    const container = document.createElement("div");
+    container.innerHTML = String(html || "");
+    return container;
+  }
+
+  function plainNodeText(node) {
+    if (!node) return "";
+    return String(node.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function trimEmptyBoundaryLines(lines) {
+    const next = Array.isArray(lines) ? lines.slice() : [];
+    while (next.length && !String(next[0] || "").trim()) next.shift();
+    while (next.length && !String(next[next.length - 1] || "").trim()) next.pop();
+    return next;
+  }
+
+  function splitLinesIntoParagraphs(lines) {
+    const groups = [];
+    let current = [];
+    (Array.isArray(lines) ? lines : []).forEach((line) => {
+      const text = String(line || "");
+      if (!text.trim()) {
+        if (current.length) {
+          groups.push(current);
+          current = [];
+        }
+        return;
+      }
+      current.push(text.trim());
+    });
+    if (current.length) groups.push(current);
+    return groups;
+  }
+
+  function parseEditorSections(text) {
+    const sections = [];
+    const lines = normalizeEditorText(text).split("\n");
+    let current = { title: "", lines: [] };
+    const flush = () => {
+      const trimmedLines = trimEmptyBoundaryLines(current.lines);
+      if (current.title || trimmedLines.length) {
+        sections.push({
+          title: String(current.title || "").trim(),
+          lines: trimmedLines,
+        });
+      }
+    };
+    lines.forEach((rawLine) => {
+      const line = String(rawLine || "");
+      const headingMatch = line.match(/^\s*##+\s*(.+?)\s*$/);
+      if (headingMatch) {
+        flush();
+        current = { title: headingMatch[1], lines: [] };
+      } else {
+        current.lines.push(line);
+      }
+    });
+    flush();
+    return sections;
+  }
+
+  function looksLikeHtml(text) {
+    return /<\s*\/?\s*[a-z!][^>]*>/i.test(String(text || ""));
+  }
+
+  function genericHtmlToEditorText(html) {
+    const root = createHtmlContainer(html);
+    const blocks = [];
+    Array.from(root.querySelectorAll("h1, h2, h3, h4, h5, h6, p, li")).forEach((node) => {
+      const line = plainNodeText(node);
+      if (line) blocks.push(line);
+    });
+    if (blocks.length) return blocks.join("\n\n").trim();
+    return plainNodeText(root);
+  }
+
+  function manualHtmlToEditorText(html) {
+    const source = String(html || "");
+    if (!source.trim()) return "";
+    const root = createHtmlContainer(source);
+    const sectionNodes = Array.from(root.querySelectorAll(".manual-section"));
+    if (!sectionNodes.length) return genericHtmlToEditorText(source);
+
+    const sectionTexts = sectionNodes.map((sectionNode) => {
+      const lines = [];
+      const title = plainNodeText(sectionNode.querySelector("h3"));
+      if (title) lines.push(`## ${title}`);
+
+      const variableRows = Array.from(sectionNode.querySelectorAll(".manual-vars p"));
+      if (variableRows.length) {
+        variableRows.forEach((row) => {
+          const symbol = plainNodeText(row.querySelector("strong"));
+          const description = plainNodeText(row.querySelector("span"));
+          if (!symbol && !description) return;
+          if (symbol && description) lines.push(`${symbol}: ${description}`);
+          else lines.push(symbol || description);
+        });
+      } else {
+        const manualRows = Array.from(sectionNode.querySelectorAll(".manual-row"));
+        if (manualRows.length) {
+          manualRows.forEach((row) => {
+            const formula = plainNodeText(row.querySelector(".manual-formula"));
+            const note = plainNodeText(row.querySelector(".manual-note"));
+            if (!formula && !note) return;
+            if (formula && note) lines.push(`${formula} :: ${note}`);
+            else if (formula) lines.push(formula);
+            else lines.push(`:: ${note}`);
+          });
+        } else {
+          Array.from(sectionNode.querySelectorAll("p, li")).forEach((row) => {
+            const text = plainNodeText(row);
+            if (text) lines.push(text);
+          });
+        }
+      }
+      return lines.join("\n").trim();
+    }).filter(Boolean);
+
+    return sectionTexts.join("\n\n").trim();
+  }
+
+  function privacyHtmlToEditorText(html) {
+    const source = String(html || "");
+    if (!source.trim()) return "";
+    const root = createHtmlContainer(source);
+    const children = Array.from(root.children);
+    if (!children.length) return genericHtmlToEditorText(source);
+
+    const sectionTexts = [];
+    let activeTitle = "";
+    let activeParagraphs = [];
+
+    const flush = () => {
+      if (!activeTitle && !activeParagraphs.length) return;
+      const lines = [];
+      if (activeTitle) lines.push(`## ${activeTitle}`);
+      activeParagraphs.forEach((paragraph, index) => {
+        if (index > 0) lines.push("");
+        lines.push(paragraph);
+      });
+      sectionTexts.push(lines.join("\n").trim());
+      activeTitle = "";
+      activeParagraphs = [];
+    };
+
+    children.forEach((child) => {
+      const tag = String(child.tagName || "").toUpperCase();
+      if (/^H[1-6]$/.test(tag)) {
+        flush();
+        activeTitle = plainNodeText(child);
+        return;
+      }
+      if (tag === "UL" || tag === "OL") {
+        const listLines = Array.from(child.querySelectorAll("li"))
+          .map((li) => plainNodeText(li))
+          .filter(Boolean)
+          .map((line) => `- ${line}`);
+        if (listLines.length) activeParagraphs.push(listLines.join("\n"));
+        return;
+      }
+      const text = plainNodeText(child);
+      if (text) activeParagraphs.push(text);
+    });
+    flush();
+
+    if (sectionTexts.length) return sectionTexts.join("\n\n").trim();
+    return genericHtmlToEditorText(source);
+  }
+
+  function manualTextToHtml(text) {
+    const source = normalizeEditorText(text);
+    if (!source.trim()) return "";
+    const sections = parseEditorSections(source);
+    if (!sections.length) return "";
+
+    const htmlSections = sections.map((section) => {
+      const title = escapeHtml(section.title || "Section");
+      const lines = section.lines.map((line) => String(line || "").trim()).filter(Boolean);
+      if (/^variables$/i.test(section.title || "")) {
+        const variableRows = lines.map((line) => {
+          const rowText = line.replace(/^[-*]\s*/, "");
+          const separatorMatch = rowText.match(/^([^:=]+?)\s*[:=]\s*(.+)$/);
+          const symbol = escapeHtml((separatorMatch ? separatorMatch[1] : rowText).trim());
+          const description = escapeHtml((separatorMatch ? separatorMatch[2] : "").trim());
+          return `      <p><strong>${symbol}</strong><span>${description}</span></p>`;
+        }).join("\n");
+        return [
+          '  <div class="manual-section">',
+          `    <h3>${title}</h3>`,
+          '    <div class="manual-vars">',
+          variableRows,
+          "    </div>",
+          "  </div>",
+        ].join("\n");
+      }
+
+      const rowMarkup = lines.map((line) => {
+        const rowText = line.replace(/^[-*]\s*/, "");
+        const separatorIndex = rowText.indexOf("::");
+        const formula = separatorIndex >= 0 ? rowText.slice(0, separatorIndex).trim() : rowText.trim();
+        const note = separatorIndex >= 0 ? rowText.slice(separatorIndex + 2).trim() : "";
+        if (!formula && !note) return "";
+        return [
+          '      <div class="manual-row">',
+          `        <p class="manual-formula">${escapeHtml(formula)}</p>`,
+          `        <p class="manual-note">${escapeHtml(note)}</p>`,
+          "      </div>",
+        ].join("\n");
+      }).filter(Boolean).join("\n");
+
+      return [
+        '  <div class="manual-section">',
+        `    <h3>${title}</h3>`,
+        rowMarkup || '    <div class="manual-row"><p class="manual-formula"></p><p class="manual-note"></p></div>',
+        "  </div>",
+      ].join("\n");
+    });
+
+    return htmlSections.join("\n\n");
+  }
+
+  function privacyTextToHtml(text) {
+    const source = normalizeEditorText(text);
+    if (!source.trim()) return "";
+    const sections = parseEditorSections(source);
+    if (!sections.length) return "";
+
+    const blocks = [];
+    sections.forEach((section) => {
+      const title = escapeHtml(section.title || "Section");
+      blocks.push(`<h3>${title}</h3>`);
+      const paragraphs = splitLinesIntoParagraphs(section.lines);
+      paragraphs.forEach((paragraphLines) => {
+        if (paragraphLines.every((line) => /^[-*]\s+/.test(line))) {
+          const items = paragraphLines
+            .map((line) => line.replace(/^[-*]\s+/, "").trim())
+            .filter(Boolean)
+            .map((item) => `<li>${escapeHtml(item)}</li>`)
+            .join("");
+          if (items) blocks.push(`<ul>${items}</ul>`);
+          return;
+        }
+        const paragraphText = paragraphLines.join(" ").trim();
+        if (paragraphText) blocks.push(`<p>${escapeHtml(paragraphText)}</p>`);
+      });
+    });
+
+    return blocks.join("\n\n");
+  }
+
+  function contentHtmlToEditorText(key, html) {
+    const pageKey = String(key || "").trim().toLowerCase();
+    if (pageKey === "manual") return manualHtmlToEditorText(html);
+    if (pageKey === "privacy") return privacyHtmlToEditorText(html);
+    return genericHtmlToEditorText(html);
+  }
+
+  function editorTextToContentHtml(key, text) {
+    const pageKey = String(key || "").trim().toLowerCase();
+    const source = String(text || "");
+    if (!source.trim()) return "";
+    if (looksLikeHtml(source)) return source;
+    if (pageKey === "manual") return manualTextToHtml(source);
+    if (pageKey === "privacy") return privacyTextToHtml(source);
+    return `<p>${escapeHtml(source)}</p>`;
+  }
+
+  function resolveAdminContentHtmlForSave(key, draftText) {
+    const pageKey = String(key || "").trim().toLowerCase();
+    const draft = String(draftText || "");
+    if (pageKey === "manual") {
+      const unchanged = normalizeEditorComparison(draft) === normalizeEditorComparison(state.admin.manualDraftBaselineText);
+      if (unchanged) return String(state.admin.manualDraftBaselineHtml || "");
+      return editorTextToContentHtml("manual", draft);
+    }
+    if (pageKey === "privacy") {
+      const unchanged = normalizeEditorComparison(draft) === normalizeEditorComparison(state.admin.privacyDraftBaselineText);
+      if (unchanged) return String(state.admin.privacyDraftBaselineHtml || "");
+      return editorTextToContentHtml("privacy", draft);
+    }
+    return editorTextToContentHtml(pageKey, draft);
   }
 
   async function saveContentPage(key, bodyHtml) {
