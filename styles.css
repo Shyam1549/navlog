@@ -1410,84 +1410,34 @@ select { font: inherit; }
   color: rgba(46, 41, 35, 0.56);
 }
 
-.admin-analytics-card {
+.admin-game-card {
   border: 1px solid rgba(46, 41, 35, 0.18);
   border-radius: 12px;
   padding: 12px;
   background: rgba(255, 255, 255, 0.48);
 }
 
-.admin-analytics-card h4 {
+.admin-game-card h4 {
   margin: 0 0 6px;
   font-size: 0.98rem;
 }
 
-.admin-analytics-card p {
+.admin-game-card p {
   margin: 0 0 10px;
   color: var(--muted);
 }
 
-.admin-link-btn {
-  text-decoration: none;
-}
-
-.admin-analytics-frame {
+.admin-game-card canvas {
   width: 100%;
-  min-height: 520px;
+  max-width: 560px;
   border: 1px solid rgba(46, 41, 35, 0.16);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
+  background: #f4ecdd;
+  display: block;
 }
 
 .admin-title-gap > span {
   margin-bottom: 4px;
-}
-
-.admin-analytics-grid {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.admin-analytics-kpi {
-  border: 1px solid rgba(46, 41, 35, 0.14);
-  border-radius: 8px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.62);
-  display: grid;
-  gap: 4px;
-}
-
-.admin-analytics-kpi strong {
-  font-size: 1.15rem;
-}
-
-.admin-analytics-kpi span {
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.admin-analytics-pages {
-  margin-top: 10px;
-}
-
-.admin-analytics-pages h5 {
-  margin: 0 0 6px;
-}
-
-.admin-analytics-pages ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: grid;
-  gap: 4px;
-}
-
-.admin-analytics-pages li {
-  display: flex;
-  justify-content: space-between;
-  border-bottom: 1px dashed rgba(46, 41, 35, 0.16);
-  padding-bottom: 3px;
 }
 
 .route-dtg {
@@ -1729,9 +1679,6 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
-  .admin-analytics-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 720px) {
@@ -1789,10 +1736,6 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
   .admin-announcement-preview {
     max-width: 180px;
-  }
-
-  .admin-analytics-grid {
-    grid-template-columns: 1fr;
   }
 
   .entry-page,

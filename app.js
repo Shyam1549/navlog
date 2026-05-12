@@ -78,11 +78,6 @@
       announcementDrafts: [createEmptyAnnouncementDraft()],
       announcementSaveStatus: "",
       panel: "dashboard",
-      analytics: {
-        loading: false,
-        error: "",
-        summary: null,
-      },
     },
     meta: {
       hasOpenedSheet: false,
@@ -100,6 +95,8 @@
   let loadingPublicCatalog = false;
   let utcTimer = null;
   let manualMathRetryCount = 0;
+  let adminGameState = null;
+  let adminGameAnimation = null;
 
   function createBlankLeg(route) {
     return {
@@ -404,31 +401,6 @@
     `;
   }
 
-  function renderAdminAnalyticsSummary(summary) {
-    if (!summary) return "<p>No analytics data yet.</p>";
-    const pageviews24h = Number(summary.pageviews24h || 0);
-    const pageviews7d = Number(summary.pageviews7d || 0);
-    const uniqueVisitors24h = Number(summary.uniqueVisitors24h || 0);
-    const uniqueVisitors7d = Number(summary.uniqueVisitors7d || 0);
-    const topPages = Array.isArray(summary.topPages) ? summary.topPages : [];
-    return `
-      <div class="admin-analytics-grid">
-        <div class="admin-analytics-kpi"><strong>${pageviews24h}</strong><span>Pageviews (24h)</span></div>
-        <div class="admin-analytics-kpi"><strong>${uniqueVisitors24h}</strong><span>Visitors (24h)</span></div>
-        <div class="admin-analytics-kpi"><strong>${pageviews7d}</strong><span>Pageviews (7d)</span></div>
-        <div class="admin-analytics-kpi"><strong>${uniqueVisitors7d}</strong><span>Visitors (7d)</span></div>
-      </div>
-      <div class="admin-analytics-pages">
-        <h5>Top Pages (7d)</h5>
-        ${
-          topPages.length
-            ? `<ul>${topPages.map((item) => `<li><span>${escapeHtml(String(item.path || "/"))}</span><strong>${Number(item.views || 0)}</strong></li>`).join("")}</ul>`
-            : "<p>No page data.</p>"
-        }
-      </div>
-    `;
-  }
-
   function renderManualScreen() {
     const customManual = String(state.catalog.content.manualHtml || "").trim();
     return `
@@ -727,16 +699,15 @@
           </div>
           <div class="manual-section${panel === "dashboard" ? "" : " hidden"}">
             <h3>Overview</h3><br>
-            <p class="setup-caption">Select a section from the left menu to manage content.</p>
-            <div class="admin-analytics-card">
-              <h4>Vercel Analytics (Native)</h4>
-              ${
-                state.admin.analytics.loading
-                  ? '<p>Loading analytics...</p>'
-                  : state.admin.analytics.error
-                    ? `<p class="admin-status error">${escapeHtml(state.admin.analytics.error)}</p>`
-                    : renderAdminAnalyticsSummary(state.admin.analytics.summary)
-              }
+            <p class="setup-caption">Select a section from the left menu to manage content. Or play a quick game.</p>
+            <div class="admin-game-card">
+              <h4>Mini Runner</h4>
+              <p>Press Space to jump over blocks.</p>
+              <canvas id="admin-mini-game" width="560" height="180" aria-label="Mini runner game"></canvas>
+              <div class="entry-actions">
+                <button class="action primary" id="admin-game-start" type="button">Start</button>
+                <span class="admin-subtle-status" id="admin-game-status"></span>
+              </div>
             </div>
           </div>
           </div>
@@ -1981,17 +1952,15 @@
     }
     const adminPanelButtons = Array.from(document.querySelectorAll("[data-admin-panel]"));
     adminPanelButtons.forEach((button) => {
-      button.addEventListener("click", async () => {
+      button.addEventListener("click", () => {
         const nextPanel = String(button.getAttribute("data-admin-panel") || "");
         if (!nextPanel || nextPanel === state.admin.panel) return;
         state.admin.panel = nextPanel;
-        if (nextPanel === "dashboard") await loadAdminAnalyticsSummary();
         render();
       });
     });
-    if (state.admin.panel === "dashboard" && !state.admin.analytics.loading && !state.admin.analytics.summary && !state.admin.analytics.error) {
-      loadAdminAnalyticsSummary();
-    }
+    if (state.admin.panel === "dashboard") initAdminMiniGame();
+    else stopAdminMiniGame();
 
     ["admin-preset-departure", "admin-preset-destination"].forEach((id) => {
       const field = document.getElementById(id);
@@ -2176,23 +2145,141 @@
     });
   }
 
-  async function loadAdminAnalyticsSummary() {
-    state.admin.analytics.loading = true;
-    state.admin.analytics.error = "";
-    render();
-    try {
-      const response = await fetch("/api/admin-analytics-summary");
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || "Could not load analytics summary.");
-      state.admin.analytics.summary = payload.summary || null;
-      state.admin.analytics.error = payload.notice ? String(payload.notice) : "";
-    } catch (error) {
-      state.admin.analytics.summary = null;
-      state.admin.analytics.error = error && error.message ? error.message : "Could not load analytics summary.";
-    } finally {
-      state.admin.analytics.loading = false;
-      render();
+  function initAdminMiniGame() {
+    const canvas = document.getElementById("admin-mini-game");
+    const startButton = document.getElementById("admin-game-start");
+    const status = document.getElementById("admin-game-status");
+    if (!canvas || !startButton || !status) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    if (!adminGameState || adminGameState.canvas !== canvas) {
+      adminGameState = {
+        canvas,
+        ctx,
+        running: false,
+        score: 0,
+        speed: 3.2,
+        gravity: 0.42,
+        jump: -8.8,
+        player: { x: 56, y: 126, w: 16, h: 20, vy: 0, onGround: true },
+        obstacles: [],
+        spawnTick: 0,
+      };
     }
+
+    const draw = () => {
+      const game = adminGameState;
+      if (!game || game.canvas !== canvas) return;
+      const { ctx: drawCtx } = game;
+      drawCtx.clearRect(0, 0, canvas.width, canvas.height);
+      drawCtx.fillStyle = "#f4ecdd";
+      drawCtx.fillRect(0, 0, canvas.width, canvas.height);
+      drawCtx.strokeStyle = "rgba(46, 41, 35, 0.24)";
+      drawCtx.beginPath();
+      drawCtx.moveTo(0, 146);
+      drawCtx.lineTo(canvas.width, 146);
+      drawCtx.stroke();
+
+      drawCtx.fillStyle = "#214c5a";
+      drawCtx.fillRect(game.player.x, game.player.y, game.player.w, game.player.h);
+
+      drawCtx.fillStyle = "#8e2e23";
+      game.obstacles.forEach((o) => drawCtx.fillRect(o.x, o.y, o.w, o.h));
+
+      drawCtx.fillStyle = "#181612";
+      drawCtx.font = "12px Trebuchet MS";
+      drawCtx.fillText(`Score: ${Math.floor(game.score)}`, 10, 16);
+    };
+
+    const step = () => {
+      const game = adminGameState;
+      if (!game || !game.running || game.canvas !== canvas) return;
+      game.score += 0.14;
+      game.speed = Math.min(7, 3.2 + game.score / 90);
+
+      game.player.vy += game.gravity;
+      game.player.y += game.player.vy;
+      if (game.player.y >= 126) {
+        game.player.y = 126;
+        game.player.vy = 0;
+        game.player.onGround = true;
+      } else game.player.onGround = false;
+
+      game.spawnTick -= 1;
+      if (game.spawnTick <= 0) {
+        const height = Math.random() > 0.62 ? 26 : 18;
+        game.obstacles.push({ x: canvas.width + 4, y: 146 - height, w: 12, h: height });
+        game.spawnTick = 65 + Math.floor(Math.random() * 45);
+      }
+
+      game.obstacles.forEach((o) => { o.x -= game.speed; });
+      game.obstacles = game.obstacles.filter((o) => o.x + o.w > -8);
+
+      const hit = game.obstacles.some((o) => (
+        game.player.x < o.x + o.w
+        && game.player.x + game.player.w > o.x
+        && game.player.y < o.y + o.h
+        && game.player.y + game.player.h > o.y
+      ));
+      if (hit) {
+        game.running = false;
+        status.textContent = `Game over. Score ${Math.floor(game.score)}.`;
+        draw();
+        return;
+      }
+      draw();
+      adminGameAnimation = requestAnimationFrame(step);
+    };
+
+    const jump = () => {
+      const game = adminGameState;
+      if (!game) return;
+      if (!game.running) return;
+      if (!game.player.onGround) return;
+      game.player.vy = game.jump;
+      game.player.onGround = false;
+    };
+
+    if (!canvas.dataset.bound) {
+      const onKey = (event) => {
+        if (event.code !== "Space") return;
+        if (state.view !== "admin" || state.admin.panel !== "dashboard") return;
+        event.preventDefault();
+        jump();
+      };
+      document.addEventListener("keydown", onKey);
+      canvas.dataset.bound = "1";
+      canvas.dataset.keyHandler = "1";
+    }
+
+    startButton.onclick = () => {
+      const game = adminGameState;
+      if (!game) return;
+      game.score = 0;
+      game.speed = 3.2;
+      game.player.y = 126;
+      game.player.vy = 0;
+      game.player.onGround = true;
+      game.obstacles = [];
+      game.spawnTick = 20;
+      game.running = true;
+      status.textContent = "Running...";
+      if (adminGameAnimation) cancelAnimationFrame(adminGameAnimation);
+      draw();
+      adminGameAnimation = requestAnimationFrame(step);
+    };
+
+    draw();
+    if (!status.textContent) status.textContent = "Press Start";
+  }
+
+  function stopAdminMiniGame() {
+    if (adminGameAnimation) {
+      cancelAnimationFrame(adminGameAnimation);
+      adminGameAnimation = null;
+    }
+    if (adminGameState) adminGameState.running = false;
   }
 
   async function connectSupabaseClient(forceRecreate) {
