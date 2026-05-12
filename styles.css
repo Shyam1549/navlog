@@ -1023,6 +1023,35 @@ select { font: inherit; }
   color: var(--ink);
 }
 
+.settings-coming-soon-wrap {
+  position: relative;
+}
+
+.settings-coming-soon-wrap::after {
+  content: attr(data-coming);
+  position: absolute;
+  left: 30px;
+  top: calc(100% + 6px);
+  border: 1px solid rgba(46, 41, 35, 0.22);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.95);
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.2;
+  padding: 6px 8px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-3px);
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 7;
+}
+
+.settings-coming-soon-wrap:hover::after {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .settings-actions {
   margin-top: 10px;
   display: flex;
@@ -1156,19 +1185,24 @@ select { font: inherit; }
 .route-inline-hint {
   display: none;
   position: absolute;
-  left: 10px;
-  top: 8px;
-  right: 36px;
+  left: 0;
+  top: 0;
+  right: 30px;
+  bottom: 0;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   color: rgba(110, 100, 88, 0.92);
-  font-size: 0.72rem;
-  line-height: 1.05;
+  font-size: 0.94rem;
+  line-height: 1.1;
   text-transform: lowercase;
   pointer-events: none;
   white-space: normal;
+  padding: 0 4px;
 }
 
 .route-cell.show-route-hint .route-inline-hint {
-  display: block;
+  display: flex;
 }
 
 .route-dtg {

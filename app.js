@@ -726,9 +726,9 @@
             ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
             ${
               isFirstRoute
-                ? '<span class="route-inline-hint route-inline-hint-dep" aria-hidden="true">departure<br>airport<br>here</span>'
+                ? '<span class="route-inline-hint route-inline-hint-dep" aria-hidden="true">departure<br>airport</span>'
                 : isLastRoute
-                  ? '<span class="route-inline-hint route-inline-hint-dest" aria-hidden="true">destination<br>airport<br>here</span>'
+                  ? '<span class="route-inline-hint route-inline-hint-dest" aria-hidden="true">destination<br>airport</span>'
                   : ""
             }
           </div>
@@ -818,7 +818,7 @@
               <input type="checkbox" id="setting-distance-to-go" ${s.showDistanceToGo ? "checked" : ""} />
               <span>Show distance-to-go under route waypoints</span>
             </label>
-            <label class="settings-item settings-item-check">
+            <label class="settings-item settings-item-check settings-coming-soon-wrap" data-coming="coming soon">
               <input type="checkbox" id="setting-variation-deviation" disabled />
               <span>Variation/Deviation</span>
             </label>
