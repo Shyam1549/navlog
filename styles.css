@@ -9,6 +9,7 @@
   --shadow: 0 18px 38px rgba(63, 48, 32, 0.14);
   --ui-scale: 0.84;
   --header-side-width: 250px;
+  --admin-row-height: 42px;
 }
 
 * { box-sizing: border-box; }
@@ -556,7 +557,7 @@ select { font: inherit; }
 
 .admin-mini-btn {
   border-radius: 0;
-  min-height: 42px;
+  min-height: var(--admin-row-height);
   min-width: 42px;
   padding: 0;
   border-top: 0;
@@ -1456,8 +1457,9 @@ select { font: inherit; }
 }
 
 .additional-info-subtitle {
-  margin: 0 0 8px;
-  font-size: 0.96rem;
+  margin: 0 0 14px;
+  font-size: 1.1rem;
+  letter-spacing: 0.01em;
 }
 
 .additional-info-table {
@@ -1477,16 +1479,16 @@ select { font: inherit; }
 
 .additional-info-table.editable td {
   padding: 0;
-  height: 42px;
+  height: calc(var(--admin-row-height) - 2px);
 }
 
 .additional-info-table.editable td input {
   width: 100%;
   border: 0;
   background: transparent;
-  min-height: 42px;
-  height: 42px;
-  padding: 4px 6px;
+  min-height: calc(var(--admin-row-height) - 2px);
+  height: calc(var(--admin-row-height) - 2px);
+  padding: 0 6px;
   line-height: 1.15;
   font-size: 0.84rem;
 }
