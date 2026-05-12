@@ -460,7 +460,6 @@
           <div class="top-side"><button class="back-link" id="back-from-admin">Back</button></div>
           <div class="top-center">
             <h1>Admin Console</h1>
-            <p class="setup-caption">Presets, airports, manual, privacy</p>
           </div>
           <div class="top-side right">
             <button class="action" id="admin-sign-out">Sign out</button>
@@ -483,7 +482,7 @@
             <div class="preset-status ${presetLookup.active ? (presetLookup.exists ? "available" : "missing") : ""}">${presetLookup.active ? (presetLookup.exists ? "preset avbl" : "preset unavbl") : ""}</div>
             <section class="admin-preset-table">
               <div class="admin-preset-head">
-                <div>ROUTE</div>
+                <div><button class="mini-plus inline admin-head-plus" id="admin-preset-add-row" type="button" aria-label="Add preset row">+</button>ROUTE</div>
                 <div>TC</div>
                 <div>DIS</div>
                 <div></div>
@@ -499,14 +498,12 @@
                 `).join("")}
               </div>
             </section>
-            <div class="entry-actions">
-              <button class="action" id="admin-preset-add-row" type="button">Add row</button>
-              <button class="action primary" id="admin-preset-save">Save</button>
+            <div class="entry-actions">              <button class="action primary" id="admin-preset-save">Save</button>
               <button class="action" id="admin-preset-delete"${presetLookup.exists ? "" : " disabled"}>Delete</button>
             </div>
           </div>
           <div class="manual-section">
-            <h3>Airports</h3>
+            <h3>Airport Information</h3>
             <datalist id="admin-airport-code-list">${airportCodeOptions}</datalist>
             <div class="preset-status ${airportLookup.active ? (airportLookup.exists ? "available" : "missing") : ""}">${airportLookup.active ? (airportLookup.exists ? "airport avbl" : "airport unavbl") : ""}</div>
             <section class="admin-airport-table">
@@ -1121,7 +1118,20 @@
     document.querySelectorAll("[data-radio-field]").forEach((input) => {
       input.addEventListener("input", (event) => {
         const [indexText, field] = event.target.dataset.radioField.split(":");
-        state.navlog.radios[Number(indexText)][field] = event.target.value;
+        const index = Number(indexText);
+        state.navlog.radios[index][field] = event.target.value;
+        if (field === "location" && String(event.target.value || "").trim() === "") {
+          state.navlog.radios[index] = {
+            ...state.navlog.radios[index],
+            cptAtis: "",
+            depAap: "",
+            twr: "",
+            gnd: "",
+            fss: "",
+            remarks: "",
+          };
+          render();
+        }
       });
     });
 
@@ -1324,7 +1334,22 @@
   function autofillAirportRow(index, rawValue) {
     const code = String(rawValue || "").trim().toUpperCase();
     const airport = state.catalog.airports.find((item) => item.code === code || item.id === code);
-    if (!airport) return;
+    if (!airport) {
+      if (!code) {
+        state.navlog.radios[index] = {
+          ...state.navlog.radios[index],
+          location: "",
+          cptAtis: "",
+          depAap: "",
+          twr: "",
+          gnd: "",
+          fss: "",
+          remarks: "",
+        };
+        render();
+      }
+      return;
+    }
     state.navlog.radios[index] = {
       ...state.navlog.radios[index],
       location: airport.code,
@@ -1610,7 +1635,7 @@
     state.admin.clickCount += 1;
     state.admin.lastClickAt = now;
 
-    if (state.admin.clickCount < 5) return;
+    if (state.admin.clickCount < 3) return;
     state.admin.clickCount = 0;
     state.admin.lastClickAt = 0;
     state.admin.firstClickAt = 0;
@@ -1871,7 +1896,7 @@
       }
       await loadAdminData();
       state.view = "admin";
-      state.admin.notice = "Signed in successfully.";
+      state.admin.notice = "";
     } catch (error) {
       state.admin.error = error && error.message ? error.message : "Admin sign-in failed.";
     } finally {
@@ -2108,6 +2133,7 @@
     const code = normalizeCode(state.admin.airportForm.code);
     if (!code) {
       state.admin.selectedAirportCode = "";
+      state.admin.airportForm = createEmptyAirportForm();
       return;
     }
     selectAirportForEditing(code);
@@ -3032,3 +3058,6 @@
 
   initializeApp();
 })();
+
+
+
