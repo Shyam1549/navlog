@@ -133,6 +133,8 @@
     else if (state.view === "manual") wireManual();
     else if (state.view === "privacy") wirePrivacy();
     else wireNavlog();
+    wireFooterActions();
+    wireBugReportModal();
     if (state.view === "manual") typesetManualMath();
   }
 
@@ -179,8 +181,8 @@
             <button class="action primary" id="open-sheet">Open navlog</button>
             ${showResume ? `<button class="action" id="resume-sheet">Resume current sheet</button>` : ""}
           </div>
-          ${renderFrontFooter()}
         </section>
+        ${renderFrontFooter()}
         ${renderBugReportModal()}
       </main>
       </div>
@@ -306,9 +308,13 @@
             <h3>Data Behaviors</h3>
             <div class="manual-row"><p class="manual-formula">Preset route delete</p><p class="manual-note">If a preset leg is removed, the next leg TC is cleared for manual entry.</p></div>
             <div class="manual-row"><p class="manual-formula">Airport autofill</p><p class="manual-note">Type airport code and press Enter to auto-fill frequency/remarks.</p></div>
+            <div class="manual-row"><p class="manual-formula">RP-C auto-fill</p><p class="manual-note">Entering RP-C No. auto-fills aircraft type and default GPH/PPH when mapping is available.</p></div>
+            <div class="manual-row"><p class="manual-formula">TOC/TOD edit button</p><p class="manual-note">TOC and TOD fields can be switched to manual mode by clicking their edit button.</p></div>
             <div class="manual-row"><p class="manual-formula">Distance to go</p><p class="manual-note">If enabled, a remaining-distance value is shown below each waypoint route field.</p></div>
           </div>
         </section>
+        ${renderFrontFooter()}
+        ${renderBugReportModal()}
       </main>
       </div>
     `;
@@ -347,6 +353,8 @@
             <p>For privacy questions, submit a bug report and include “Privacy” in your message so it can be prioritized appropriately.</p>
           </article>
         </section>
+        ${renderFrontFooter()}
+        ${renderBugReportModal()}
       </main>
       </div>
     `;
@@ -391,6 +399,8 @@
             ${renderAtisSection()}
           </div>
         </section>
+        ${renderFrontFooter()}
+        ${renderBugReportModal()}
       </main>
       </div>
     `;
@@ -720,102 +730,6 @@
       state.view = "navlog";
       render();
     });
-    const openManualButton = document.getElementById("open-manual");
-    if (openManualButton) {
-      openManualButton.addEventListener("click", () => {
-        state.view = "manual";
-        render();
-      });
-    }
-    const openPrivacyButton = document.getElementById("open-privacy");
-    if (openPrivacyButton) {
-      openPrivacyButton.addEventListener("click", () => {
-        state.view = "privacy";
-        render();
-      });
-    }
-    const openBugReportButton = document.getElementById("open-bug-report");
-    if (openBugReportButton) {
-      openBugReportButton.addEventListener("click", () => {
-        state.bugReport.open = true;
-        state.bugReport.submitting = false;
-        state.bugReport.status = "";
-        state.bugReport.note = "";
-        render();
-      });
-    }
-    const closeBugReportButton = document.getElementById("close-bug-report");
-    if (closeBugReportButton) {
-      closeBugReportButton.addEventListener("click", () => {
-        state.bugReport.open = false;
-        state.bugReport.submitting = false;
-        state.bugReport.status = "";
-        state.bugReport.note = "";
-        render();
-      });
-    }
-    const bugReportOverlay = document.getElementById("bug-report-overlay");
-    if (bugReportOverlay) {
-      bugReportOverlay.addEventListener("click", (event) => {
-        if (event.target !== bugReportOverlay || state.bugReport.submitting) return;
-        state.bugReport.open = false;
-        state.bugReport.status = "";
-        state.bugReport.note = "";
-        render();
-      });
-    }
-    document.removeEventListener("keydown", handleBugReportEscape);
-    if (state.bugReport.open) {
-      document.addEventListener("keydown", handleBugReportEscape);
-      const messageInput = document.getElementById("bug-report-message");
-      if (messageInput) messageInput.focus();
-    }
-    const bugReportForm = document.getElementById("bug-report-form");
-    if (bugReportForm) {
-      bugReportForm.addEventListener("submit", async (event) => {
-        event.preventDefault();
-        if (state.bugReport.submitting) return;
-        const messageInput = document.getElementById("bug-report-message");
-        const emailInput = document.getElementById("bug-report-email");
-        const message = (messageInput ? messageInput.value : "").trim();
-        const reporterEmail = (emailInput ? emailInput.value : "").trim();
-        if (!message) {
-          state.bugReport.status = "error";
-          state.bugReport.note = "Please add bug details first.";
-          render();
-          return;
-        }
-        state.bugReport.submitting = true;
-        state.bugReport.status = "";
-        state.bugReport.note = "";
-        render();
-        try {
-          const response = await fetch("/api/bug-report", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              message,
-              reporterEmail,
-              page: state.view,
-              departure: state.navlog.setup.departure || "",
-              destination: state.navlog.setup.destination || "",
-              userAgent: window.navigator.userAgent || "",
-            }),
-          });
-          const payload = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(payload.error || "Could not submit bug report.");
-          state.bugReport.submitting = false;
-          state.bugReport.status = "ok";
-          state.bugReport.note = "Thanks. Your bug report was sent.";
-          render();
-        } catch (error) {
-          state.bugReport.submitting = false;
-          state.bugReport.status = "error";
-          state.bugReport.note = error && error.message ? error.message : "Could not submit bug report.";
-          render();
-        }
-      });
-    }
     const resumeButton = document.getElementById("resume-sheet");
     if (resumeButton) {
       resumeButton.addEventListener("click", () => {
@@ -1408,6 +1322,104 @@
     });
   }
 
+  function wireFooterActions() {
+    const openManualButton = document.getElementById("open-manual");
+    if (openManualButton) {
+      openManualButton.addEventListener("click", () => {
+        state.view = "manual";
+        render();
+      });
+    }
+    const openPrivacyButton = document.getElementById("open-privacy");
+    if (openPrivacyButton) {
+      openPrivacyButton.addEventListener("click", () => {
+        state.view = "privacy";
+        render();
+      });
+    }
+    const openBugReportButton = document.getElementById("open-bug-report");
+    if (openBugReportButton) {
+      openBugReportButton.addEventListener("click", () => {
+        state.bugReport.open = true;
+        state.bugReport.submitting = false;
+        state.bugReport.status = "";
+        state.bugReport.note = "";
+        render();
+      });
+    }
+  }
+
+  function wireBugReportModal() {
+    const closeBugReportButton = document.getElementById("close-bug-report");
+    if (closeBugReportButton) {
+      closeBugReportButton.addEventListener("click", () => {
+        closeBugReport();
+      });
+    }
+
+    const bugReportOverlay = document.getElementById("bug-report-overlay");
+    if (bugReportOverlay) {
+      bugReportOverlay.addEventListener("click", (event) => {
+        if (event.target !== bugReportOverlay || state.bugReport.submitting) return;
+        closeBugReport();
+      });
+    }
+
+    document.removeEventListener("keydown", handleBugReportEscape);
+    if (state.bugReport.open) {
+      document.addEventListener("keydown", handleBugReportEscape);
+      const messageInput = document.getElementById("bug-report-message");
+      if (messageInput) messageInput.focus();
+    }
+
+    const bugReportForm = document.getElementById("bug-report-form");
+    if (bugReportForm) {
+      bugReportForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        if (state.bugReport.submitting) return;
+        const messageInput = document.getElementById("bug-report-message");
+        const emailInput = document.getElementById("bug-report-email");
+        const message = (messageInput ? messageInput.value : "").trim();
+        const reporterEmail = (emailInput ? emailInput.value : "").trim();
+        if (!message) {
+          state.bugReport.status = "error";
+          state.bugReport.note = "Please add bug details first.";
+          render();
+          return;
+        }
+        state.bugReport.submitting = true;
+        state.bugReport.status = "";
+        state.bugReport.note = "";
+        render();
+        try {
+          const response = await fetch("/api/bug-report", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message,
+              reporterEmail,
+              page: state.view,
+              departure: state.navlog.setup.departure || "",
+              destination: state.navlog.setup.destination || "",
+              userAgent: window.navigator.userAgent || "",
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload.error || "Could not submit bug report.");
+          state.bugReport.submitting = false;
+          state.bugReport.status = "ok";
+          state.bugReport.note = "Thanks. Your bug report was sent.";
+          render();
+        } catch (error) {
+          state.bugReport.submitting = false;
+          state.bugReport.status = "error";
+          state.bugReport.note = error && error.message ? error.message : "Could not submit bug report.";
+          render();
+        }
+      });
+    }
+  }
+
   function wirePrivacy() {
     const backButton = document.getElementById("back-from-privacy");
     if (!backButton) return;
@@ -1419,6 +1431,10 @@
 
   function handleBugReportEscape(event) {
     if (event.key !== "Escape" || !state.bugReport.open || state.bugReport.submitting) return;
+    closeBugReport();
+  }
+
+  function closeBugReport() {
     state.bugReport.open = false;
     state.bugReport.status = "";
     state.bugReport.note = "";

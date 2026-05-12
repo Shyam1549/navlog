@@ -29,7 +29,13 @@ input,
 select { font: inherit; }
 
 .entry-page,
-.page { width: min(1320px, 100%); margin: 0 auto; }
+.page {
+  width: min(1320px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
 
 .ui-scale {
   width: 100%;
@@ -96,7 +102,7 @@ select { font: inherit; }
   line-height: 1.35;
 }
 
-.setup-card { margin-top: 18px; padding: 20px; }
+.setup-card { margin-top: 18px; margin-bottom: 16px; padding: 20px; }
 .manual-card { display: grid; gap: 14px; }
 .manual-section {
   border: 2px solid rgba(46, 41, 35, 0.16);
@@ -195,9 +201,12 @@ select { font: inherit; }
 .manual-front-btn { margin-left: auto; }
 
 .front-footer {
-  margin-top: 16px;
-  padding: 12px 0 0;
-  border-top: 2px solid rgba(46, 41, 35, 0.16);
+  margin-top: auto;
+  padding: 13px 16px;
+  border: 2px solid rgba(46, 41, 35, 0.16);
+  border-radius: 16px;
+  background: rgba(251, 247, 239, 0.9);
+  box-shadow: var(--shadow);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -235,10 +244,8 @@ select { font: inherit; }
 .bug-report-overlay {
   position: fixed;
   inset: 0;
-  background:
-    radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0) 38%),
-    linear-gradient(160deg, rgba(239, 227, 207, 0.84), rgba(219, 234, 240, 0.74));
-  backdrop-filter: blur(4px) saturate(1.05);
+  background: rgba(0, 0, 0, 0.02);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -250,8 +257,7 @@ select { font: inherit; }
   width: min(620px, 100%);
   border: 2px solid rgba(33, 76, 90, 0.22);
   border-radius: 18px;
-  background:
-    linear-gradient(165deg, rgba(255, 255, 255, 0.98), rgba(248, 242, 232, 0.98));
+  background: rgba(251, 247, 239, 0.99);
   box-shadow: 0 24px 54px rgba(35, 47, 52, 0.2);
   padding: 20px;
 }
@@ -394,7 +400,7 @@ select { font: inherit; }
   font-weight: 700;
 }
 
-.sheet-wrap { overflow: visible; }
+.sheet-wrap { overflow: visible; margin-bottom: 16px; }
 .sheet {
   width: 100%;
   min-width: 0;
