@@ -179,8 +179,8 @@
             <button class="action primary" id="open-sheet">Open navlog</button>
             ${showResume ? `<button class="action" id="resume-sheet">Resume current sheet</button>` : ""}
           </div>
+          ${renderFrontFooter()}
         </section>
-        ${renderFrontFooter()}
         ${renderBugReportModal()}
       </main>
       </div>
@@ -326,31 +326,26 @@
           </div>
           <div class="top-side right"></div>
         </section>
-        <section class="setup-card manual-card privacy-card">
-          <div class="manual-section">
+        <section class="setup-card privacy-card">
+          <article class="privacy-content">
             <h3>Overview</h3>
-            <p>Navlog is a flight planning utility. We only collect information needed to run core features and improve reliability.</p>
-          </div>
-          <div class="manual-section">
+            <p>Navlog is a flight planning utility. We collect only the information needed to run core features and maintain service reliability.</p>
+
             <h3>Information You Enter</h3>
-            <p>Flight planning fields you type into Navlog are processed in your browser for calculations. Bug reports may include the message you submit, optional email address, and basic device/browser metadata.</p>
-          </div>
-          <div class="manual-section">
-            <h3>Bug Reports</h3>
-            <p>When you submit a bug report, data is sent to our backend endpoint and delivered by our email service provider so we can troubleshoot and respond. Do not include sensitive personal or operational information in bug reports.</p>
-          </div>
-          <div class="manual-section">
-            <h3>How We Use Information</h3>
-            <p>We use submitted data to provide navlog functionality, diagnose technical issues, and improve service quality. We do not sell your data.</p>
-          </div>
-          <div class="manual-section">
+            <p>Most planning values you type into Navlog are processed in your browser for calculations. Bug report submissions may include the issue message, optional contact email, and basic technical metadata such as browser type.</p>
+
+            <h3>Bug Report Processing</h3>
+            <p>When you submit a bug report, data is sent to our secure backend endpoint and then routed through our email service provider so we can investigate and respond. Please avoid sharing highly sensitive personal or operational details in reports.</p>
+
+            <h3>Use Of Data</h3>
+            <p>Submitted data is used to provide functionality, diagnose faults, improve product quality, and maintain operational security. We do not sell personal data.</p>
+
             <h3>Data Retention</h3>
-            <p>Bug report emails are retained as long as needed for support, maintenance, legal compliance, and record-keeping.</p>
-          </div>
-          <div class="manual-section">
+            <p>Bug report records are retained only as long as reasonably required for support, maintenance, legal obligations, and audit or record-keeping needs.</p>
+
             <h3>Contact</h3>
-            <p>For privacy concerns, use the bug report form and include “Privacy” in your message subject line.</p>
-          </div>
+            <p>For privacy questions, submit a bug report and include “Privacy” in your message so it can be prioritized appropriately.</p>
+          </article>
         </section>
       </main>
       </div>
