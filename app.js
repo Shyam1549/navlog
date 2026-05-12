@@ -36,6 +36,82 @@
     { id: "RPMS", code: "RPMS", cptAtis: "", depAap: "122.0", twr: "", gnd: "", fss: "", remarks: "18-36/20ft" },
     { id: "RPME", code: "RPME", cptAtis: "", depAap: "121.3", twr: "123.3/122.0", gnd: "", fss: "", remarks: "12-30/44ft" },
   ];
+  const DEFAULT_ROUTE_PRESETS = [
+    {
+      id: "preset-rpsp-rpvd",
+      name: "RPSP to RPVD",
+      departure: "RPSP",
+      destination: "RPVD",
+      legs: [
+        { route: "RPSP" },
+        { route: "DOLJO", tc: 291, distance: 4, cas: 70 },
+        { route: "BOLJOON", tc: 280, distance: 15, cas: 85 },
+        { route: "OSLOB", tc: 203, distance: 6, cas: 85 },
+        { route: "SUMILON", tc: 210, distance: 6, cas: 85 },
+        { route: "RPVD", tc: 215, distance: 8, cas: 85 },
+      ],
+    },
+    {
+      id: "preset-rpvd-rpmg",
+      name: "RPVD to RPMG",
+      departure: "RPVD",
+      destination: "RPMG",
+      legs: [
+        { route: "RPVD" },
+        { route: "DAUIN", tc: 197, distance: 9, cas: 70 },
+        { route: "ZAMBOANGUITA", tc: 218, distance: 8, cas: 85 },
+        { route: "ALIGUAY", tc: 176, distance: 22, cas: 85 },
+        { route: "RPMG", tc: 137, distance: 11, cas: 85 },
+      ],
+    },
+    {
+      id: "preset-rpmg-rpvd",
+      name: "RPMG to RPVD",
+      departure: "RPMG",
+      destination: "RPVD",
+      legs: [
+        { route: "RPMG" },
+        { route: "TAGULO POINT", tc: 16, distance: 8, cas: 70 },
+        { route: "SELINOG", tc: 18, distance: 8, cas: 85 },
+        { route: "APO ISLAND", tc: 327, distance: 16, cas: 85 },
+        { route: "DAUIN", tc: 359, distance: 7, cas: 85 },
+        { route: "RPVD", tc: 22, distance: 7, cas: 85 },
+      ],
+    },
+    {
+      id: "preset-rpvd-rpsp",
+      name: "RPVD to RPSP",
+      departure: "RPVD",
+      destination: "RPSP",
+      legs: [
+        { route: "RPVD" },
+        { route: "SUMILON", tc: 35, distance: 8, cas: 70 },
+        { route: "OSLOB", tc: 30, distance: 6, cas: 85 },
+        { route: "DOLJO", tc: 76, distance: 18, cas: 85 },
+        { route: "RPSP", tc: 111, distance: 4, cas: 85 },
+      ],
+    },
+    {
+      id: "preset-rpmg-rpsp",
+      name: "RPMG to RPSP",
+      departure: "RPMG",
+      destination: "RPSP",
+      legs: [
+        { route: "RPMG" },
+        { route: "TAUOLO POINT", tc: 16, distance: 8, cas: 70 },
+        { route: "SELINOG", tc: 14, distance: 8, cas: 85 },
+        { route: "SAN JUAN", tc: 14, distance: 19, cas: 85 },
+        { route: "LAZI", tc: 116, distance: 8, cas: 85 },
+        { route: "MARIA", tc: 39, distance: 7, cas: 85 },
+        { route: "PAMILICAN", tc: 38, distance: 24, cas: 85 },
+        { route: "RPSP", tc: 300, distance: 10, cas: 85 },
+      ],
+    },
+  ];
+  const SUPABASE_URL_KEY = "navlog_supabase_url";
+  const SUPABASE_ANON_KEY = "navlog_supabase_anon_key";
+  const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
+  const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
 
   const app = document.getElementById("app");
   const state = {
@@ -48,9 +124,37 @@
       status: "",
       note: "",
     },
+    catalog: {
+      airports: AIRPORTS.map((airport) => ({ ...airport })),
+      routePresets: DEFAULT_ROUTE_PRESETS.map((preset) => ({ ...preset, legs: preset.legs.map((leg) => ({ ...leg })) })),
+      content: {
+        manualHtml: "",
+        privacyHtml: "",
+      },
+    },
+    admin: {
+      clickCount: 0,
+      lastClickAt: 0,
+      firstClickAt: 0,
+      supabaseUrl: readStoredValue(SUPABASE_URL_KEY),
+      supabaseAnonKey: readStoredValue(SUPABASE_ANON_KEY),
+      loading: false,
+      notice: "",
+      error: "",
+      session: null,
+      presets: [],
+      airports: [],
+      selectedPresetId: "",
+      selectedAirportCode: "",
+      presetForm: createEmptyPresetForm(),
+      airportForm: createEmptyAirportForm(),
+      manualHtmlDraft: "",
+      privacyHtmlDraft: "",
+    },
     meta: {
       hasOpenedSheet: false,
       usingPresetRoute: false,
+      lastNonDocView: "setup",
     },
   };
   const TRIG_TOLERANCE = 1e-6;
@@ -58,6 +162,8 @@
   const KNOTS_PER_MPH = 0.868976;
   const KNOTS_PER_KMH = 1 / 1.852;
   const KNOTS_PER_MS = 1.9438444924406046;
+  let supabaseClient = null;
+  let loadingPublicCatalog = false;
   let utcTimer = null;
   let manualMathRetryCount = 0;
 
@@ -122,17 +228,84 @@
     };
   }
 
+  function createEmptyPresetForm() {
+    return {
+      name: "",
+      departure: "",
+      destination: "",
+      legsJson: "[]",
+    };
+  }
+
+  function createEmptyAirportForm() {
+    return {
+      id: "",
+      code: "",
+      cptAtis: "",
+      depAap: "",
+      twr: "",
+      gnd: "",
+      fss: "",
+      remarks: "",
+    };
+  }
+
+  function readStoredValue(key) {
+    try {
+      return String(window.localStorage.getItem(key) || "");
+    } catch {
+      return "";
+    }
+  }
+
+  function writeStoredValue(key, value) {
+    try {
+      if (!value) window.localStorage.removeItem(key);
+      else window.localStorage.setItem(key, String(value));
+    } catch {
+      // ignore storage failures (private mode / blocked storage)
+    }
+  }
+
+  function clonePreset(preset) {
+    return {
+      id: String(preset.id || ""),
+      name: String(preset.name || ""),
+      departure: normalizeCode(preset.departure),
+      destination: normalizeCode(preset.destination),
+      legs: Array.isArray(preset.legs) ? preset.legs.map((leg) => ({ ...leg })) : [],
+    };
+  }
+
+  function normalizeAirportRecord(airport) {
+    return {
+      id: String(airport.id || airport.code || "").trim().toUpperCase(),
+      code: String(airport.code || airport.id || "").trim().toUpperCase(),
+      cptAtis: String(airport.cptAtis || ""),
+      depAap: String(airport.depAap || ""),
+      twr: String(airport.twr || ""),
+      gnd: String(airport.gnd || ""),
+      fss: String(airport.fss || ""),
+      remarks: String(airport.remarks || ""),
+    };
+  }
+
   function render() {
     computeRouteMath();
     if (state.view === "setup") app.innerHTML = renderSetupScreen();
     else if (state.view === "manual") app.innerHTML = renderManualScreen();
     else if (state.view === "privacy") app.innerHTML = renderPrivacyScreen();
+    else if (state.view === "admin-login") app.innerHTML = renderAdminLoginScreen();
+    else if (state.view === "admin") app.innerHTML = renderAdminScreen();
     else app.innerHTML = renderNavlogScreen();
     startUtcClock();
     if (state.view === "setup") wireSetup();
     else if (state.view === "manual") wireManual();
     else if (state.view === "privacy") wirePrivacy();
+    else if (state.view === "admin-login") wireAdminLogin();
+    else if (state.view === "admin") wireAdminPanel();
     else wireNavlog();
+    wireUtcAdminTrigger();
     wireFooterActions();
     wireBugReportModal();
     if (state.view === "manual") typesetManualMath();
@@ -235,6 +408,28 @@
   }
 
   function renderManualScreen() {
+    const customManual = String(state.catalog.content.manualHtml || "").trim();
+    if (customManual) {
+      return `
+        <div class="ui-scale">
+        <main class="entry-page">
+          <section class="topbar centered">
+            <div class="top-side"><button class="back-link" id="back-from-manual">Back</button></div>
+            <div class="top-center">
+              <h1>User Manual</h1>
+              <p class="setup-caption">Formulas, features, limits</p>
+            </div>
+            <div class="top-side right"></div>
+          </section>
+          <section class="setup-card privacy-card">
+            <article class="privacy-content">${customManual}</article>
+          </section>
+          ${renderFrontFooter()}
+          ${renderBugReportModal()}
+        </main>
+        </div>
+      `;
+    }
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -321,6 +516,28 @@
   }
 
   function renderPrivacyScreen() {
+    const customPrivacy = String(state.catalog.content.privacyHtml || "").trim();
+    if (customPrivacy) {
+      return `
+        <div class="ui-scale">
+        <main class="entry-page">
+          <section class="topbar centered">
+            <div class="top-side"><button class="back-link" id="back-from-privacy">Back</button></div>
+            <div class="top-center">
+              <h1>Privacy Policy</h1>
+              <p class="setup-caption">Last updated: ${formatPolicyDate()}</p>
+            </div>
+            <div class="top-side right"></div>
+          </section>
+          <section class="setup-card privacy-card">
+            <article class="privacy-content">${customPrivacy}</article>
+          </section>
+          ${renderFrontFooter()}
+          ${renderBugReportModal()}
+        </main>
+        </div>
+      `;
+    }
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -352,6 +569,194 @@
             <h3>Contact</h3>
             <p>For privacy questions, submit a bug report and include “Privacy” in your message so it can be prioritized appropriately.</p>
           </article>
+        </section>
+        ${renderFrontFooter()}
+        ${renderBugReportModal()}
+      </main>
+      </div>
+    `;
+  }
+
+  function renderAdminLoginScreen() {
+    const isReady = Boolean(supabaseClient);
+    const statusText = state.admin.error || state.admin.notice;
+    const statusClass = state.admin.error ? "admin-status error" : "admin-status ok";
+    return `
+      <div class="ui-scale">
+      <main class="entry-page">
+        <section class="topbar centered">
+          <div class="top-side"><button class="back-link" id="back-from-admin-login">Back</button></div>
+          <div class="top-center">
+            <h1>Admin Login</h1>
+            <p class="setup-caption">Sign in with your Supabase admin user</p>
+          </div>
+          <div class="top-side right"></div>
+        </section>
+        <section class="setup-card admin-card">
+          <div class="admin-grid two-col">
+            <label class="setup-field">
+              <span>Supabase URL</span>
+              <input id="admin-supabase-url" value="${escapeAttr(state.admin.supabaseUrl)}" placeholder="https://project-ref.supabase.co" />
+            </label>
+            <label class="setup-field">
+              <span>Supabase anon key</span>
+              <input id="admin-supabase-anon" value="${escapeAttr(state.admin.supabaseAnonKey)}" placeholder="eyJhbGciOi..." />
+            </label>
+          </div>
+          <div class="entry-actions">
+            <button class="action" id="admin-connect-supabase">Connect</button>
+          </div>
+          <div class="admin-divider"></div>
+          <div class="admin-grid two-col">
+            <label class="setup-field">
+              <span>Admin email</span>
+              <input id="admin-login-email" type="email" placeholder="admin@example.com" />
+            </label>
+            <label class="setup-field">
+              <span>Password</span>
+              <input id="admin-login-password" type="password" placeholder="••••••••" />
+            </label>
+          </div>
+          <div class="entry-actions">
+            <button class="action primary" id="admin-login-submit" ${isReady ? "" : "disabled"}>Sign in</button>
+          </div>
+          ${statusText ? `<p class="${statusClass}">${escapeHtml(statusText)}</p>` : ""}
+        </section>
+        ${renderFrontFooter()}
+        ${renderBugReportModal()}
+      </main>
+      </div>
+    `;
+  }
+
+  function renderAdminScreen() {
+    if (!state.admin.session) return renderAdminLoginScreen();
+    const statusText = state.admin.error || state.admin.notice;
+    const statusClass = state.admin.error ? "admin-status error" : "admin-status ok";
+    const presetOptions = state.admin.presets
+      .map((preset) => `<option value="${escapeAttr(preset.id)}"${preset.id === state.admin.selectedPresetId ? " selected" : ""}>${escapeHtml(preset.name || `${preset.departure} to ${preset.destination}`)}</option>`)
+      .join("");
+    const airportOptions = state.admin.airports
+      .map((airport) => `<option value="${escapeAttr(airport.code)}"${airport.code === state.admin.selectedAirportCode ? " selected" : ""}>${escapeHtml(airport.code)}</option>`)
+      .join("");
+    return `
+      <div class="ui-scale">
+      <main class="entry-page">
+        <section class="topbar centered">
+          <div class="top-side"><button class="back-link" id="back-from-admin">Back</button></div>
+          <div class="top-center">
+            <h1>Admin Console</h1>
+            <p class="setup-caption">Presets, airports, manual, privacy</p>
+          </div>
+          <div class="top-side right">
+            <button class="action" id="admin-refresh-data">Refresh</button>
+            <button class="action" id="admin-sign-out">Sign out</button>
+          </div>
+        </section>
+        <section class="setup-card admin-card">
+          <div class="manual-section">
+            <h3>Route Presets</h3>
+            <div class="admin-grid two-col">
+              <label class="setup-field">
+                <span>Existing preset</span>
+                <select id="admin-preset-select">
+                  <option value="">Select preset</option>
+                  ${presetOptions}
+                </select>
+              </label>
+              <label class="setup-field">
+                <span>Preset name</span>
+                <input id="admin-preset-name" value="${escapeAttr(state.admin.presetForm.name)}" />
+              </label>
+              <label class="setup-field">
+                <span>Departure</span>
+                <input id="admin-preset-departure" value="${escapeAttr(state.admin.presetForm.departure)}" />
+              </label>
+              <label class="setup-field">
+                <span>Destination</span>
+                <input id="admin-preset-destination" value="${escapeAttr(state.admin.presetForm.destination)}" />
+              </label>
+            </div>
+            <label class="setup-field">
+              <span>Legs JSON</span>
+              <textarea id="admin-preset-legs" class="admin-textarea">${escapeHtml(state.admin.presetForm.legsJson)}</textarea>
+            </label>
+            <div class="entry-actions">
+              <button class="action" id="admin-preset-new">New</button>
+              <button class="action primary" id="admin-preset-save">Save</button>
+              <button class="action" id="admin-preset-delete"${state.admin.selectedPresetId ? "" : " disabled"}>Delete</button>
+            </div>
+          </div>
+          <div class="manual-section">
+            <h3>Airports</h3>
+            <div class="admin-grid two-col">
+              <label class="setup-field">
+                <span>Existing airport</span>
+                <select id="admin-airport-select">
+                  <option value="">Select airport</option>
+                  ${airportOptions}
+                </select>
+              </label>
+              <label class="setup-field">
+                <span>Airport code</span>
+                <input id="admin-airport-code" value="${escapeAttr(state.admin.airportForm.code)}" />
+              </label>
+              <label class="setup-field">
+                <span>Airport id</span>
+                <input id="admin-airport-id" value="${escapeAttr(state.admin.airportForm.id)}" />
+              </label>
+              <label class="setup-field">
+                <span>CPT/ATIS</span>
+                <input id="admin-airport-cptAtis" value="${escapeAttr(state.admin.airportForm.cptAtis)}" />
+              </label>
+              <label class="setup-field">
+                <span>DEP/AAP</span>
+                <input id="admin-airport-depAap" value="${escapeAttr(state.admin.airportForm.depAap)}" />
+              </label>
+              <label class="setup-field">
+                <span>TWR</span>
+                <input id="admin-airport-twr" value="${escapeAttr(state.admin.airportForm.twr)}" />
+              </label>
+              <label class="setup-field">
+                <span>GND</span>
+                <input id="admin-airport-gnd" value="${escapeAttr(state.admin.airportForm.gnd)}" />
+              </label>
+              <label class="setup-field">
+                <span>FSS</span>
+                <input id="admin-airport-fss" value="${escapeAttr(state.admin.airportForm.fss)}" />
+              </label>
+            </div>
+            <label class="setup-field">
+              <span>Remarks</span>
+              <input id="admin-airport-remarks" value="${escapeAttr(state.admin.airportForm.remarks)}" />
+            </label>
+            <div class="entry-actions">
+              <button class="action" id="admin-airport-new">New</button>
+              <button class="action primary" id="admin-airport-save">Save</button>
+              <button class="action" id="admin-airport-delete"${state.admin.selectedAirportCode ? "" : " disabled"}>Delete</button>
+            </div>
+          </div>
+          <div class="manual-section">
+            <h3>User Manual Content</h3>
+            <label class="setup-field">
+              <span>Manual HTML</span>
+              <textarea id="admin-manual-html" class="admin-textarea admin-textarea-large">${escapeHtml(state.admin.manualHtmlDraft)}</textarea>
+            </label>
+            <div class="entry-actions">
+              <button class="action primary" id="admin-manual-save">Save manual</button>
+            </div>
+          </div>
+          <div class="manual-section">
+            <h3>Privacy Policy Content</h3>
+            <label class="setup-field">
+              <span>Privacy HTML</span>
+              <textarea id="admin-privacy-html" class="admin-textarea admin-textarea-large">${escapeHtml(state.admin.privacyHtmlDraft)}</textarea>
+            </label>
+            <div class="entry-actions">
+              <button class="action primary" id="admin-privacy-save">Save privacy policy</button>
+            </div>
+          </div>
+          ${statusText ? `<p class="${statusClass}">${escapeHtml(statusText)}</p>` : ""}
         </section>
         ${renderFrontFooter()}
         ${renderBugReportModal()}
@@ -1089,57 +1494,11 @@
   }
 
   function getPresetLegs(departure, destination) {
-    if (departure === "RPSP" && destination === "RPVD") {
-      return [
-        createPresetLeg({ route: "RPSP" }),
-        createPresetLeg({ route: "DOLJO", tc: 291, distance: 4, cas: 70 }),
-        createPresetLeg({ route: "BOLJOON", tc: 280, distance: 15, cas: 85 }),
-        createPresetLeg({ route: "OSLOB", tc: 203, distance: 6, cas: 85 }),
-        createPresetLeg({ route: "SUMILON", tc: 210, distance: 6, cas: 85 }),
-        createPresetLeg({ route: "RPVD", tc: 215, distance: 8, cas: 85 }),
-      ];
-    }
-    if (departure === "RPVD" && destination === "RPMG") {
-      return [
-        createPresetLeg({ route: "RPVD" }),
-        createPresetLeg({ route: "DAUIN", tc: 197, distance: 9, cas: 70 }),
-        createPresetLeg({ route: "ZAMBOANGUITA", tc: 218, distance: 8, cas: 85 }),
-        createPresetLeg({ route: "ALIGUAY", tc: 176, distance: 22, cas: 85 }),
-        createPresetLeg({ route: "RPMG", tc: 137, distance: 11, cas: 85 }),
-      ];
-    }
-    if (departure === "RPMG" && destination === "RPVD") {
-      return [
-        createPresetLeg({ route: "RPMG" }),
-        createPresetLeg({ route: "TAGULO POINT", tc: 16, distance: 8, cas: 70 }),
-        createPresetLeg({ route: "SELINOG", tc: 18, distance: 8, cas: 85 }),
-        createPresetLeg({ route: "APO ISLAND", tc: 327, distance: 16, cas: 85 }),
-        createPresetLeg({ route: "DAUIN", tc: 359, distance: 7, cas: 85 }),
-        createPresetLeg({ route: "RPVD", tc: 22, distance: 7, cas: 85 }),
-      ];
-    }
-    if (departure === "RPVD" && destination === "RPSP") {
-      return [
-        createPresetLeg({ route: "RPVD" }),
-        createPresetLeg({ route: "SUMILON", tc: 35, distance: 8, cas: 70 }),
-        createPresetLeg({ route: "OSLOB", tc: 30, distance: 6, cas: 85 }),
-        createPresetLeg({ route: "DOLJO", tc: 76, distance: 18, cas: 85 }),
-        createPresetLeg({ route: "RPSP", tc: 111, distance: 4, cas: 85 }),
-      ];
-    }
-    if (departure === "RPMG" && destination === "RPSP") {
-      return [
-        createPresetLeg({ route: "RPMG" }),
-        createPresetLeg({ route: "TAUOLO POINT", tc: 16, distance: 8, cas: 70 }),
-        createPresetLeg({ route: "SELINOG", tc: 14, distance: 8, cas: 85 }),
-        createPresetLeg({ route: "SAN JUAN", tc: 14, distance: 19, cas: 85 }),
-        createPresetLeg({ route: "LAZI", tc: 116, distance: 8, cas: 85 }),
-        createPresetLeg({ route: "MARIA", tc: 39, distance: 7, cas: 85 }),
-        createPresetLeg({ route: "PAMILICAN", tc: 38, distance: 24, cas: 85 }),
-        createPresetLeg({ route: "RPSP", tc: 300, distance: 10, cas: 85 }),
-      ];
-    }
-    return null;
+    const match = state.catalog.routePresets.find(
+      (preset) => normalizeCode(preset.departure) === departure && normalizeCode(preset.destination) === destination,
+    );
+    if (!match || !Array.isArray(match.legs) || match.legs.length === 0) return null;
+    return match.legs.map((leg) => createPresetLeg(leg));
   }
 
   function getPresetStatusMarkup() {
@@ -1164,7 +1523,7 @@
 
   function autofillAirportRow(index, rawValue) {
     const code = String(rawValue || "").trim().toUpperCase();
-    const airport = AIRPORTS.find((item) => item.code === code || item.id === code);
+    const airport = state.catalog.airports.find((item) => item.code === code || item.id === code);
     if (!airport) return;
     state.navlog.radios[index] = {
       ...state.navlog.radios[index],
@@ -1317,7 +1676,7 @@
 
   function wireManual() {
     document.getElementById("back-from-manual").addEventListener("click", () => {
-      state.view = "setup";
+      state.view = state.meta.lastNonDocView || "setup";
       render();
     });
   }
@@ -1326,6 +1685,7 @@
     const openManualButton = document.getElementById("open-manual");
     if (openManualButton) {
       openManualButton.addEventListener("click", () => {
+        state.meta.lastNonDocView = state.view;
         state.view = "manual";
         render();
       });
@@ -1333,6 +1693,7 @@
     const openPrivacyButton = document.getElementById("open-privacy");
     if (openPrivacyButton) {
       openPrivacyButton.addEventListener("click", () => {
+        state.meta.lastNonDocView = state.view;
         state.view = "privacy";
         render();
       });
@@ -1424,9 +1785,530 @@
     const backButton = document.getElementById("back-from-privacy");
     if (!backButton) return;
     backButton.addEventListener("click", () => {
-      state.view = "setup";
+      state.view = state.meta.lastNonDocView || "setup";
       render();
     });
+  }
+
+  function wireUtcAdminTrigger() {
+    document.querySelectorAll("#utc-clock").forEach((clockNode) => {
+      clockNode.addEventListener("click", handleUtcAdminTap);
+    });
+  }
+
+  function handleUtcAdminTap() {
+    const now = Date.now();
+    const timedOut =
+      !state.admin.lastClickAt
+      || (now - state.admin.lastClickAt) > UTC_ADMIN_CLICK_WINDOW_MS
+      || (state.admin.firstClickAt && (now - state.admin.firstClickAt) > UTC_ADMIN_TOTAL_TIMEOUT_MS);
+    if (timedOut) {
+      state.admin.clickCount = 0;
+      state.admin.firstClickAt = now;
+    }
+    if (state.admin.clickCount === 0) state.admin.firstClickAt = now;
+    state.admin.clickCount += 1;
+    state.admin.lastClickAt = now;
+
+    if (state.admin.clickCount < 5) return;
+    state.admin.clickCount = 0;
+    state.admin.lastClickAt = 0;
+    state.admin.firstClickAt = 0;
+    state.admin.error = "";
+    state.admin.notice = "";
+    state.meta.lastNonDocView = state.view;
+    state.view = "admin-login";
+    render();
+  }
+
+  function wireAdminLogin() {
+    const backButton = document.getElementById("back-from-admin-login");
+    if (backButton) {
+      backButton.addEventListener("click", () => {
+        state.view = state.meta.lastNonDocView || "setup";
+        render();
+      });
+    }
+
+    const connectButton = document.getElementById("admin-connect-supabase");
+    if (connectButton) {
+      connectButton.addEventListener("click", async () => {
+        const urlInput = document.getElementById("admin-supabase-url");
+        const anonInput = document.getElementById("admin-supabase-anon");
+        state.admin.supabaseUrl = String(urlInput ? urlInput.value : "").trim();
+        state.admin.supabaseAnonKey = String(anonInput ? anonInput.value : "").trim();
+        writeStoredValue(SUPABASE_URL_KEY, state.admin.supabaseUrl);
+        writeStoredValue(SUPABASE_ANON_KEY, state.admin.supabaseAnonKey);
+        const ok = await connectSupabaseClient(true);
+        if (ok) {
+          state.admin.notice = "Supabase connected.";
+          await loadPublicCatalogFromSupabase();
+        }
+        render();
+      });
+    }
+
+    const submitButton = document.getElementById("admin-login-submit");
+    if (submitButton) {
+      submitButton.addEventListener("click", async () => {
+        await signInAdmin();
+      });
+    }
+  }
+
+  function wireAdminPanel() {
+    if (!state.admin.session) {
+      state.view = "admin-login";
+      render();
+      return;
+    }
+    const backButton = document.getElementById("back-from-admin");
+    if (backButton) {
+      backButton.addEventListener("click", () => {
+        state.view = "setup";
+        render();
+      });
+    }
+    const signOutButton = document.getElementById("admin-sign-out");
+    if (signOutButton) {
+      signOutButton.addEventListener("click", async () => {
+        await signOutAdmin();
+      });
+    }
+    const refreshButton = document.getElementById("admin-refresh-data");
+    if (refreshButton) {
+      refreshButton.addEventListener("click", async () => {
+        await loadAdminData();
+      });
+    }
+
+    const presetSelect = document.getElementById("admin-preset-select");
+    if (presetSelect) {
+      presetSelect.addEventListener("change", (event) => {
+        selectPresetForEditing(event.target.value);
+        render();
+      });
+    }
+    const presetNewButton = document.getElementById("admin-preset-new");
+    if (presetNewButton) {
+      presetNewButton.addEventListener("click", () => {
+        state.admin.selectedPresetId = "";
+        state.admin.presetForm = createEmptyPresetForm();
+        render();
+      });
+    }
+    const presetSaveButton = document.getElementById("admin-preset-save");
+    if (presetSaveButton) {
+      presetSaveButton.addEventListener("click", async () => {
+        readPresetFormFromInputs();
+        await savePresetFromAdmin();
+      });
+    }
+    const presetDeleteButton = document.getElementById("admin-preset-delete");
+    if (presetDeleteButton) {
+      presetDeleteButton.addEventListener("click", async () => {
+        await deletePresetFromAdmin();
+      });
+    }
+
+    const airportSelect = document.getElementById("admin-airport-select");
+    if (airportSelect) {
+      airportSelect.addEventListener("change", (event) => {
+        selectAirportForEditing(event.target.value);
+        render();
+      });
+    }
+    const airportNewButton = document.getElementById("admin-airport-new");
+    if (airportNewButton) {
+      airportNewButton.addEventListener("click", () => {
+        state.admin.selectedAirportCode = "";
+        state.admin.airportForm = createEmptyAirportForm();
+        render();
+      });
+    }
+    const airportSaveButton = document.getElementById("admin-airport-save");
+    if (airportSaveButton) {
+      airportSaveButton.addEventListener("click", async () => {
+        readAirportFormFromInputs();
+        await saveAirportFromAdmin();
+      });
+    }
+    const airportDeleteButton = document.getElementById("admin-airport-delete");
+    if (airportDeleteButton) {
+      airportDeleteButton.addEventListener("click", async () => {
+        await deleteAirportFromAdmin();
+      });
+    }
+
+    const manualSaveButton = document.getElementById("admin-manual-save");
+    if (manualSaveButton) {
+      manualSaveButton.addEventListener("click", async () => {
+        const manualInput = document.getElementById("admin-manual-html");
+        state.admin.manualHtmlDraft = String(manualInput ? manualInput.value : "");
+        await saveContentPage("manual", state.admin.manualHtmlDraft);
+      });
+    }
+    const privacySaveButton = document.getElementById("admin-privacy-save");
+    if (privacySaveButton) {
+      privacySaveButton.addEventListener("click", async () => {
+        const privacyInput = document.getElementById("admin-privacy-html");
+        state.admin.privacyHtmlDraft = String(privacyInput ? privacyInput.value : "");
+        await saveContentPage("privacy", state.admin.privacyHtmlDraft);
+      });
+    }
+  }
+
+  async function connectSupabaseClient(forceRecreate) {
+    state.admin.error = "";
+    if (!state.admin.supabaseUrl || !state.admin.supabaseAnonKey) {
+      state.admin.error = "Supabase URL and anon key are required.";
+      return false;
+    }
+    if (!window.supabase || typeof window.supabase.createClient !== "function") {
+      state.admin.error = "Supabase SDK did not load.";
+      return false;
+    }
+    if (
+      forceRecreate
+      || !supabaseClient
+      || supabaseClient.__navlogUrl !== state.admin.supabaseUrl
+      || supabaseClient.__navlogAnon !== state.admin.supabaseAnonKey
+    ) {
+      supabaseClient = window.supabase.createClient(state.admin.supabaseUrl, state.admin.supabaseAnonKey);
+      supabaseClient.__navlogUrl = state.admin.supabaseUrl;
+      supabaseClient.__navlogAnon = state.admin.supabaseAnonKey;
+    }
+    try {
+      const { data, error } = await supabaseClient.auth.getSession();
+      if (error) throw error;
+      state.admin.session = data ? data.session : null;
+      return true;
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Could not connect to Supabase.";
+      return false;
+    }
+  }
+
+  async function signInAdmin() {
+    const ok = await connectSupabaseClient(false);
+    if (!ok) {
+      render();
+      return;
+    }
+    const emailInput = document.getElementById("admin-login-email");
+    const passwordInput = document.getElementById("admin-login-password");
+    const email = String(emailInput ? emailInput.value : "").trim();
+    const password = String(passwordInput ? passwordInput.value : "");
+    if (!email || !password) {
+      state.admin.error = "Email and password are required.";
+      render();
+      return;
+    }
+    state.admin.loading = true;
+    state.admin.error = "";
+    state.admin.notice = "";
+    render();
+    try {
+      const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      state.admin.session = data ? data.session : null;
+      await loadAdminData();
+      state.view = "admin";
+      state.admin.notice = "Signed in successfully.";
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Admin sign-in failed.";
+    } finally {
+      state.admin.loading = false;
+      render();
+    }
+  }
+
+  async function signOutAdmin() {
+    if (supabaseClient) {
+      try {
+        await supabaseClient.auth.signOut();
+      } catch {
+        // ignore
+      }
+    }
+    state.admin.session = null;
+    state.admin.selectedPresetId = "";
+    state.admin.selectedAirportCode = "";
+    state.admin.notice = "Signed out.";
+    state.admin.error = "";
+    state.view = "admin-login";
+    render();
+  }
+
+  async function loadAdminData() {
+    const ok = await connectSupabaseClient(false);
+    if (!ok) {
+      render();
+      return;
+    }
+    state.admin.loading = true;
+    state.admin.error = "";
+    state.admin.notice = "";
+    try {
+      const [presetResult, airportResult, contentResult] = await Promise.all([
+        supabaseClient.from("route_presets").select("*").order("name", { ascending: true }),
+        supabaseClient.from("airports").select("*").order("code", { ascending: true }),
+        supabaseClient.from("content_pages").select("*"),
+      ]);
+      if (presetResult.error) throw presetResult.error;
+      if (airportResult.error) throw airportResult.error;
+      if (contentResult.error) throw contentResult.error;
+
+      state.admin.presets = (presetResult.data || []).map((row) => ({
+        id: String(row.id),
+        name: String(row.name || ""),
+        departure: normalizeCode(row.departure),
+        destination: normalizeCode(row.destination),
+        legs: Array.isArray(row.legs_json) ? row.legs_json : [],
+      }));
+      state.admin.airports = (airportResult.data || []).map((row) => normalizeAirportRecord({
+        id: row.id,
+        code: row.code,
+        cptAtis: row.cpt_atis,
+        depAap: row.dep_aap,
+        twr: row.twr,
+        gnd: row.gnd,
+        fss: row.fss,
+        remarks: row.remarks,
+      }));
+      const contentMap = {};
+      (contentResult.data || []).forEach((row) => {
+        contentMap[String(row.key || "").toLowerCase()] = String(row.body_html || "");
+      });
+      state.catalog.routePresets = state.admin.presets.map((preset) => clonePreset(preset));
+      state.catalog.airports = state.admin.airports.map((airport) => ({ ...airport }));
+      state.catalog.content.manualHtml = contentMap.manual || "";
+      state.catalog.content.privacyHtml = contentMap.privacy || "";
+      state.admin.manualHtmlDraft = state.catalog.content.manualHtml;
+      state.admin.privacyHtmlDraft = state.catalog.content.privacyHtml;
+
+      if (state.admin.selectedPresetId) selectPresetForEditing(state.admin.selectedPresetId);
+      else if (state.admin.presets[0]) selectPresetForEditing(state.admin.presets[0].id);
+      if (state.admin.selectedAirportCode) selectAirportForEditing(state.admin.selectedAirportCode);
+      else if (state.admin.airports[0]) selectAirportForEditing(state.admin.airports[0].code);
+
+      state.admin.notice = "Admin data loaded.";
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Could not load admin data.";
+    } finally {
+      state.admin.loading = false;
+      render();
+    }
+  }
+
+  function readPresetFormFromInputs() {
+    const name = document.getElementById("admin-preset-name");
+    const departure = document.getElementById("admin-preset-departure");
+    const destination = document.getElementById("admin-preset-destination");
+    const legs = document.getElementById("admin-preset-legs");
+    state.admin.presetForm = {
+      name: String(name ? name.value : "").trim(),
+      departure: normalizeCode(departure ? departure.value : ""),
+      destination: normalizeCode(destination ? destination.value : ""),
+      legsJson: String(legs ? legs.value : "[]"),
+    };
+  }
+
+  function readAirportFormFromInputs() {
+    const get = (id) => {
+      const node = document.getElementById(id);
+      return String(node ? node.value : "");
+    };
+    state.admin.airportForm = normalizeAirportRecord({
+      id: get("admin-airport-id"),
+      code: get("admin-airport-code"),
+      cptAtis: get("admin-airport-cptAtis"),
+      depAap: get("admin-airport-depAap"),
+      twr: get("admin-airport-twr"),
+      gnd: get("admin-airport-gnd"),
+      fss: get("admin-airport-fss"),
+      remarks: get("admin-airport-remarks"),
+    });
+  }
+
+  function selectPresetForEditing(presetId) {
+    state.admin.selectedPresetId = String(presetId || "");
+    const selected = state.admin.presets.find((preset) => preset.id === state.admin.selectedPresetId);
+    if (!selected) {
+      state.admin.presetForm = createEmptyPresetForm();
+      return;
+    }
+    state.admin.presetForm = {
+      name: String(selected.name || ""),
+      departure: normalizeCode(selected.departure),
+      destination: normalizeCode(selected.destination),
+      legsJson: JSON.stringify(selected.legs || [], null, 2),
+    };
+  }
+
+  function selectAirportForEditing(code) {
+    state.admin.selectedAirportCode = normalizeCode(code);
+    const selected = state.admin.airports.find((airport) => airport.code === state.admin.selectedAirportCode);
+    if (!selected) {
+      state.admin.airportForm = createEmptyAirportForm();
+      return;
+    }
+    state.admin.airportForm = normalizeAirportRecord(selected);
+  }
+
+  async function savePresetFromAdmin() {
+    const ok = await connectSupabaseClient(false);
+    if (!ok) {
+      render();
+      return;
+    }
+    let parsedLegs = [];
+    try {
+      parsedLegs = JSON.parse(state.admin.presetForm.legsJson || "[]");
+    } catch {
+      state.admin.error = "Preset legs JSON is invalid.";
+      state.admin.notice = "";
+      render();
+      return;
+    }
+    if (!Array.isArray(parsedLegs)) {
+      state.admin.error = "Preset legs JSON must be an array.";
+      state.admin.notice = "";
+      render();
+      return;
+    }
+    const payload = {
+      name: state.admin.presetForm.name || `${state.admin.presetForm.departure} to ${state.admin.presetForm.destination}`,
+      departure: normalizeCode(state.admin.presetForm.departure),
+      destination: normalizeCode(state.admin.presetForm.destination),
+      legs_json: parsedLegs,
+    };
+    if (!payload.departure || !payload.destination) {
+      state.admin.error = "Preset departure and destination are required.";
+      state.admin.notice = "";
+      render();
+      return;
+    }
+    state.admin.error = "";
+    state.admin.notice = "";
+    try {
+      let result;
+      if (state.admin.selectedPresetId) {
+        result = await supabaseClient.from("route_presets").update(payload).eq("id", state.admin.selectedPresetId).select().single();
+      } else {
+        result = await supabaseClient.from("route_presets").insert(payload).select().single();
+      }
+      if (result.error) throw result.error;
+      state.admin.notice = "Preset saved.";
+      if (result.data && result.data.id) state.admin.selectedPresetId = String(result.data.id);
+      await loadAdminData();
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Could not save preset.";
+      render();
+    }
+  }
+
+  async function deletePresetFromAdmin() {
+    const ok = await connectSupabaseClient(false);
+    if (!ok || !state.admin.selectedPresetId) {
+      render();
+      return;
+    }
+    if (!window.confirm("Delete this preset?")) return;
+    state.admin.error = "";
+    state.admin.notice = "";
+    try {
+      const { error } = await supabaseClient.from("route_presets").delete().eq("id", state.admin.selectedPresetId);
+      if (error) throw error;
+      state.admin.selectedPresetId = "";
+      state.admin.presetForm = createEmptyPresetForm();
+      state.admin.notice = "Preset deleted.";
+      await loadAdminData();
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Could not delete preset.";
+      render();
+    }
+  }
+
+  async function saveAirportFromAdmin() {
+    const ok = await connectSupabaseClient(false);
+    if (!ok) {
+      render();
+      return;
+    }
+    const airport = normalizeAirportRecord(state.admin.airportForm);
+    if (!airport.code) {
+      state.admin.error = "Airport code is required.";
+      state.admin.notice = "";
+      render();
+      return;
+    }
+    const payload = {
+      code: airport.code,
+      id: airport.id || airport.code,
+      cpt_atis: airport.cptAtis,
+      dep_aap: airport.depAap,
+      twr: airport.twr,
+      gnd: airport.gnd,
+      fss: airport.fss,
+      remarks: airport.remarks,
+    };
+    state.admin.error = "";
+    state.admin.notice = "";
+    try {
+      const { error } = await supabaseClient.from("airports").upsert(payload, { onConflict: "code" });
+      if (error) throw error;
+      state.admin.selectedAirportCode = airport.code;
+      state.admin.notice = "Airport saved.";
+      await loadAdminData();
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Could not save airport.";
+      render();
+    }
+  }
+
+  async function deleteAirportFromAdmin() {
+    const ok = await connectSupabaseClient(false);
+    if (!ok || !state.admin.selectedAirportCode) {
+      render();
+      return;
+    }
+    if (!window.confirm("Delete this airport?")) return;
+    state.admin.error = "";
+    state.admin.notice = "";
+    try {
+      const { error } = await supabaseClient.from("airports").delete().eq("code", state.admin.selectedAirportCode);
+      if (error) throw error;
+      state.admin.selectedAirportCode = "";
+      state.admin.airportForm = createEmptyAirportForm();
+      state.admin.notice = "Airport deleted.";
+      await loadAdminData();
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Could not delete airport.";
+      render();
+    }
+  }
+
+  async function saveContentPage(key, bodyHtml) {
+    const ok = await connectSupabaseClient(false);
+    if (!ok) {
+      render();
+      return;
+    }
+    const pageKey = String(key || "").trim().toLowerCase();
+    if (!pageKey) return;
+    state.admin.error = "";
+    state.admin.notice = "";
+    try {
+      const payload = { key: pageKey, body_html: String(bodyHtml || "") };
+      const { error } = await supabaseClient.from("content_pages").upsert(payload, { onConflict: "key" });
+      if (error) throw error;
+      state.admin.notice = `${pageKey} content saved.`;
+      await loadAdminData();
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : `Could not save ${pageKey} content.`;
+      render();
+    }
   }
 
   function handleBugReportEscape(event) {
@@ -2116,10 +2998,60 @@
     `;
   }
 
+  async function loadPublicCatalogFromSupabase() {
+    if (loadingPublicCatalog) return;
+    if (!state.admin.supabaseUrl || !state.admin.supabaseAnonKey) return;
+    const ok = await connectSupabaseClient(false);
+    if (!ok || !supabaseClient) return;
+    loadingPublicCatalog = true;
+    try {
+      const [presetResult, airportResult, contentResult] = await Promise.all([
+        supabaseClient.from("route_presets").select("*").order("name", { ascending: true }),
+        supabaseClient.from("airports").select("*").order("code", { ascending: true }),
+        supabaseClient.from("content_pages").select("*"),
+      ]);
+      if (presetResult.error || airportResult.error || contentResult.error) return;
+
+      const dbPresets = (presetResult.data || []).map((row) => ({
+        id: String(row.id),
+        name: String(row.name || ""),
+        departure: normalizeCode(row.departure),
+        destination: normalizeCode(row.destination),
+        legs: Array.isArray(row.legs_json) ? row.legs_json : [],
+      }));
+      const dbAirports = (airportResult.data || []).map((row) => normalizeAirportRecord({
+        id: row.id,
+        code: row.code,
+        cptAtis: row.cpt_atis,
+        depAap: row.dep_aap,
+        twr: row.twr,
+        gnd: row.gnd,
+        fss: row.fss,
+        remarks: row.remarks,
+      }));
+      const contentMap = {};
+      (contentResult.data || []).forEach((row) => {
+        contentMap[String(row.key || "").toLowerCase()] = String(row.body_html || "");
+      });
+
+      if (dbPresets.length) state.catalog.routePresets = dbPresets.map((preset) => clonePreset(preset));
+      if (dbAirports.length) state.catalog.airports = dbAirports.map((airport) => ({ ...airport }));
+      if (typeof contentMap.manual === "string") state.catalog.content.manualHtml = contentMap.manual;
+      if (typeof contentMap.privacy === "string") state.catalog.content.privacyHtml = contentMap.privacy;
+    } finally {
+      loadingPublicCatalog = false;
+    }
+  }
+
+  async function initializeApp() {
+    await loadPublicCatalogFromSupabase();
+    render();
+  }
+
   window.addEventListener("beforeunload", (event) => {
     event.preventDefault();
     event.returnValue = "";
   });
 
-  render();
+  initializeApp();
 })();
