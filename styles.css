@@ -194,10 +194,51 @@ select { font: inherit; }
 .entry-actions { margin-top: 18px; }
 .manual-front-btn { margin-left: auto; }
 
+.front-footer {
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 2px solid rgba(46, 41, 35, 0.16);
+  border-radius: 16px;
+  background: rgba(251, 247, 239, 0.85);
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.front-footer-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.footer-link {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 4px 2px;
+  font-size: 0.88rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.footer-link:hover {
+  color: #113743;
+}
+
+.front-footer-copy {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .bug-report-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(10, 10, 10, 0.5);
+  background: rgba(14, 16, 20, 0.6);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -207,11 +248,12 @@ select { font: inherit; }
 
 .bug-report-modal {
   width: min(620px, 100%);
-  border: 2px solid rgba(46, 41, 35, 0.22);
-  border-radius: 16px;
-  background: rgba(251, 247, 239, 0.98);
-  box-shadow: var(--shadow);
-  padding: 14px;
+  border: 2px solid rgba(46, 41, 35, 0.2);
+  border-radius: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(251, 247, 239, 0.98));
+  box-shadow: 0 26px 48px rgba(20, 18, 15, 0.26);
+  padding: 18px;
 }
 
 .bug-report-head {
@@ -223,7 +265,7 @@ select { font: inherit; }
 
 .bug-report-head h3 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 1.2rem;
 }
 
 .bug-report-close {
@@ -232,8 +274,8 @@ select { font: inherit; }
 
 .bug-report-form {
   display: grid;
-  gap: 10px;
-  margin-top: 10px;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .bug-report-form label {
@@ -261,6 +303,13 @@ select { font: inherit; }
   resize: vertical;
 }
 
+.bug-report-form textarea:focus,
+.bug-report-form input:focus {
+  outline: none;
+  border-color: rgba(33, 76, 90, 0.6);
+  box-shadow: 0 0 0 4px rgba(33, 76, 90, 0.14);
+}
+
 .bug-report-status {
   margin: 0;
   font-size: 0.85rem;
@@ -273,6 +322,10 @@ select { font: inherit; }
 .bug-report-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.privacy-card p {
+  line-height: 1.5;
 }
 
 .preset-status {

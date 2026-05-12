@@ -126,10 +126,12 @@
     computeRouteMath();
     if (state.view === "setup") app.innerHTML = renderSetupScreen();
     else if (state.view === "manual") app.innerHTML = renderManualScreen();
+    else if (state.view === "privacy") app.innerHTML = renderPrivacyScreen();
     else app.innerHTML = renderNavlogScreen();
     startUtcClock();
     if (state.view === "setup") wireSetup();
     else if (state.view === "manual") wireManual();
+    else if (state.view === "privacy") wirePrivacy();
     else wireNavlog();
     if (state.view === "manual") typesetManualMath();
   }
@@ -176,13 +178,26 @@
           <div class="entry-actions">
             <button class="action primary" id="open-sheet">Open navlog</button>
             ${showResume ? `<button class="action" id="resume-sheet">Resume current sheet</button>` : ""}
-            <button class="action" id="open-bug-report" type="button">Report bug</button>
-            <button class="action manual-front-btn" id="open-manual" type="button">User manual</button>
           </div>
         </section>
+        ${renderFrontFooter()}
         ${renderBugReportModal()}
       </main>
       </div>
+    `;
+  }
+
+  function renderFrontFooter() {
+    const year = new Date().getUTCFullYear();
+    return `
+      <footer class="front-footer">
+        <div class="front-footer-links">
+          <button class="footer-link" id="open-bug-report" type="button">Bug report</button>
+          <button class="footer-link" id="open-manual" type="button">User manual</button>
+          <button class="footer-link" id="open-privacy" type="button">Privacy policy</button>
+        </div>
+        <p class="front-footer-copy">© ${year} Navlog. All rights reserved.</p>
+      </footer>
     `;
   }
 
@@ -292,6 +307,49 @@
             <div class="manual-row"><p class="manual-formula">Preset route delete</p><p class="manual-note">If a preset leg is removed, the next leg TC is cleared for manual entry.</p></div>
             <div class="manual-row"><p class="manual-formula">Airport autofill</p><p class="manual-note">Type airport code and press Enter to auto-fill frequency/remarks.</p></div>
             <div class="manual-row"><p class="manual-formula">Distance to go</p><p class="manual-note">If enabled, a remaining-distance value is shown below each waypoint route field.</p></div>
+          </div>
+        </section>
+      </main>
+      </div>
+    `;
+  }
+
+  function renderPrivacyScreen() {
+    return `
+      <div class="ui-scale">
+      <main class="entry-page">
+        <section class="topbar centered">
+          <div class="top-side"><button class="back-link" id="back-from-privacy">Back</button></div>
+          <div class="top-center">
+            <h1>Privacy Policy</h1>
+            <p class="setup-caption">Last updated: ${formatPolicyDate()}</p>
+          </div>
+          <div class="top-side right"></div>
+        </section>
+        <section class="setup-card manual-card privacy-card">
+          <div class="manual-section">
+            <h3>Overview</h3>
+            <p>Navlog is a flight planning utility. We only collect information needed to run core features and improve reliability.</p>
+          </div>
+          <div class="manual-section">
+            <h3>Information You Enter</h3>
+            <p>Flight planning fields you type into Navlog are processed in your browser for calculations. Bug reports may include the message you submit, optional email address, and basic device/browser metadata.</p>
+          </div>
+          <div class="manual-section">
+            <h3>Bug Reports</h3>
+            <p>When you submit a bug report, data is sent to our backend endpoint and delivered by our email service provider so we can troubleshoot and respond. Do not include sensitive personal or operational information in bug reports.</p>
+          </div>
+          <div class="manual-section">
+            <h3>How We Use Information</h3>
+            <p>We use submitted data to provide navlog functionality, diagnose technical issues, and improve service quality. We do not sell your data.</p>
+          </div>
+          <div class="manual-section">
+            <h3>Data Retention</h3>
+            <p>Bug report emails are retained as long as needed for support, maintenance, legal compliance, and record-keeping.</p>
+          </div>
+          <div class="manual-section">
+            <h3>Contact</h3>
+            <p>For privacy concerns, use the bug report form and include “Privacy” in your message subject line.</p>
           </div>
         </section>
       </main>
@@ -674,6 +732,13 @@
         render();
       });
     }
+    const openPrivacyButton = document.getElementById("open-privacy");
+    if (openPrivacyButton) {
+      openPrivacyButton.addEventListener("click", () => {
+        state.view = "privacy";
+        render();
+      });
+    }
     const openBugReportButton = document.getElementById("open-bug-report");
     if (openBugReportButton) {
       openBugReportButton.addEventListener("click", () => {
@@ -703,6 +768,12 @@
         state.bugReport.note = "";
         render();
       });
+    }
+    document.removeEventListener("keydown", handleBugReportEscape);
+    if (state.bugReport.open) {
+      document.addEventListener("keydown", handleBugReportEscape);
+      const messageInput = document.getElementById("bug-report-message");
+      if (messageInput) messageInput.focus();
     }
     const bugReportForm = document.getElementById("bug-report-form");
     if (bugReportForm) {
@@ -1340,6 +1411,24 @@
       state.view = "setup";
       render();
     });
+  }
+
+  function wirePrivacy() {
+    const backButton = document.getElementById("back-from-privacy");
+    if (!backButton) return;
+    backButton.addEventListener("click", () => {
+      state.view = "setup";
+      render();
+    });
+  }
+
+  function handleBugReportEscape(event) {
+    if (event.key !== "Escape" || !state.bugReport.open || state.bugReport.submitting) return;
+    state.bugReport.open = false;
+    state.bugReport.status = "";
+    state.bugReport.note = "";
+    document.removeEventListener("keydown", handleBugReportEscape);
+    render();
   }
 
   function typesetManualMath() {
@@ -1995,6 +2084,14 @@
     if (!iso) return "";
     const [year, month, day] = iso.split("-");
     return `${year.slice(-2)}/${month}/${day}`;
+  }
+
+  function formatPolicyDate() {
+    const now = new Date();
+    const year = now.getUTCFullYear();
+    const month = String(now.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(now.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
 
   function renderDateHeaderControl(displayDateValue) {
