@@ -1634,9 +1634,9 @@ select { font: inherit; }
 }
 
 .additional-info-row-action {
-  width: var(--admin-row-height) !important;
-  min-width: var(--admin-row-height) !important;
-  max-width: var(--admin-row-height) !important;
+  width: calc(var(--admin-row-height) + 2px) !important;
+  min-width: calc(var(--admin-row-height) + 2px) !important;
+  max-width: calc(var(--admin-row-height) + 2px) !important;
   padding: 0 !important;
   text-align: center;
   vertical-align: middle;
@@ -2044,9 +2044,9 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   }
 
   .additional-info-row-action {
-    width: var(--admin-row-height) !important;
-    min-width: var(--admin-row-height) !important;
-    max-width: var(--admin-row-height) !important;
+    width: calc(var(--admin-row-height) + 2px) !important;
+    min-width: calc(var(--admin-row-height) + 2px) !important;
+    max-width: calc(var(--admin-row-height) + 2px) !important;
   }
 }
 
