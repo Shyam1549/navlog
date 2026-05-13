@@ -1592,7 +1592,7 @@ select { font: inherit; }
   min-width: var(--admin-row-height);
   height: var(--admin-row-height);
   border-radius: 8px;
-  margin-right: 1px;
+  margin-right: 4px;
 }
 
 .additional-info-inline-back {
