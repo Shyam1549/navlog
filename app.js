@@ -85,7 +85,6 @@
       maintenanceMode: false,
       maintenanceSaveStatus: "",
       panel: "dashboard",
-      additionalInfoPanel: "aircraft",
       additionalInfoDraft: [],
       additionalInfoSaveStatus: "",
     },
@@ -637,7 +636,6 @@
     const airportCodeOptions = state.admin.airports
       .map((airport) => `<option value="${escapeAttr(airport.code)}"></option>`)
       .join("");
-    const additionalInfoPanel = String(state.admin.additionalInfoPanel || "aircraft");
     const additionalInfoRows = normalizeAdditionalInfoTable(
       state.admin.additionalInfoDraft,
       getAdditionalInfoRowCount(state.admin.additionalInfoDraft),
@@ -828,10 +826,8 @@
           </div>
           <div class="manual-section${panel === "additional-info" ? "" : " hidden"}">
             <h3>Additional Information</h3><br>
-            <div class="admin-submenu">
-              <button class="admin-submenu-btn${additionalInfoPanel === "aircraft" ? " active" : ""}" data-admin-additional-panel="aircraft" type="button">Aircraft Information</button>
-            </div>
-            <div class="additional-info-subsection${additionalInfoPanel === "aircraft" ? "" : " hidden"}">
+            <div class="additional-info-subsection">
+              <h4 class="additional-info-subtitle">Aircraft Information</h4>
               <div class="additional-info-wrap">
                 <table class="additional-info-table editable">
                   <tbody>
@@ -859,11 +855,13 @@
             <h3>Overview</h3><br>
             <p class="setup-caption">Select a section from the left menu to manage content.</p>
             <div class="admin-game-card">
-              <canvas id="admin-mini-game" width="980" height="180" aria-label="Mini runner game"></canvas>
+              <div class="admin-game-stage">
+                <canvas id="admin-mini-game" width="980" height="180" aria-label="Mini runner game"></canvas>
+                <span class="admin-subtle-status admin-game-highscore" id="admin-game-highscore"></span>
+              </div>
               <div class="entry-actions">
                 <button class="action primary" id="admin-game-start" type="button">Start</button>
                 <span class="admin-subtle-status" id="admin-game-status"></span>
-                <span class="admin-subtle-status" id="admin-game-highscore"></span>
               </div>
             </div>
           </div>
@@ -2353,15 +2351,6 @@
         await saveMaintenanceModeFromAdmin(enabled);
       });
     }
-    const additionalPanelButtons = Array.from(document.querySelectorAll("[data-admin-additional-panel]"));
-    additionalPanelButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        const nextPanel = String(button.getAttribute("data-admin-additional-panel") || "");
-        if (!nextPanel || nextPanel === state.admin.additionalInfoPanel) return;
-        state.admin.additionalInfoPanel = nextPanel;
-        render();
-      });
-    });
     const additionalInputs = Array.from(document.querySelectorAll("[data-admin-additional]"));
     additionalInputs.forEach((input) => {
       input.addEventListener("input", () => {
@@ -4372,16 +4361,15 @@
             wrapped.textContent = input.value;
             input.replaceWith(wrapped);
           });
-          // Route cells need strict one-child centering to avoid horizontal drift in PDF mode.
-          doc.querySelectorAll(".route-main").forEach((routeMain) => {
-            const routeValueNode = routeMain.querySelector(".pdf-wrap-value");
-            if (!routeValueNode) return;
-            const routeValue = routeValueNode.textContent || "";
-            routeMain.innerHTML = "";
+          // Route cells use a strict single centered node in PDF mode.
+          doc.querySelectorAll(".route-cell").forEach((routeCell) => {
+            const routeValueNode = routeCell.querySelector(".pdf-wrap-value");
+            const routeValue = routeValueNode ? (routeValueNode.textContent || "") : "";
+            routeCell.innerHTML = "";
             const centered = doc.createElement("div");
-            centered.className = "pdf-wrap-value pdf-route-value";
+            centered.className = "pdf-route-center";
             centered.textContent = routeValue;
-            routeMain.appendChild(centered);
+            routeCell.appendChild(centered);
           });
           doc.querySelectorAll("input").forEach((input) => {
             input.placeholder = "";

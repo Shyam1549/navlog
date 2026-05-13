@@ -1472,6 +1472,10 @@ select { font: inherit; }
   background: rgba(255, 255, 255, 0.48);
 }
 
+.admin-game-stage {
+  position: relative;
+}
+
 .admin-game-card h4 {
   margin: 0 0 6px;
   font-size: 0.98rem;
@@ -1488,6 +1492,20 @@ select { font: inherit; }
   border-radius: 10px;
   background: #f4ecdd;
   display: block;
+}
+
+.admin-game-highscore {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  min-height: 0;
+  padding: 3px 8px;
+  border: 1px solid rgba(46, 41, 35, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--ink);
+  font-size: 0.74rem;
+  letter-spacing: 0.02em;
 }
 
 .admin-title-gap > span {
@@ -1614,14 +1632,21 @@ select { font: inherit; }
 .additional-info-row-action {
   width: 42px;
   min-width: 42px;
-  padding: 0 !important;
+  padding: 4px !important;
   text-align: center;
   vertical-align: middle;
 }
 
 .additional-info-row-action .admin-mini-btn {
-  width: 100%;
-  min-width: 0;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  margin: 0 auto;
+  border-radius: 8px;
+  border-top: 2px solid var(--line);
+  border-right: 2px solid var(--line);
+  border-bottom: 2px solid var(--line);
 }
 
 .route-dtg {
@@ -2048,6 +2073,7 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0 !important;
 }
 .pdf-export .route-main {
   width: 100%;
@@ -2105,23 +2131,21 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 .pdf-export .atis-cell input {
   padding: 0 8px;
 }
-.pdf-export .route-main .pdf-wrap-value {
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-  width: 100% !important;
-  max-width: 100%;
+.pdf-export .route-cell .pdf-route-center {
+  width: 100%;
+  height: 100%;
+  min-height: 94px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
   justify-content: center;
   text-align: center;
-  margin: 0 auto !important;
-}
-.pdf-export .route-main .pdf-route-value {
-  width: 100% !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  justify-content: center !important;
-  text-align: center !important;
+  line-height: 1.15;
+  font-size: 1.08rem;
 }
 .pdf-export .spd-head { border-right: 2px solid var(--line) !important; }
+.pdf-export .tc-head { border-left: 2px solid var(--line) !important; }
 .pdf-export .navlog-box {
   font-size: 1.56rem;
   justify-content: center;
