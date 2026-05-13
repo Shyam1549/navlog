@@ -10,7 +10,6 @@
   --ui-scale: 0.84;
   --header-side-width: 250px;
   --admin-row-height: 42px;
-  --additional-info-cell-height: 42px;
 }
 
 * { box-sizing: border-box; }
@@ -541,11 +540,13 @@ select { font: inherit; }
 .admin-preset-row input,
 .admin-airport-row input {
   width: 100%;
-  min-height: 42px;
+  height: var(--admin-row-height);
+  min-height: var(--admin-row-height);
   border: 0;
   border-right: 1px solid rgba(46, 41, 35, 0.14);
   padding: 8px 10px;
   background: transparent;
+  line-height: 1.15;
 }
 
 .admin-preset-row input:last-of-type {
@@ -558,12 +559,17 @@ select { font: inherit; }
 
 .admin-mini-btn {
   border-radius: 0;
+  height: var(--admin-row-height);
   min-height: var(--admin-row-height);
   min-width: 42px;
   padding: 0;
   border-top: 0;
   border-right: 0;
   border-bottom: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .admin-mini-btn:disabled {
@@ -855,7 +861,7 @@ select { font: inherit; }
 .spd-head { box-shadow: inset -2px 0 0 var(--line); }
 
 .leg-row {
-  min-height: 88px;
+  min-height: 86px;
   border-bottom: 1.5px solid var(--line);
 }
 
@@ -864,6 +870,7 @@ select { font: inherit; }
 .field input {
   width: 100%;
   min-height: 86px;
+  height: 86px;
   border: 0;
   background: transparent;
   padding: 12px 10px;
@@ -1184,6 +1191,12 @@ select { font: inherit; }
   padding-bottom: 24px;
 }
 
+.route-main .remove-chip,
+.route-main .blank-chip {
+  min-height: 86px;
+  height: 86px;
+}
+
 .route-inline-hint {
   display: none;
   position: absolute;
@@ -1457,6 +1470,47 @@ select { font: inherit; }
   background: rgba(255, 255, 255, 0.55);
 }
 
+.admin-submenu {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.admin-submenu-btn {
+  border: 1.5px solid rgba(46, 41, 35, 0.18);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.56);
+  color: var(--ink);
+  min-height: 38px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.admin-submenu-btn.active {
+  border-color: rgba(33, 76, 90, 0.34);
+  background: rgba(219, 234, 240, 0.5);
+  color: #123a46;
+}
+
+.additional-info-subsection {
+  border: 1px solid rgba(46, 41, 35, 0.14);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.36);
+  padding: 10px;
+}
+
+.additional-info-controls {
+  margin: 0 0 8px;
+}
+
+.additional-info-controls .action {
+  min-width: 42px;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 10px;
+}
+
 .additional-info-subtitle {
   margin: 0 0 14px;
   font-size: 1.1rem;
@@ -1465,7 +1519,9 @@ select { font: inherit; }
 
 .additional-info-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
   min-width: 620px;
 }
 
@@ -1480,19 +1536,32 @@ select { font: inherit; }
 
 .additional-info-table.editable td {
   padding: 0;
-  height: calc(var(--additional-info-cell-height) - 2px);
+  height: var(--admin-row-height);
+  min-height: var(--admin-row-height);
 }
 
 .additional-info-table.editable td input {
+  display: block;
   width: 100%;
   border: 0;
   background: transparent;
-  min-height: calc(var(--additional-info-cell-height) - 2px);
-  height: calc(var(--additional-info-cell-height) - 2px);
+  min-height: 0;
+  height: 100%;
   padding: 0 6px;
   line-height: 1.15;
   font-size: 0.84rem;
   box-sizing: border-box;
+}
+
+.additional-info-row-action {
+  width: 42px;
+  min-width: 42px;
+  padding: 0 !important;
+}
+
+.additional-info-row-action .admin-mini-btn {
+  width: 100%;
+  min-width: 0;
 }
 
 .route-dtg {
@@ -1698,10 +1767,16 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   .head-cell.sub,
   .head-cell.tall { font-size: 0.72rem; }
 
-  .leg-row { min-height: 78px; }
+  .leg-row { min-height: 76px; }
   .field input {
     min-height: 76px;
+    height: 76px;
     font-size: 0.86rem;
+  }
+  .route-main .remove-chip,
+  .route-main .blank-chip {
+    min-height: 76px;
+    height: 76px;
   }
 
   .radio-row { min-height: 74px; }
@@ -1818,7 +1893,10 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
 .pdf-export .leg-row { min-height: 96px; }
 .pdf-export .radio-row { min-height: 86px; }
-.pdf-export .field input { min-height: 94px; }
+.pdf-export .field input {
+  min-height: 94px;
+  height: 94px;
+}
 .pdf-export .radio-row input { min-height: 84px; }
 .pdf-export .toc-tod-title,
 .pdf-export .toc-tod-card input { min-height: 74px; }

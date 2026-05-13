@@ -81,6 +81,7 @@
       announcementDrafts: [createEmptyAnnouncementDraft()],
       announcementSaveStatus: "",
       panel: "dashboard",
+      additionalInfoPanel: "aircraft",
       additionalInfoDraft: [],
       additionalInfoSaveStatus: "",
     },
@@ -89,6 +90,7 @@
       usingPresetRoute: false,
       lastNonDocView: "setup",
       docBackView: "",
+      additionalInfoPanel: "aircraft",
     },
   };
   const TRIG_TOLERANCE = 1e-6;
@@ -529,6 +531,7 @@
     const sourceRows = getAdditionalInfoRowCount(state.catalog.content.additionalInfoTable);
     const sourceCols = getAdditionalInfoColumnCount(state.catalog.content.additionalInfoTable);
     const table = normalizeAdditionalInfoTable(state.catalog.content.additionalInfoTable, sourceRows, sourceCols);
+    const viewPanel = String(state.meta.additionalInfoPanel || "aircraft");
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -540,13 +543,18 @@
           <div class="top-side right"></div>
         </section>
         <section class="setup-card privacy-card">
-          <h3 class="additional-info-subtitle">Aircraft Information</h3>
-          <div class="additional-info-wrap">
-            <table class="additional-info-table">
-              <tbody>
-                ${table.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}
-              </tbody>
-            </table>
+          <div class="admin-submenu">
+            <button class="admin-submenu-btn${viewPanel === "aircraft" ? " active" : ""}" data-additional-info-panel="aircraft" type="button">Aircraft Information</button>
+          </div>
+          <div class="additional-info-subsection${viewPanel === "aircraft" ? "" : " hidden"}">
+            <h3 class="additional-info-subtitle">Aircraft Information</h3>
+            <div class="additional-info-wrap">
+              <table class="additional-info-table">
+                <tbody>
+                  ${table.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}
+                </tbody>
+              </table>
+            </div>
           </div>
         </section>
         ${renderFrontFooter()}
@@ -618,6 +626,12 @@
     const airportCodeOptions = state.admin.airports
       .map((airport) => `<option value="${escapeAttr(airport.code)}"></option>`)
       .join("");
+    const additionalInfoPanel = String(state.admin.additionalInfoPanel || "aircraft");
+    const additionalInfoRows = normalizeAdditionalInfoTable(
+      state.admin.additionalInfoDraft,
+      getAdditionalInfoRowCount(state.admin.additionalInfoDraft),
+      getAdditionalInfoColumnCount(state.admin.additionalInfoDraft),
+    );
     const panelButtons = [
       { id: "dashboard", label: "Overview" },
       { id: "presets", label: "Presets" },
@@ -796,25 +810,27 @@
           </div>
           <div class="manual-section${panel === "additional-info" ? "" : " hidden"}">
             <h3>Additional Information</h3><br>
-            <div class="entry-actions additional-info-controls">
-              <button class="action" id="admin-additional-add-col" type="button">+ Vertical</button>
-              <button class="action" id="admin-additional-remove-col" type="button">- Vertical</button>
-              <span class="admin-subtle-status">Vertical: ${getAdditionalInfoRowCount(state.admin.additionalInfoDraft)}</span>
+            <div class="admin-submenu">
+              <button class="admin-submenu-btn${additionalInfoPanel === "aircraft" ? " active" : ""}" data-admin-additional-panel="aircraft" type="button">Aircraft Information</button>
             </div>
-            <div class="additional-info-wrap">
-              <table class="additional-info-table editable">
-                <tbody>
-                  ${normalizeAdditionalInfoTable(
-                    state.admin.additionalInfoDraft,
-                    getAdditionalInfoRowCount(state.admin.additionalInfoDraft),
-                    getAdditionalInfoColumnCount(state.admin.additionalInfoDraft),
-                  ).map((row, rowIndex) => `
-                    <tr>
-                      ${row.map((cell, colIndex) => `<td><input data-admin-additional="${rowIndex}:${colIndex}" value="${escapeAttr(cell)}" /></td>`).join("")}
-                    </tr>
-                  `).join("")}
-                </tbody>
-              </table>
+            <div class="additional-info-subsection${additionalInfoPanel === "aircraft" ? "" : " hidden"}">
+              <div class="entry-actions additional-info-controls">
+                <button class="action" id="admin-additional-add-row" type="button" aria-label="Add vertical row">+</button>
+              </div>
+              <div class="additional-info-wrap">
+                <table class="additional-info-table editable">
+                  <tbody>
+                    ${additionalInfoRows.map((row, rowIndex) => `
+                      <tr>
+                        ${row.map((cell, colIndex) => `<td><input data-admin-additional="${rowIndex}:${colIndex}" value="${escapeAttr(cell)}" /></td>`).join("")}
+                        <td class="additional-info-row-action">
+                          <button class="action admin-mini-btn active" data-admin-additional-remove-row="${rowIndex}" type="button" aria-label="Remove row">-</button>
+                        </td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
             </div>
             <div class="entry-actions">
               <button class="action primary" id="admin-additional-save">Save</button>
@@ -2001,15 +2017,25 @@
 
   function wireAdditionalInfo() {
     const backButton = document.getElementById("back-from-additional-info");
-    if (!backButton) return;
-    backButton.addEventListener("click", () => {
-      if (state.meta.docBackView) {
-        state.view = state.meta.docBackView;
-        state.meta.docBackView = "";
-      } else {
-        state.view = state.meta.lastNonDocView || "setup";
-      }
-      render();
+    if (backButton) {
+      backButton.addEventListener("click", () => {
+        if (state.meta.docBackView) {
+          state.view = state.meta.docBackView;
+          state.meta.docBackView = "";
+        } else {
+          state.view = state.meta.lastNonDocView || "setup";
+        }
+        render();
+      });
+    }
+    const panelButtons = Array.from(document.querySelectorAll("[data-additional-info-panel]"));
+    panelButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const nextPanel = String(button.getAttribute("data-additional-info-panel") || "");
+        if (!nextPanel || nextPanel === state.meta.additionalInfoPanel) return;
+        state.meta.additionalInfoPanel = nextPanel;
+        render();
+      });
     });
   }
 
@@ -2292,6 +2318,15 @@
         await saveAnnouncementByIndex(index);
       });
     });
+    const additionalPanelButtons = Array.from(document.querySelectorAll("[data-admin-additional-panel]"));
+    additionalPanelButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const nextPanel = String(button.getAttribute("data-admin-additional-panel") || "");
+        if (!nextPanel || nextPanel === state.admin.additionalInfoPanel) return;
+        state.admin.additionalInfoPanel = nextPanel;
+        render();
+      });
+    });
     const additionalInputs = Array.from(document.querySelectorAll("[data-admin-additional]"));
     additionalInputs.forEach((input) => {
       input.addEventListener("input", () => {
@@ -2299,30 +2334,51 @@
         state.admin.additionalInfoSaveStatus = "";
       });
     });
-    const additionalAddColButton = document.getElementById("admin-additional-add-col");
-    if (additionalAddColButton) {
-      additionalAddColButton.addEventListener("click", () => {
+    const additionalAddRowButton = document.getElementById("admin-additional-add-row");
+    if (additionalAddRowButton) {
+      additionalAddRowButton.addEventListener("click", () => {
         const currentRows = getAdditionalInfoRowCount(state.admin.additionalInfoDraft);
         state.admin.additionalInfoDraft = resizeAdditionalInfoRows(state.admin.additionalInfoDraft, currentRows + 1);
         render();
       });
     }
-    const additionalRemoveColButton = document.getElementById("admin-additional-remove-col");
-    if (additionalRemoveColButton) {
-      additionalRemoveColButton.addEventListener("click", () => {
-        const currentRows = getAdditionalInfoRowCount(state.admin.additionalInfoDraft);
-        state.admin.additionalInfoDraft = resizeAdditionalInfoRows(state.admin.additionalInfoDraft, currentRows - 1);
+    const additionalRemoveRowButtons = Array.from(document.querySelectorAll("[data-admin-additional-remove-row]"));
+    additionalRemoveRowButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        readAdditionalInfoFromInputs();
+        const rawIndex = String(button.getAttribute("data-admin-additional-remove-row") || "");
+        const rowIndex = Number(rawIndex);
+        const rows = normalizeAdditionalInfoTable(
+          state.admin.additionalInfoDraft,
+          getAdditionalInfoRowCount(state.admin.additionalInfoDraft),
+          getAdditionalInfoColumnCount(state.admin.additionalInfoDraft),
+        );
+        if (!Number.isFinite(rowIndex) || rowIndex < 0 || rowIndex >= rows.length) return;
+        if (rows.length <= 1) {
+          const colCount = getAdditionalInfoColumnCount(rows);
+          state.admin.additionalInfoDraft = createEmptyAdditionalInfoTable(1, colCount);
+          render();
+          return;
+        }
+        rows.splice(rowIndex, 1);
+        state.admin.additionalInfoDraft = rows;
+        state.admin.additionalInfoSaveStatus = "";
         render();
       });
-    }
+    });
     const additionalSaveButton = document.getElementById("admin-additional-save");
     if (additionalSaveButton) {
       additionalSaveButton.addEventListener("click", async () => {
+        const currentRows = getAdditionalInfoRowCount(state.admin.additionalInfoDraft);
+        state.admin.additionalInfoDraft = normalizeAdditionalInfoTable(
+          state.admin.additionalInfoDraft,
+          currentRows,
+          getAdditionalInfoColumnCount(state.admin.additionalInfoDraft),
+        );
         readAdditionalInfoFromInputs();
         await saveAdditionalInfoFromAdmin();
       });
     }
-    syncAdditionalInfoCellHeight();
   }
 
   function initAdminMiniGame() {
@@ -2460,14 +2516,6 @@
       adminGameAnimation = null;
     }
     if (adminGameState) adminGameState.running = false;
-  }
-
-  function syncAdditionalInfoCellHeight() {
-    const rowButton = document.querySelector(".admin-mini-btn");
-    if (!rowButton) return;
-    const height = Math.round(rowButton.getBoundingClientRect().height);
-    if (!Number.isFinite(height) || height <= 0) return;
-    document.documentElement.style.setProperty("--additional-info-cell-height", `${height}px`);
   }
 
   async function connectSupabaseClient(forceRecreate) {
