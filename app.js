@@ -42,6 +42,7 @@
         manualHtml: "",
         privacyHtml: "",
         announcements: [],
+        maintenanceMode: false,
         additionalInfoTable: [],
       },
     },
@@ -80,6 +81,8 @@
       privacySaveStatus: "",
       announcementDrafts: [createEmptyAnnouncementDraft()],
       announcementSaveStatus: "",
+      maintenanceMode: false,
+      maintenanceSaveStatus: "",
       panel: "dashboard",
       additionalInfoPanel: "aircraft",
       additionalInfoDraft: [],
@@ -90,7 +93,7 @@
       usingPresetRoute: false,
       lastNonDocView: "setup",
       docBackView: "",
-      additionalInfoPanel: "aircraft",
+      additionalInfoPanel: "",
     },
   };
   const TRIG_TOLERANCE = 1e-6;
@@ -447,14 +450,17 @@
     const total = state.announcement.items.length;
     const current = state.announcement.items[index];
     const isLast = index >= total - 1;
+    const isMaintenance = String(current.kind || "") === "maintenance";
+    const modalClass = isMaintenance ? "announcement-modal maintenance" : "announcement-modal";
+    const bodyClass = isMaintenance ? "announcement-body maintenance" : "announcement-body";
     return `
       <div class="announcement-overlay" id="announcement-overlay">
-        <section class="announcement-modal" role="dialog" aria-modal="true" aria-label="Announcement">
+        <section class="${modalClass}" role="dialog" aria-modal="true" aria-label="Announcement">
           <div class="announcement-head">
             <h3>${escapeHtml(current.heading || "Announcement")}</h3>
             <span class="announcement-count">${index + 1} / ${total}</span>
           </div>
-          <p class="announcement-body">${escapeHtml(current.body || "")}</p>
+          <p class="${bodyClass}">${escapeHtml(current.body || "")}</p>
           <div class="announcement-actions">
             ${
               isLast
@@ -531,7 +537,7 @@
     const sourceRows = getAdditionalInfoRowCount(state.catalog.content.additionalInfoTable);
     const sourceCols = getAdditionalInfoColumnCount(state.catalog.content.additionalInfoTable);
     const table = normalizeAdditionalInfoTable(state.catalog.content.additionalInfoTable, sourceRows, sourceCols);
-    const viewPanel = String(state.meta.additionalInfoPanel || "aircraft");
+    const viewPanel = String(state.meta.additionalInfoPanel || "");
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -546,6 +552,7 @@
           <div class="admin-submenu">
             <button class="admin-submenu-btn${viewPanel === "aircraft" ? " active" : ""}" data-additional-info-panel="aircraft" type="button">Aircraft Information</button>
           </div>
+          ${viewPanel ? "" : '<p class="setup-caption additional-info-menu-hint">Choose a section from the menu.</p>'}
           <div class="additional-info-subsection${viewPanel === "aircraft" ? "" : " hidden"}">
             <h3 class="additional-info-subtitle">Aircraft Information</h3>
             <div class="additional-info-wrap">
@@ -786,6 +793,11 @@
                 </article>
               `).join("") : '<p class="setup-caption">No announcements yet. Click Add to create one.</p>'}
             </section>
+            <label class="admin-toggle-line admin-maintenance-toggle">
+              <input id="admin-maintenance-flag" type="checkbox" ${state.admin.maintenanceMode ? "checked" : ""} />
+              <span>Under maintenance</span>
+            </label>
+            <span class="admin-subtle-status">${escapeHtml(state.admin.maintenanceSaveStatus)}</span>
             <span class="admin-subtle-status">${escapeHtml(state.admin.announcementSaveStatus)}</span>
           </div>
           <div class="manual-section${panel === "manual" ? "" : " hidden"}">
@@ -814,9 +826,6 @@
               <button class="admin-submenu-btn${additionalInfoPanel === "aircraft" ? " active" : ""}" data-admin-additional-panel="aircraft" type="button">Aircraft Information</button>
             </div>
             <div class="additional-info-subsection${additionalInfoPanel === "aircraft" ? "" : " hidden"}">
-              <div class="entry-actions additional-info-controls">
-                <button class="action" id="admin-additional-add-row" type="button" aria-label="Add vertical row">+</button>
-              </div>
               <div class="additional-info-wrap">
                 <table class="additional-info-table editable">
                   <tbody>
@@ -824,12 +833,15 @@
                       <tr>
                         ${row.map((cell, colIndex) => `<td><input data-admin-additional="${rowIndex}:${colIndex}" value="${escapeAttr(cell)}" /></td>`).join("")}
                         <td class="additional-info-row-action">
-                          <button class="action admin-mini-btn active" data-admin-additional-remove-row="${rowIndex}" type="button" aria-label="Remove row">-</button>
+                          <button class="additional-info-remove-btn" data-admin-additional-remove-row="${rowIndex}" type="button" aria-label="Remove row">−</button>
                         </td>
                       </tr>
                     `).join("")}
                   </tbody>
                 </table>
+              </div>
+              <div class="entry-actions additional-info-controls additional-info-controls-bottom">
+                <button class="action" id="admin-additional-add-row" type="button" aria-label="Add vertical row">+</button>
               </div>
             </div>
             <div class="entry-actions">
@@ -1878,6 +1890,7 @@
           state.meta.lastNonDocView = state.view;
           state.meta.docBackView = "";
         }
+        state.meta.additionalInfoPanel = "";
         state.view = "additional-info";
         render();
       });
@@ -2199,12 +2212,13 @@
 
     const airportCodeInput = document.getElementById("admin-airport-code");
     if (airportCodeInput) {
-      const onAirportCodeChange = () => {
+      const onAirportCodeInput = () => {
         readAirportFormFromInputs();
         loadAirportByCode();
         render();
       };
-      airportCodeInput.addEventListener("change", onAirportCodeChange);
+      airportCodeInput.addEventListener("input", onAirportCodeInput);
+      airportCodeInput.addEventListener("change", onAirportCodeInput);
     }
 
     ["admin-airport-cptAtis", "admin-airport-depAap", "admin-airport-twr", "admin-airport-gnd", "admin-airport-fss", "admin-airport-remarks"].forEach((id) => {
@@ -2318,6 +2332,15 @@
         await saveAnnouncementByIndex(index);
       });
     });
+    const maintenanceToggle = document.getElementById("admin-maintenance-flag");
+    if (maintenanceToggle) {
+      maintenanceToggle.addEventListener("change", async () => {
+        const enabled = Boolean(maintenanceToggle.checked);
+        state.admin.maintenanceMode = enabled;
+        state.catalog.content.maintenanceMode = enabled;
+        await saveMaintenanceModeFromAdmin(enabled);
+      });
+    }
     const additionalPanelButtons = Array.from(document.querySelectorAll("[data-admin-additional-panel]"));
     additionalPanelButtons.forEach((button) => {
       button.addEventListener("click", () => {
@@ -2660,6 +2683,7 @@
       state.catalog.content.manualHtml = contentMap.manual || "";
       state.catalog.content.privacyHtml = contentMap.privacy || "";
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
+      state.catalog.content.maintenanceMode = parseMaintenanceModeContent(contentMap.maintenance_mode || "");
       state.catalog.content.additionalInfoTable = parseAdditionalInfoContent(contentMap.additional_info || "");
       state.admin.manualHtmlDraft = contentHtmlToEditorText("manual", state.catalog.content.manualHtml);
       state.admin.privacyHtmlDraft = contentHtmlToEditorText("privacy", state.catalog.content.privacyHtml);
@@ -2668,6 +2692,8 @@
       state.admin.manualDraftBaselineText = state.admin.manualHtmlDraft;
       state.admin.privacyDraftBaselineText = state.admin.privacyHtmlDraft;
       state.admin.announcementDrafts = normalizeAnnouncementDrafts(state.catalog.content.announcements, false);
+      state.admin.maintenanceMode = Boolean(state.catalog.content.maintenanceMode);
+      state.admin.maintenanceSaveStatus = "";
       state.admin.additionalInfoDraft = normalizeAdditionalInfoTable(state.catalog.content.additionalInfoTable);
       evaluateAnnouncementsPrompt();
 
@@ -3163,6 +3189,26 @@
     }
   }
 
+  function parseMaintenanceModeContent(raw) {
+    const text = String(raw || "").trim().toLowerCase();
+    return text === "1" || text === "true" || text === "yes" || text === "on";
+  }
+
+  function createMaintenanceAnnouncement() {
+    return {
+      id: "maintenance_notice",
+      kind: "maintenance",
+      heading: "Under Maintenance",
+      body: "Major math and system updates are in progress. Do not trust calculations for operational use right now.",
+      startDate: "",
+      startTimeUtc: "",
+      endDate: "",
+      endTimeUtc: "",
+      permanent: true,
+      collapsed: false,
+    };
+  }
+
   function parseAdditionalInfoContent(raw) {
     const text = String(raw || "").trim();
     if (!text) return createEmptyAdditionalInfoTable();
@@ -3190,13 +3236,14 @@
 
   function computeAnnouncementSignature(items) {
     return (Array.isArray(items) ? items : [])
-      .map((item) => `${item.id}|${item.heading}|${item.body}|${item.startDate}|${item.startTimeUtc}|${item.endDate}|${item.endTimeUtc}|${item.permanent ? 1 : 0}`)
+      .map((item) => `${item.id}|${item.kind || ""}|${item.heading}|${item.body}|${item.startDate}|${item.startTimeUtc}|${item.endDate}|${item.endTimeUtc}|${item.permanent ? 1 : 0}`)
       .join("||");
   }
 
   function evaluateAnnouncementsPrompt() {
     if (state.view === "admin" || state.view === "admin-login") return;
-    const announcements = Array.isArray(state.catalog.content.announcements) ? state.catalog.content.announcements : [];
+    const announcements = Array.isArray(state.catalog.content.announcements) ? state.catalog.content.announcements.slice() : [];
+    if (state.catalog.content.maintenanceMode) announcements.unshift(createMaintenanceAnnouncement());
     if (!announcements.length) {
       state.announcement.open = false;
       state.announcement.items = [];
@@ -3607,6 +3654,34 @@
       }
     }
     await persistAnnouncementsToDatabase(normalizedAll, "Saved");
+  }
+
+  async function saveMaintenanceModeFromAdmin(enabled) {
+    const ok = await connectSupabaseClient(false);
+    if (!ok) {
+      render();
+      return false;
+    }
+    state.admin.error = "";
+    state.admin.notice = "";
+    try {
+      const { error } = await supabaseClient.from("content_pages").upsert(
+        { key: "maintenance_mode", body_html: enabled ? "1" : "0" },
+        { onConflict: "key" },
+      );
+      if (error) throw error;
+      state.catalog.content.maintenanceMode = Boolean(enabled);
+      state.admin.maintenanceMode = Boolean(enabled);
+      state.admin.maintenanceSaveStatus = `Saved ${formatAdminSaveTime()}`;
+      evaluateAnnouncementsPrompt();
+      render();
+      return true;
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Could not save maintenance mode.";
+      state.admin.maintenanceSaveStatus = "Save failed";
+      render();
+      return false;
+    }
   }
 
   async function saveAdditionalInfoFromAdmin() {
@@ -4404,6 +4479,7 @@
       if (typeof contentMap.manual === "string") state.catalog.content.manualHtml = contentMap.manual;
       if (typeof contentMap.privacy === "string") state.catalog.content.privacyHtml = contentMap.privacy;
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
+      state.catalog.content.maintenanceMode = parseMaintenanceModeContent(contentMap.maintenance_mode || "");
       state.catalog.content.additionalInfoTable = parseAdditionalInfoContent(contentMap.additional_info || "");
     } finally {
       loadingPublicCatalog = false;

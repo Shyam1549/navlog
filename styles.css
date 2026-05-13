@@ -373,6 +373,10 @@ select { font: inherit; }
   color: #2f2a24;
 }
 
+.additional-info-menu-hint {
+  margin: 6px 0 12px;
+}
+
 .admin-card {
   display: grid;
   gap: 14px;
@@ -1208,7 +1212,7 @@ select { font: inherit; }
   justify-content: center;
   text-align: center;
   color: rgba(24, 22, 18, 0.48);
-  font-size: 0.94rem;
+  font-size: clamp(0.78rem, 1.6vw, 0.94rem);
   line-height: 1.1;
   text-transform: lowercase;
   pointer-events: none;
@@ -1237,6 +1241,12 @@ select { font: inherit; }
   padding: 20px;
 }
 
+.announcement-modal.maintenance {
+  border-color: rgba(179, 58, 43, 0.5);
+  background: rgba(255, 245, 243, 0.98);
+  box-shadow: 0 24px 56px rgba(123, 37, 28, 0.2);
+}
+
 .announcement-head {
   display: flex;
   justify-content: space-between;
@@ -1260,6 +1270,11 @@ select { font: inherit; }
   color: var(--ink);
   font-size: 0.92rem;
   line-height: 1.5;
+}
+
+.announcement-body.maintenance {
+  color: #8e2e23;
+  font-weight: 700;
 }
 
 .announcement-actions {
@@ -1305,6 +1320,12 @@ select { font: inherit; }
   text-transform: none;
   color: var(--ink);
   font-size: 0.9rem;
+}
+
+.admin-maintenance-toggle {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(46, 41, 35, 0.2);
 }
 
 .hidden {
@@ -1511,6 +1532,12 @@ select { font: inherit; }
   border-radius: 10px;
 }
 
+.additional-info-controls-bottom {
+  justify-content: flex-end;
+  margin-top: 10px;
+  margin-bottom: 0;
+}
+
 .additional-info-subtitle {
   margin: 0 0 14px;
   font-size: 1.1rem;
@@ -1554,14 +1581,38 @@ select { font: inherit; }
 }
 
 .additional-info-row-action {
-  width: 42px;
-  min-width: 42px;
+  width: 34px;
+  min-width: 34px;
   padding: 0 !important;
+  text-align: center;
+  vertical-align: middle;
 }
 
-.additional-info-row-action .admin-mini-btn {
-  width: 100%;
-  min-width: 0;
+.additional-info-remove-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(46, 41, 35, 0.28);
+  background: rgba(255, 255, 255, 0.7);
+  color: rgba(46, 41, 35, 0.78);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.additional-info-remove-btn:hover {
+  background: rgba(219, 234, 240, 0.58);
+  border-color: rgba(33, 76, 90, 0.34);
+  color: #123a46;
+}
+
+.additional-info-remove-btn:focus-visible {
+  outline: 2px solid rgba(33, 76, 90, 0.46);
+  outline-offset: 1px;
 }
 
 .route-dtg {
@@ -1747,6 +1798,16 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   }
   .manual-vars { grid-template-columns: 1fr; }
   .manual-row { grid-template-columns: 1fr; gap: 4px; }
+  .manual-section { padding: 10px 11px; }
+  .privacy-card { padding: 14px; }
+  .privacy-content h3 { font-size: 0.96rem; }
+  .privacy-content p { font-size: 0.88rem; line-height: 1.5; }
+  .manual-formula,
+  .manual-note {
+    overflow-x: auto;
+    white-space: nowrap;
+    padding-bottom: 1px;
+  }
 
   .topbar.centered {
     grid-template-columns: 1fr;
@@ -1778,6 +1839,15 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     min-height: 76px;
     height: 76px;
   }
+  .route-main input {
+    padding-bottom: 20px;
+  }
+  .route-inline-hint {
+    right: 28px;
+    font-size: 0.8rem;
+    line-height: 1.05;
+    padding: 0 2px;
+  }
 
   .radio-row { min-height: 74px; }
   .radio-row input {
@@ -1802,11 +1872,36 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
   .admin-shell {
     grid-template-columns: 1fr;
+    gap: 12px;
   }
 
   .admin-menu {
     position: static;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(124px, 1fr));
+    gap: 7px;
+  }
+
+  .admin-menu-btn {
+    text-align: center;
+    font-size: 0.82rem;
+    padding: 9px 8px;
+  }
+
+  .admin-panel-wrap .manual-section {
+    padding: 10px;
+  }
+
+  .additional-info-wrap {
+    border-radius: 9px;
+  }
+
+  .additional-info-table {
+    min-width: 560px;
+  }
+
+  .additional-info-table td {
+    font-size: 0.8rem;
+    height: 38px;
   }
 
 }
@@ -1876,6 +1971,46 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   .admin-grid.two-col {
     grid-template-columns: 1fr;
   }
+
+  .manual-section {
+    padding: 9px 9px;
+  }
+
+  .manual-row {
+    gap: 5px;
+  }
+
+  .route-inline-hint {
+    right: 24px;
+    font-size: 0.76rem;
+    line-height: 1.03;
+  }
+
+  .route-main,
+  .location-cell {
+    grid-template-columns: minmax(0, 1fr) 24px;
+  }
+
+  .additional-info-table {
+    min-width: 520px;
+  }
+
+  .additional-info-table td {
+    font-size: 0.78rem;
+    height: 36px;
+    padding: 3px 4px;
+  }
+
+  .additional-info-row-action {
+    width: 30px;
+    min-width: 30px;
+  }
+
+  .additional-info-remove-btn {
+    width: 20px;
+    height: 20px;
+    font-size: 0.82rem;
+  }
 }
 
 @media print {
@@ -1904,6 +2039,7 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 .pdf-export .route-cell,
 .pdf-export .location-cell { grid-template-columns: 1fr; }
 .pdf-export .route-main { grid-template-columns: 1fr; }
+.pdf-export .route-inline-hint { display: none !important; }
 .pdf-export .alt-departure-hint,
 .pdf-export .alt-info-wrap,
 .pdf-export .settings-info-wrap { display: none !important; }
@@ -1926,13 +2062,29 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 }
 .pdf-export .pdf-wrap-value {
   min-height: 94px;
-  padding: 12px 12px 12px 10px;
-  text-align: left;
+  padding: 8px 8px;
+  text-align: center;
   white-space: normal;
   word-break: normal;
   overflow-wrap: break-word;
-  line-height: 1.2;
-  font-size: 0.84rem;
+  line-height: 1.15;
+  font-size: 0.98rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pdf-export .field input,
+.pdf-export .radio-row input,
+.pdf-export .atis-cell input,
+.pdf-export .toc-tod-card input,
+.pdf-export .header-box input {
+  text-align: center;
+  font-size: 0.98rem;
+}
+.pdf-export .field input,
+.pdf-export .radio-row input,
+.pdf-export .atis-cell input {
+  padding: 8px 8px;
 }
 .pdf-export .navlog-box {
   font-size: 1.56rem;
