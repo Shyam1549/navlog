@@ -815,7 +815,6 @@ select { font: inherit; }
 
 .nav-head-grid > div,
 .leg-row > div { border-right: 2px solid var(--line); }
-.nav-head-grid > div:last-child,
 .leg-row > div:last-child { border-right: 0; }
 
 .nav-head-grid {
@@ -2037,9 +2036,15 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 .pdf-export .toc-tod-card input::placeholder { color: transparent; }
 .pdf-export .route-cell,
 .pdf-export .location-cell { grid-template-columns: 1fr; }
-.pdf-export .route-main {
-  grid-template-columns: 1fr;
+.pdf-export .route-cell {
   display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pdf-export .route-main {
+  width: 100%;
+  grid-template-columns: 1fr !important;
+  display: flex !important;
   align-items: center;
   justify-content: center;
 }
@@ -2094,9 +2099,12 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 .pdf-export .route-main .pdf-wrap-value {
   padding-left: 0 !important;
   padding-right: 0 !important;
+  width: 100% !important;
+  max-width: 100%;
   justify-content: center;
   text-align: center;
-  margin: 0 auto;
+  margin: 0 auto !important;
+  transform: translateX(-1px);
 }
 .pdf-export .navlog-box {
   font-size: 1.56rem;
