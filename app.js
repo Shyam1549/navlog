@@ -18,6 +18,7 @@
   const ADMIN_REMEMBER_KEY = "navlog_admin_remember";
   const ADMIN_EMAIL_KEY = "navlog_admin_email";
   const ADMIN_PASSWORD_KEY = "navlog_admin_password";
+  const ADMIN_GAME_HIGH_SCORE_KEY = "navlog_admin_game_high_score";
   const ANNOUNCEMENT_SEEN_KEY = "navlog_announcement_seen_signature";
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
   const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
@@ -363,7 +364,7 @@
     const presetStatus = getPresetStatusMarkup();
     const showResume = shouldShowResumeButton();
     const maintenanceBanner = state.catalog.content.maintenanceMode
-      ? '<p class="maintenance-warning">UNDER MAINTENANCE: service is undergoing maintenance. Do not trust for now.</p>'
+      ? '<p class="maintenance-warning">Under maintenance: service is undergoing maintenance. Do not trust.</p>'
       : "";
     return `
       <div class="ui-scale">
@@ -552,7 +553,7 @@
           </div>
           <div class="top-side right"></div>
         </section>
-        <section class="setup-card privacy-card">
+        <section class="additional-info-page">
           <div class="additional-info-menu-links${viewPanel ? " hidden" : ""}">
             <button class="additional-info-link" data-additional-info-panel="aircraft" type="button">Aircraft Information</button>
           </div>
@@ -862,6 +863,7 @@
               <div class="entry-actions">
                 <button class="action primary" id="admin-game-start" type="button">Start</button>
                 <span class="admin-subtle-status" id="admin-game-status"></span>
+                <span class="admin-subtle-status" id="admin-game-highscore"></span>
               </div>
             </div>
           </div>
@@ -2418,9 +2420,23 @@
     const canvas = document.getElementById("admin-mini-game");
     const startButton = document.getElementById("admin-game-start");
     const status = document.getElementById("admin-game-status");
+    const highScoreNode = document.getElementById("admin-game-highscore");
     if (!canvas || !startButton || !status) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const readHighScore = () => {
+      const raw = Number(readStoredValue(ADMIN_GAME_HIGH_SCORE_KEY));
+      return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+    };
+    const writeHighScore = (score) => {
+      const normalized = Math.max(0, Math.floor(score));
+      writeStoredValue(ADMIN_GAME_HIGH_SCORE_KEY, String(normalized));
+      if (highScoreNode) highScoreNode.textContent = `High ${normalized}`;
+    };
+    const setHighScoreLabel = () => {
+      if (!highScoreNode) return;
+      highScoreNode.textContent = `High ${readHighScore()}`;
+    };
 
     if (!adminGameState || adminGameState.canvas !== canvas) {
       adminGameState = {
@@ -2434,6 +2450,7 @@
         player: { x: 56, y: 126, w: 16, h: 20, vy: 0, onGround: true },
         obstacles: [],
         spawnTick: 0,
+        highScore: readHighScore(),
       };
     }
 
@@ -2493,7 +2510,12 @@
       ));
       if (hit) {
         game.running = false;
-        status.textContent = `Game over. Score ${Math.floor(game.score)}.`;
+        const scored = Math.floor(game.score);
+        if (scored > game.highScore) {
+          game.highScore = scored;
+          writeHighScore(scored);
+        } else setHighScoreLabel();
+        status.textContent = `Game over. Score ${scored}.`;
         draw();
         return;
       }
@@ -2525,6 +2547,7 @@
     startButton.onclick = () => {
       const game = adminGameState;
       if (!game) return;
+      game.highScore = readHighScore();
       game.score = 0;
       game.speed = 3.2;
       game.player.y = 126;
@@ -2539,6 +2562,25 @@
       adminGameAnimation = requestAnimationFrame(step);
     };
 
+    const onTap = (event) => {
+      if (state.view !== "admin" || state.admin.panel !== "dashboard") return;
+      event.preventDefault();
+      const game = adminGameState;
+      if (!game) return;
+      if (!game.running) {
+        startButton.click();
+        return;
+      }
+      jump();
+    };
+
+    if (!canvas.dataset.tapBound) {
+      if (window.PointerEvent) canvas.addEventListener("pointerdown", onTap, { passive: false });
+      else canvas.addEventListener("touchstart", onTap, { passive: false });
+      canvas.dataset.tapBound = "1";
+    }
+
+    setHighScoreLabel();
     draw();
     if (!status.textContent) status.textContent = "Press Start";
   }
@@ -4329,6 +4371,17 @@
             wrapped.className = "pdf-wrap-value";
             wrapped.textContent = input.value;
             input.replaceWith(wrapped);
+          });
+          // Route cells need strict one-child centering to avoid horizontal drift in PDF mode.
+          doc.querySelectorAll(".route-main").forEach((routeMain) => {
+            const routeValueNode = routeMain.querySelector(".pdf-wrap-value");
+            if (!routeValueNode) return;
+            const routeValue = routeValueNode.textContent || "";
+            routeMain.innerHTML = "";
+            const centered = doc.createElement("div");
+            centered.className = "pdf-wrap-value pdf-route-value";
+            centered.textContent = routeValue;
+            routeMain.appendChild(centered);
           });
           doc.querySelectorAll("input").forEach((input) => {
             input.placeholder = "";

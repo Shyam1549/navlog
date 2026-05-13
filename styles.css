@@ -103,6 +103,14 @@ select { font: inherit; }
 }
 
 .setup-card { margin-top: 18px; margin-bottom: 16px; padding: 20px; }
+.additional-info-page {
+  margin-top: 18px;
+  margin-bottom: 16px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
 .manual-card { display: grid; gap: 14px; }
 .manual-section {
   border: 2px solid rgba(46, 41, 35, 0.16);
@@ -2048,6 +2056,7 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   align-items: center;
   justify-content: center;
 }
+.pdf-export .route-dtg { display: none !important; }
 .pdf-export .route-inline-hint { display: none !important; }
 .pdf-export .alt-departure-hint,
 .pdf-export .alt-info-wrap,
@@ -2104,8 +2113,15 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   justify-content: center;
   text-align: center;
   margin: 0 auto !important;
-  transform: translateX(-1px);
 }
+.pdf-export .route-main .pdf-route-value {
+  width: 100% !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  justify-content: center !important;
+  text-align: center !important;
+}
+.pdf-export .spd-head { border-right: 2px solid var(--line) !important; }
 .pdf-export .navlog-box {
   font-size: 1.56rem;
   justify-content: center;
