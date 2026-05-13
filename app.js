@@ -1859,6 +1859,7 @@
     document.getElementById("back-from-manual").addEventListener("click", () => {
       if (state.meta.docBackView) {
         state.view = state.meta.docBackView;
+        if (state.view === "additional-info") state.meta.additionalInfoPanel = "";
         state.meta.docBackView = "";
       } else {
         state.view = state.meta.lastNonDocView || "setup";
@@ -2033,6 +2034,7 @@
     backButton.addEventListener("click", () => {
       if (state.meta.docBackView) {
         state.view = state.meta.docBackView;
+        if (state.view === "additional-info") state.meta.additionalInfoPanel = "";
         state.meta.docBackView = "";
       } else {
         state.view = state.meta.lastNonDocView || "setup";
