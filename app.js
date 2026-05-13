@@ -362,6 +362,9 @@
   function renderSetupScreen() {
     const presetStatus = getPresetStatusMarkup();
     const showResume = shouldShowResumeButton();
+    const maintenanceBanner = state.catalog.content.maintenanceMode
+      ? '<p class="maintenance-warning">UNDER MAINTENANCE: service is undergoing maintenance. Do not trust for now.</p>'
+      : "";
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -370,6 +373,7 @@
             <h1>Navlog</h1>
             <div class="utc-pill" id="utc-clock">UTC ${formatUtcNow()}</div>
             <p class="setup-caption">Enter your DEP and ARR aerodrome.</p>
+            ${maintenanceBanner}
           </div>
         </section>
         <section class="setup-card">
@@ -549,10 +553,9 @@
           <div class="top-side right"></div>
         </section>
         <section class="setup-card privacy-card">
-          <div class="admin-submenu">
-            <button class="admin-submenu-btn${viewPanel === "aircraft" ? " active" : ""}" data-additional-info-panel="aircraft" type="button">Aircraft Information</button>
+          <div class="additional-info-menu-links${viewPanel ? " hidden" : ""}">
+            <button class="additional-info-link" data-additional-info-panel="aircraft" type="button">Aircraft Information</button>
           </div>
-          ${viewPanel ? "" : '<p class="setup-caption additional-info-menu-hint">Choose a section from the menu.</p>'}
           <div class="additional-info-subsection${viewPanel === "aircraft" ? "" : " hidden"}">
             <h3 class="additional-info-subtitle">Aircraft Information</h3>
             <div class="additional-info-wrap">
@@ -744,7 +747,6 @@
               <h3>Announcements</h3>
               <button class="action" id="admin-announcement-add">Add</button>
             </div>
-            <br>
             <section class="admin-announcement-list">
               ${state.admin.announcementDrafts.length ? state.admin.announcementDrafts.map((draft, index) => `
                 <article class="admin-announcement-item${draft.collapsed ? " collapsed" : ""}">
@@ -793,12 +795,15 @@
                 </article>
               `).join("") : '<p class="setup-caption">No announcements yet. Click Add to create one.</p>'}
             </section>
+            <span class="admin-subtle-status">${escapeHtml(state.admin.announcementSaveStatus)}</span>
+          </div>
+          <div class="manual-section admin-maintenance-panel${panel === "announcements" ? "" : " hidden"}">
+            <h3>Maintenance</h3>
             <label class="admin-toggle-line admin-maintenance-toggle">
               <input id="admin-maintenance-flag" type="checkbox" ${state.admin.maintenanceMode ? "checked" : ""} />
               <span>Under maintenance</span>
             </label>
             <span class="admin-subtle-status">${escapeHtml(state.admin.maintenanceSaveStatus)}</span>
-            <span class="admin-subtle-status">${escapeHtml(state.admin.announcementSaveStatus)}</span>
           </div>
           <div class="manual-section${panel === "manual" ? "" : " hidden"}">
             <h3>User Manual Content</h3><br>
@@ -2032,6 +2037,11 @@
     const backButton = document.getElementById("back-from-additional-info");
     if (backButton) {
       backButton.addEventListener("click", () => {
+        if (state.meta.additionalInfoPanel) {
+          state.meta.additionalInfoPanel = "";
+          render();
+          return;
+        }
         if (state.meta.docBackView) {
           state.view = state.meta.docBackView;
           state.meta.docBackView = "";
@@ -3194,21 +3204,6 @@
     return text === "1" || text === "true" || text === "yes" || text === "on";
   }
 
-  function createMaintenanceAnnouncement() {
-    return {
-      id: "maintenance_notice",
-      kind: "maintenance",
-      heading: "Under Maintenance",
-      body: "Major math and system updates are in progress. Do not trust calculations for operational use right now.",
-      startDate: "",
-      startTimeUtc: "",
-      endDate: "",
-      endTimeUtc: "",
-      permanent: true,
-      collapsed: false,
-    };
-  }
-
   function parseAdditionalInfoContent(raw) {
     const text = String(raw || "").trim();
     if (!text) return createEmptyAdditionalInfoTable();
@@ -3243,7 +3238,6 @@
   function evaluateAnnouncementsPrompt() {
     if (state.view === "admin" || state.view === "admin-login") return;
     const announcements = Array.isArray(state.catalog.content.announcements) ? state.catalog.content.announcements.slice() : [];
-    if (state.catalog.content.maintenanceMode) announcements.unshift(createMaintenanceAnnouncement());
     if (!announcements.length) {
       state.announcement.open = false;
       state.announcement.items = [];
@@ -4330,7 +4324,7 @@
           while (clonedRadioBody && clonedRadioBody.children.length < 5) {
             clonedRadioBody.insertAdjacentHTML("beforeend", renderRadioRow(createBlankRadioRow(), 0));
           }
-          doc.querySelectorAll(".route-cell input, .location-cell input").forEach((input) => {
+          doc.querySelectorAll(".field input, .location-cell input, .radio-row input, .atis-cell input, .toc-tod-card input").forEach((input) => {
             const wrapped = doc.createElement("div");
             wrapped.className = "pdf-wrap-value";
             wrapped.textContent = input.value;

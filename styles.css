@@ -1378,6 +1378,14 @@ select { font: inherit; }
   margin-bottom: 8px;
 }
 
+.admin-announcement-list .setup-caption {
+  margin-top: 2px;
+}
+
+.admin-maintenance-panel {
+  margin-top: 10px;
+}
+
 .route-cell.show-route-hint .route-inline-hint {
   display: flex;
 }
@@ -1518,6 +1526,27 @@ select { font: inherit; }
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.36);
   padding: 10px;
+}
+
+.additional-info-menu-links {
+  min-height: 210px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.additional-info-link {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 1.02rem;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.additional-info-link:hover {
+  color: #113743;
 }
 
 .additional-info-controls {
@@ -2062,13 +2091,14 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 }
 .pdf-export .pdf-wrap-value {
   min-height: 94px;
-  padding: 8px 8px;
+  width: 100%;
+  padding: 0 8px;
   text-align: center;
   white-space: normal;
   word-break: normal;
   overflow-wrap: break-word;
   line-height: 1.15;
-  font-size: 0.98rem;
+  font-size: 1.08rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2079,12 +2109,18 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 .pdf-export .toc-tod-card input,
 .pdf-export .header-box input {
   text-align: center;
-  font-size: 0.98rem;
+  font-size: 1.08rem;
 }
 .pdf-export .field input,
 .pdf-export .radio-row input,
 .pdf-export .atis-cell input {
-  padding: 8px 8px;
+  padding: 0 8px;
+}
+.pdf-export .route-main .pdf-wrap-value {
+  padding-left: 0;
+  padding-right: 0;
+  justify-content: center;
+  text-align: center;
 }
 .pdf-export .navlog-box {
   font-size: 1.56rem;
