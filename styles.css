@@ -1587,6 +1587,14 @@ select { font: inherit; }
   margin-bottom: 0;
 }
 
+#admin-additional-add-row {
+  width: var(--admin-row-height);
+  min-width: var(--admin-row-height);
+  height: var(--admin-row-height);
+  border-radius: 8px;
+  margin-right: 1px;
+}
+
 .additional-info-inline-back {
   margin: 0 0 8px;
 }
