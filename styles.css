@@ -1587,6 +1587,10 @@ select { font: inherit; }
   margin-bottom: 0;
 }
 
+.additional-info-inline-back {
+  margin: 0 0 8px;
+}
+
 .additional-info-subtitle {
   margin: 0 0 14px;
   font-size: 1.1rem;
@@ -1632,21 +1636,19 @@ select { font: inherit; }
 .additional-info-row-action {
   width: 42px;
   min-width: 42px;
-  padding: 4px !important;
+  max-width: 42px;
+  padding: 0 !important;
   text-align: center;
   vertical-align: middle;
 }
 
 .additional-info-row-action .admin-mini-btn {
-  width: 32px;
-  height: 32px;
-  min-width: 32px;
-  min-height: 32px;
-  margin: 0 auto;
-  border-radius: 8px;
-  border-top: 2px solid var(--line);
-  border-right: 2px solid var(--line);
-  border-bottom: 2px solid var(--line);
+  width: 42px;
+  height: var(--admin-row-height);
+  min-width: 42px;
+  min-height: var(--admin-row-height);
+  margin: 0;
+  border-radius: 0;
 }
 
 .route-dtg {
@@ -2074,6 +2076,7 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   align-items: center;
   justify-content: center;
   padding: 0 !important;
+  position: relative;
 }
 .pdf-export .route-main {
   width: 100%;
@@ -2132,9 +2135,8 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   padding: 0 8px;
 }
 .pdf-export .route-cell .pdf-route-center {
-  width: 100%;
-  height: 100%;
-  min-height: 94px;
+  position: absolute;
+  inset: 0;
   margin: 0;
   padding: 0;
   display: flex;
@@ -2145,7 +2147,6 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   font-size: 1.08rem;
 }
 .pdf-export .spd-head { border-right: 2px solid var(--line) !important; }
-.pdf-export .tc-head { border-left: 2px solid var(--line) !important; }
 .pdf-export .navlog-box {
   font-size: 1.56rem;
   justify-content: center;

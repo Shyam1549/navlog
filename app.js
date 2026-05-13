@@ -85,6 +85,7 @@
       maintenanceMode: false,
       maintenanceSaveStatus: "",
       panel: "dashboard",
+      additionalInfoPanel: "",
       additionalInfoDraft: [],
       additionalInfoSaveStatus: "",
     },
@@ -636,6 +637,7 @@
     const airportCodeOptions = state.admin.airports
       .map((airport) => `<option value="${escapeAttr(airport.code)}"></option>`)
       .join("");
+    const additionalInfoPanel = String(state.admin.additionalInfoPanel || "");
     const additionalInfoRows = normalizeAdditionalInfoTable(
       state.admin.additionalInfoDraft,
       getAdditionalInfoRowCount(state.admin.additionalInfoDraft),
@@ -826,7 +828,13 @@
           </div>
           <div class="manual-section${panel === "additional-info" ? "" : " hidden"}">
             <h3>Additional Information</h3><br>
-            <div class="additional-info-subsection">
+            <div class="additional-info-menu-links${additionalInfoPanel ? " hidden" : ""}">
+              <button class="additional-info-link" data-admin-additional-panel="aircraft" type="button">Aircraft Information</button>
+            </div>
+            <div class="additional-info-subsection${additionalInfoPanel === "aircraft" ? "" : " hidden"}">
+              <div class="entry-actions additional-info-inline-back">
+                <button class="back-link" id="admin-additional-back" type="button">Back</button>
+              </div>
               <h4 class="additional-info-subtitle">Aircraft Information</h4>
               <div class="additional-info-wrap">
                 <table class="additional-info-table editable">
@@ -2154,6 +2162,7 @@
         const nextPanel = String(button.getAttribute("data-admin-panel") || "");
         if (!nextPanel || nextPanel === state.admin.panel) return;
         state.admin.panel = nextPanel;
+        if (nextPanel === "additional-info") state.admin.additionalInfoPanel = "";
         render();
       });
     });
@@ -2349,6 +2358,22 @@
         state.admin.maintenanceMode = enabled;
         state.catalog.content.maintenanceMode = enabled;
         await saveMaintenanceModeFromAdmin(enabled);
+      });
+    }
+    const additionalPanelButtons = Array.from(document.querySelectorAll("[data-admin-additional-panel]"));
+    additionalPanelButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const nextPanel = String(button.getAttribute("data-admin-additional-panel") || "");
+        if (!nextPanel || nextPanel === state.admin.additionalInfoPanel) return;
+        state.admin.additionalInfoPanel = nextPanel;
+        render();
+      });
+    });
+    const additionalBackButton = document.getElementById("admin-additional-back");
+    if (additionalBackButton) {
+      additionalBackButton.addEventListener("click", () => {
+        state.admin.additionalInfoPanel = "";
+        render();
       });
     }
     const additionalInputs = Array.from(document.querySelectorAll("[data-admin-additional]"));
