@@ -556,7 +556,7 @@
           <div class="additional-info-menu-links${viewPanel ? " hidden" : ""}">
             <button class="additional-info-link" data-additional-info-panel="aircraft" type="button">Aircraft Information</button>
           </div>
-          <div class="additional-info-subsection${viewPanel === "aircraft" ? "" : " hidden"}">
+          <div class="${viewPanel === "aircraft" ? "" : "hidden"}">
             <h3 class="additional-info-subtitle">Aircraft Information</h3>
             <div class="additional-info-wrap">
               <table class="additional-info-table">
@@ -838,7 +838,7 @@
                       <tr>
                         ${row.map((cell, colIndex) => `<td><input data-admin-additional="${rowIndex}:${colIndex}" value="${escapeAttr(cell)}" /></td>`).join("")}
                         <td class="additional-info-row-action">
-                          <button class="additional-info-remove-btn" data-admin-additional-remove-row="${rowIndex}" type="button" aria-label="Remove row">−</button>
+                          <button class="action admin-mini-btn active" data-admin-additional-remove-row="${rowIndex}" type="button" aria-label="Remove row">-</button>
                         </td>
                       </tr>
                     `).join("")}

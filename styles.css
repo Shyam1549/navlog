@@ -373,10 +373,6 @@ select { font: inherit; }
   color: #2f2a24;
 }
 
-.additional-info-menu-hint {
-  margin: 6px 0 12px;
-}
-
 .admin-card {
   display: grid;
   gap: 14px;
@@ -862,7 +858,6 @@ select { font: inherit; }
 .temp-head { grid-column: 4; grid-row: 2; }
 .dir-head { grid-column: 5; grid-row: 2; }
 .spd-head { grid-column: 6; grid-row: 2; }
-.spd-head { box-shadow: inset -2px 0 0 var(--line); }
 
 .leg-row {
   min-height: 86px;
@@ -1379,7 +1374,7 @@ select { font: inherit; }
 }
 
 .admin-announcement-list .setup-caption {
-  margin-top: 2px;
+  margin: 2px 0 0;
 }
 
 .admin-maintenance-panel {
@@ -1610,38 +1605,16 @@ select { font: inherit; }
 }
 
 .additional-info-row-action {
-  width: 34px;
-  min-width: 34px;
+  width: 42px;
+  min-width: 42px;
   padding: 0 !important;
   text-align: center;
   vertical-align: middle;
 }
 
-.additional-info-remove-btn {
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border-radius: 999px;
-  border: 1px solid rgba(46, 41, 35, 0.28);
-  background: rgba(255, 255, 255, 0.7);
-  color: rgba(46, 41, 35, 0.78);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  font-size: 0.88rem;
-  cursor: pointer;
-}
-
-.additional-info-remove-btn:hover {
-  background: rgba(219, 234, 240, 0.58);
-  border-color: rgba(33, 76, 90, 0.34);
-  color: #123a46;
-}
-
-.additional-info-remove-btn:focus-visible {
-  outline: 2px solid rgba(33, 76, 90, 0.46);
-  outline-offset: 1px;
+.additional-info-row-action .admin-mini-btn {
+  width: 100%;
+  min-width: 0;
 }
 
 .route-dtg {
@@ -2031,14 +2004,8 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   }
 
   .additional-info-row-action {
-    width: 30px;
-    min-width: 30px;
-  }
-
-  .additional-info-remove-btn {
-    width: 20px;
-    height: 20px;
-    font-size: 0.82rem;
+    width: 42px;
+    min-width: 42px;
   }
 }
 
@@ -2064,10 +2031,18 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 .pdf-export .radio-row input { min-height: 84px; }
 .pdf-export .toc-tod-title,
 .pdf-export .toc-tod-card input { min-height: 74px; }
+.pdf-export .toc-tod-card {
+  grid-template-columns: 96px 1fr 1fr;
+}
 .pdf-export .toc-tod-card input::placeholder { color: transparent; }
 .pdf-export .route-cell,
 .pdf-export .location-cell { grid-template-columns: 1fr; }
-.pdf-export .route-main { grid-template-columns: 1fr; }
+.pdf-export .route-main {
+  grid-template-columns: 1fr;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .pdf-export .route-inline-hint { display: none !important; }
 .pdf-export .alt-departure-hint,
 .pdf-export .alt-info-wrap,
@@ -2117,10 +2092,11 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   padding: 0 8px;
 }
 .pdf-export .route-main .pdf-wrap-value {
-  padding-left: 0;
-  padding-right: 0;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
   justify-content: center;
   text-align: center;
+  margin: 0 auto;
 }
 .pdf-export .navlog-box {
   font-size: 1.56rem;
