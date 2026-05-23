@@ -857,6 +857,20 @@ select { font: inherit; }
   font-size: 0.82rem;
 }
 
+.time-head {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  line-height: 1.05;
+}
+
+.time-head small {
+  font-size: 0.62rem;
+  letter-spacing: 0.01em;
+}
+
 .route-head { grid-column: 1; }
 .cruise-head { grid-column: 2 / 5; grid-row: 1; }
 .wind-head { grid-column: 5 / 7; grid-row: 1; }
@@ -1188,9 +1202,14 @@ select { font: inherit; }
   font-size: 0.6rem;
   line-height: 1;
   padding: 0;
+  cursor: pointer;
 }
 
 .field.first-alt.show-alt-hint .alt-info-wrap:hover .alt-info-text {
+  display: block;
+}
+
+.field.first-alt.show-alt-hint .alt-info-wrap.alt-info-open .alt-info-text {
   display: block;
 }
 

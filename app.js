@@ -102,6 +102,8 @@
   const KNOTS_PER_MPH = 0.868976;
   const KNOTS_PER_KMH = 1 / 1.852;
   const KNOTS_PER_MS = 1.9438444924406046;
+  const NM_PER_KM = 1 / 1.852;
+  const NM_PER_SM = 1 / 1.150779;
   let supabaseClient = null;
   let loadingPublicCatalog = false;
   let utcTimer = null;
@@ -356,6 +358,7 @@
       open: false,
       altitudeUnit: "ft",
       speedUnit: "kts",
+      distanceUnit: "nm",
       temperatureUnit: "c",
       roundTimeValues: true,
       roundDistanceValues: true,
@@ -956,6 +959,12 @@
           : state.settings.speedUnit === "ms"
             ? "M/S"
             : "KTS";
+    const distanceUnitLabel =
+      state.settings.distanceUnit === "km"
+        ? "KM"
+        : state.settings.distanceUnit === "sm"
+          ? "SM"
+          : "NM";
     const altUnitLabel = state.settings.altitudeUnit === "m" ? "M" : "FT";
     const tempUnitLabel =
       state.settings.temperatureUnit === "f"
@@ -975,10 +984,10 @@
           <div class="head-cell sub split-top mhv-head">MH</div>
           <div class="head-cell tall ta-head-vd">TA (${speedUnitLabel})</div>
           <div class="head-cell tall gs-head-vd">GS (${speedUnitLabel})</div>
-          <div class="head-cell tall dis-head-vd">DIS (NM)</div>
+          <div class="head-cell tall dis-head-vd">DIS (${distanceUnitLabel})</div>
           <div class="head-cell tall ee-head-vd">EE</div>
-          <div class="head-cell tall et-head-vd">ET</div>
-          <div class="head-cell tall at-head-vd">AT</div>
+          <div class="head-cell tall et-head-vd"><span class="time-head"><span>ET</span><small>(HHMM)</small></span></div>
+          <div class="head-cell tall at-head-vd"><span class="time-head"><span>AT</span><small>(HHMM)</small></span></div>
           <div class="head-cell sub cas-head">CAS (${speedUnitLabel})</div>
           <div class="head-cell sub alt-head">ALT (${altUnitLabel})</div>
           <div class="head-cell sub temp-head">TEMP (${tempUnitLabel})</div>
@@ -998,10 +1007,10 @@
           <div class="head-cell tall wca-head">WCA</div>
           <div class="head-cell tall ta-head">TA (${speedUnitLabel})</div>
           <div class="head-cell tall gs-head">GS (${speedUnitLabel})</div>
-          <div class="head-cell tall dis-head">DIS (NM)</div>
+          <div class="head-cell tall dis-head">DIS (${distanceUnitLabel})</div>
           <div class="head-cell tall ee-head">EE</div>
-          <div class="head-cell tall et-head">ET</div>
-          <div class="head-cell tall at-head">AT</div>
+          <div class="head-cell tall et-head"><span class="time-head"><span>ET</span><small>(HHMM)</small></span></div>
+          <div class="head-cell tall at-head"><span class="time-head"><span>AT</span><small>(HHMM)</small></span></div>
           <div class="head-cell sub cas-head">CAS (${speedUnitLabel})</div>
           <div class="head-cell sub alt-head">ALT (${altUnitLabel})</div>
           <div class="head-cell sub temp-head">TEMP (${tempUnitLabel})</div>
@@ -1124,7 +1133,7 @@
         <div class="${legFieldClass(leg, "distance")}"><input data-leg-field="${index}:distance" value="${escapeAttr(legFieldValue(leg, "distance"))}" /></div>
         <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(legFieldValue(leg, "ee"))}" /></div>
         <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(legFieldValue(leg, "et"))}" /></div>
-        <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" /></div>
+        <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" ${index === 0 ? 'placeholder="AB TIME"' : ""} /></div>
       </div>
     `;
   }
@@ -1157,6 +1166,14 @@
                 <option value="mph" ${s.speedUnit === "mph" ? "selected" : ""}>miles/hour (mph)</option>
                 <option value="kmh" ${s.speedUnit === "kmh" ? "selected" : ""}>kilometers/hour (km/h)</option>
                 <option value="ms" ${s.speedUnit === "ms" ? "selected" : ""}>meters/second (m/s)</option>
+              </select>
+            </label>
+            <label class="settings-item">
+              <span>Distance</span>
+              <select id="setting-distance-unit">
+                <option value="nm" ${s.distanceUnit === "nm" ? "selected" : ""}>nautical miles (NM)</option>
+                <option value="km" ${s.distanceUnit === "km" ? "selected" : ""}>kilometers (KM)</option>
+                <option value="sm" ${s.distanceUnit === "sm" ? "selected" : ""}>statute miles (SM)</option>
               </select>
             </label>
             <label class="settings-item">
@@ -1453,6 +1470,19 @@
         const index = Number(indexText);
         const leg = state.navlog.legs[index];
         let nextValue = event.target.value;
+        if (field === "ee") {
+          const parsedEeMinutes = parseEeInput(nextValue);
+          if (parsedEeMinutes != null) {
+            nextValue = formatMinutesAsHhmm(parsedEeMinutes);
+            event.target.value = nextValue;
+          }
+        } else if (field === "at") {
+          const parsedAtMinutes = parseAtInput(nextValue);
+          if (parsedAtMinutes != null) {
+            nextValue = formatMinutesAsHhmm(parsedAtMinutes);
+            event.target.value = nextValue;
+          }
+        }
         if (isDegreeField(field)) {
           const parsed = num(nextValue);
           if (parsed != null) {
@@ -1477,6 +1507,25 @@
         syncRouteHints();
       });
     });
+    document.querySelectorAll(".alt-info-badge").forEach((badge) => {
+      badge.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const wrap = badge.closest(".alt-info-wrap");
+        if (!wrap) return;
+        const shouldOpen = !wrap.classList.contains("alt-info-open");
+        document.querySelectorAll(".alt-info-wrap.alt-info-open").forEach((node) => node.classList.remove("alt-info-open"));
+        if (shouldOpen) wrap.classList.add("alt-info-open");
+      });
+    });
+    if (!document.body.dataset.altInfoCloseBound) {
+      document.body.dataset.altInfoCloseBound = "1";
+      document.addEventListener("click", (event) => {
+        const target = event.target;
+        if (target && target.closest && target.closest(".alt-info-wrap")) return;
+        document.querySelectorAll(".alt-info-wrap.alt-info-open").forEach((node) => node.classList.remove("alt-info-open"));
+      });
+    }
     const datePickerInput = document.querySelector("[data-date-picker]");
     if (datePickerInput) {
       const dateDisplayInput = document.querySelector('[data-header="date"]');
@@ -1569,6 +1618,12 @@
         applySettingsChange({ speedUnit: event.target.value });
       });
     }
+    const distanceUnitSelect = document.getElementById("setting-distance-unit");
+    if (distanceUnitSelect) {
+      distanceUnitSelect.addEventListener("change", (event) => {
+        applySettingsChange({ distanceUnit: event.target.value });
+      });
+    }
     const temperatureUnitSelect = document.getElementById("setting-temperature-unit");
     if (temperatureUnitSelect) {
       temperatureUnitSelect.addEventListener("change", (event) => {
@@ -1610,6 +1665,7 @@
         applySettingsChange({
           altitudeUnit: "ft",
           speedUnit: "kts",
+          distanceUnit: "nm",
           temperatureUnit: "c",
           roundTimeValues: true,
           roundDistanceValues: true,
@@ -1630,6 +1686,7 @@
     const affectsMathFormatting =
       previous.altitudeUnit !== next.altitudeUnit
       || previous.speedUnit !== next.speedUnit
+      || previous.distanceUnit !== next.distanceUnit
       || previous.temperatureUnit !== next.temperatureUnit
       || previous.roundTimeValues !== next.roundTimeValues
       || previous.roundDistanceValues !== next.roundDistanceValues;
@@ -1658,8 +1715,8 @@
       convertLegField(leg, "windSpd", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
       convertLegField(leg, "ta", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
       convertLegField(leg, "gs", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
-      convertLegField(leg, "distance", previous, next, parseDistanceInputWithRounding, formatDistanceDisplayWithRounding);
-      convertLegField(leg, "ee", previous, next, parseDurationInputWithTimeRounding, formatEeDisplayWithTimeRounding);
+      convertLegField(leg, "distance", previous, next, parseDistanceInputWithUnit, formatDistanceDisplayWithRounding);
+      convertLegField(leg, "ee", previous, next, parseEeInput, formatEeDisplayWithTimeRounding);
     });
 
     if (previous.altitudeUnit !== next.altitudeUnit) {
@@ -1676,11 +1733,11 @@
       if (todMinutes != null) state.navlog.tocTod.todTime = formatGeneralMinutesWithTimeRounding(todMinutes, next.roundTimeValues);
     }
 
-    if (previous.roundDistanceValues !== next.roundDistanceValues) {
-      const tocDistance = parseDistanceInputWithRounding(state.navlog.tocTod.tocDistance, previous.roundDistanceValues);
-      const todDistance = parseDistanceInputWithRounding(state.navlog.tocTod.todDistance, previous.roundDistanceValues);
-      if (tocDistance != null) state.navlog.tocTod.tocDistance = formatDistanceDisplayWithRounding(tocDistance, next.roundDistanceValues);
-      if (todDistance != null) state.navlog.tocTod.todDistance = formatDistanceDisplayWithRounding(todDistance, next.roundDistanceValues);
+    if (previous.roundDistanceValues !== next.roundDistanceValues || previous.distanceUnit !== next.distanceUnit) {
+      const tocDistance = parseDistanceInputWithRounding(state.navlog.tocTod.tocDistance, previous.roundDistanceValues, previous.distanceUnit);
+      const todDistance = parseDistanceInputWithRounding(state.navlog.tocTod.todDistance, previous.roundDistanceValues, previous.distanceUnit);
+      if (tocDistance != null) state.navlog.tocTod.tocDistance = formatDistanceDisplayWithRounding(tocDistance, next.roundDistanceValues, next.distanceUnit);
+      if (todDistance != null) state.navlog.tocTod.todDistance = formatDistanceDisplayWithRounding(todDistance, next.roundDistanceValues, next.distanceUnit);
     }
   }
 
@@ -1693,8 +1750,8 @@
       parseMode = previous.roundTimeValues;
       formatMode = next.roundTimeValues;
     } else if (field === "distance") {
-      parseMode = previous.roundDistanceValues;
-      formatMode = next.roundDistanceValues;
+      parseMode = previous.distanceUnit;
+      formatMode = next.distanceUnit;
     } else if (field === "alt") {
       parseMode = previous.altitudeUnit;
       formatMode = next.altitudeUnit;
@@ -1704,6 +1761,10 @@
     }
     const internal = parseFn(raw, parseMode);
     if (internal == null) return;
+    if (field === "distance") {
+      leg[field] = formatFn(internal, next.roundDistanceValues, formatMode);
+      return;
+    }
     leg[field] = formatFn(internal, formatMode, next.roundTimeValues);
   }
 
@@ -1783,6 +1844,7 @@
 
   function computeRouteMath(activeEdit) {
     state.navlog.legs = state.navlog.legs.map((leg, index) => solveLeg(leg, activeEdit && activeEdit.index === index ? activeEdit.field : null));
+    computeEtAtTimeline();
     computeTocTod();
   }
 
@@ -1796,10 +1858,14 @@
       windSpd: manual.windSpd ? parseSpeedInput(leg.windSpd) : null,
       tc: manual.tc ? num(leg.tc) : null,
       wca: manual.wca ? num(leg.wca) : null,
+      th: manual.th ? num(leg.th) : null,
+      var: manual.var ? num(leg.var) : null,
+      mh: manual.mh ? num(leg.mh) : null,
+      dev: manual.dev ? num(leg.dev) : null,
       ta: manual.ta ? parseSpeedInput(leg.ta) : null,
       gs: manual.gs ? parseSpeedInput(leg.gs) : null,
       distance: manual.distance ? parseDistanceInput(leg.distance) : null,
-      ee: manual.ee ? parseDurationInput(leg.ee) : null,
+      ee: manual.ee ? parseEeInput(leg.ee) : null,
     };
     const derived = {};
     const errors = {};
@@ -1887,6 +1953,14 @@
         assignDerived("gs", values.distance / (values.ee / 60));
       }
 
+      if (values.tc != null && values.wca != null) assignDerived("th", normalizeAngle(values.tc + values.wca));
+      if (values.th != null && values.tc != null) assignDerived("wca", normalizeSignedAngle(values.th - values.tc));
+      if (values.th != null && values.wca != null) assignDerived("tc", normalizeAngle(values.th - values.wca));
+
+      if (values.th != null && values.var != null) assignDerived("mh", normalizeAngle(values.th + values.var));
+      if (values.mh != null && values.th != null) assignDerived("var", normalizeSignedAngle(values.mh - values.th));
+      if (values.mh != null && values.var != null) assignDerived("th", normalizeAngle(values.mh - values.var));
+
     }
 
     if (errors.wca && canDerive("wca")) {
@@ -1908,8 +1982,12 @@
       temp: resolveDisplayField(leg, manual, lockedField, "temp", values.temp, formatTemperatureDisplay),
       windDir: resolveDisplayField(leg, manual, lockedField, "windDir", values.windDir, maybeDegrees),
       windSpd: resolveDisplayField(leg, manual, lockedField, "windSpd", values.windSpd, formatSpeedDisplay),
-      tc: resolveDisplayField(leg, manual, lockedField, "tc", values.tc, maybeDegrees),
+      tc: resolveDisplayField(leg, manual, lockedField, "tc", values.tc, maybeHeadingDegrees),
       wca: resolveDisplayField(leg, manual, lockedField, "wca", values.wca, maybeSignedDegrees),
+      th: resolveDisplayField(leg, manual, lockedField, "th", values.th, maybeHeadingDegrees),
+      var: resolveDisplayField(leg, manual, lockedField, "var", values.var, maybeSignedDegrees),
+      mh: resolveDisplayField(leg, manual, lockedField, "mh", values.mh, maybeHeadingDegrees),
+      dev: resolveDisplayField(leg, manual, lockedField, "dev", values.dev, maybeSignedDegrees),
       ta: resolveDisplayField(leg, manual, lockedField, "ta", values.ta, formatSpeedDisplay),
       gs: resolveDisplayField(leg, manual, lockedField, "gs", values.gs, formatSpeedDisplay),
       distance: resolveDisplayField(leg, manual, lockedField, "distance", values.distance, formatDistanceDisplay),
@@ -3916,10 +3994,16 @@
       syncLegField(index, "windSpd", leg.windSpd, activeEdit, leg);
       syncLegField(index, "tc", leg.tc, activeEdit, leg);
       syncLegField(index, "wca", leg.wca, activeEdit, leg);
+      syncLegField(index, "th", leg.th, activeEdit, leg);
+      syncLegField(index, "var", leg.var, activeEdit, leg);
+      syncLegField(index, "mh", leg.mh, activeEdit, leg);
+      syncLegField(index, "dev", leg.dev, activeEdit, leg);
       syncLegField(index, "ta", leg.ta, activeEdit, leg);
       syncLegField(index, "gs", leg.gs, activeEdit, leg);
       syncLegField(index, "distance", leg.distance, activeEdit, leg);
       syncLegField(index, "ee", leg.ee, activeEdit, leg);
+      syncLegField(index, "et", leg.et, activeEdit, leg);
+      syncLegField(index, "at", leg.at, activeEdit, leg);
 
       syncLegDerived(index, "cas", Boolean(leg._derived && leg._derived.cas));
       syncLegDerived(index, "alt", Boolean(leg._derived && leg._derived.alt));
@@ -3928,10 +4012,15 @@
       syncLegDerived(index, "windSpd", Boolean(leg._derived && leg._derived.windSpd));
       syncLegDerived(index, "tc", Boolean(leg._derived && leg._derived.tc));
       syncLegDerived(index, "wca", Boolean(leg._derived && leg._derived.wca));
+      syncLegDerived(index, "th", Boolean(leg._derived && leg._derived.th));
+      syncLegDerived(index, "var", Boolean(leg._derived && leg._derived.var));
+      syncLegDerived(index, "mh", Boolean(leg._derived && leg._derived.mh));
+      syncLegDerived(index, "dev", Boolean(leg._derived && leg._derived.dev));
       syncLegDerived(index, "ta", Boolean(leg._derived && leg._derived.ta));
       syncLegDerived(index, "gs", Boolean(leg._derived && leg._derived.gs));
       syncLegDerived(index, "distance", Boolean(leg._derived && leg._derived.distance));
       syncLegDerived(index, "ee", Boolean(leg._derived && leg._derived.ee));
+      syncLegDerived(index, "et", Boolean(leg._derived && leg._derived.et));
 
       syncLegError(index, "wca", Boolean(leg._errors && leg._errors.wca));
       syncLegError(index, "gs", Boolean(leg._errors && leg._errors.gs));
@@ -4182,17 +4271,31 @@
     return parseDistanceInputWithRounding(value, state.settings.roundDistanceValues);
   }
 
-  function parseDistanceInputWithRounding(value, _roundDistanceValues) {
-    return num(value);
+  function parseDistanceInputWithRounding(value, _roundDistanceValues, unit = state.settings.distanceUnit) {
+    return parseDistanceInputWithUnit(value, unit);
+  }
+
+  function parseDistanceInputWithUnit(value, unit) {
+    const parsed = num(value);
+    if (parsed == null) return null;
+    if (unit === "km") return parsed * NM_PER_KM;
+    if (unit === "sm") return parsed * NM_PER_SM;
+    return parsed;
   }
 
   function formatDistanceDisplay(valueNm) {
     return formatDistanceDisplayWithRounding(valueNm, state.settings.roundDistanceValues);
   }
 
-  function formatDistanceDisplayWithRounding(valueNm, roundDistanceValues) {
+  function formatDistanceDisplayWithRounding(valueNm, roundDistanceValues, unit = state.settings.distanceUnit) {
     if (valueNm == null || !Number.isFinite(valueNm)) return "";
-    return roundDistanceValues ? maybeFormat(valueNm) : formatOneDecimal(valueNm);
+    const display =
+      unit === "km"
+        ? valueNm / NM_PER_KM
+        : unit === "sm"
+          ? valueNm / NM_PER_SM
+          : valueNm;
+    return roundDistanceValues ? maybeFormat(display) : formatOneDecimal(display);
   }
 
   function parseClimbRateInput(value) {
@@ -4286,12 +4389,17 @@
   }
 
   function isDegreeField(field) {
-    return field === "tc" || field === "wca" || field === "windDir";
+    return field === "tc" || field === "wca" || field === "windDir" || field === "th" || field === "var" || field === "mh" || field === "dev";
   }
 
   function maybeDegrees(value) {
     if (value == null || !Number.isFinite(value)) return "";
     return String(roundHalfUp(value));
+  }
+
+  function maybeHeadingDegrees(value) {
+    if (value == null || !Number.isFinite(value)) return "";
+    return String(roundHalfUp(normalizeAngle(value)));
   }
 
   function maybeSignedDegrees(value) {
@@ -4312,8 +4420,17 @@
     return formatEeDisplayWithTimeRounding(minutesFloat, state.settings.roundTimeValues);
   }
 
-  function formatEeDisplayWithTimeRounding(minutesFloat, roundTimeValues) {
-    return formatMinutesDisplayWithTimeRounding(minutesFloat, roundTimeValues);
+  function formatEeDisplayWithTimeRounding(minutesFloat, _roundTimeValues) {
+    if (!Number.isFinite(minutesFloat)) return "";
+    return formatMinutesAsHhmm(minutesFloat);
+  }
+
+  function formatMinutesAsHhmm(minutesFloat) {
+    if (!Number.isFinite(minutesFloat)) return "";
+    const totalMinutes = Math.max(0, roundHalfUp(minutesFloat));
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return `${String(hours).padStart(2, "0")}${String(minutes).padStart(2, "0")}`;
   }
 
   function formatMinutesDisplayWithTimeRounding(minutesFloat, roundTimeValues) {
@@ -4335,6 +4452,36 @@
 
   function parseDurationInput(value) {
     return parseDurationInputWithTimeRounding(value, state.settings.roundTimeValues);
+  }
+
+  function parseEeInput(value) {
+    const text = String(value || "").trim();
+    if (!text) return null;
+    const hhmm = parseHhmmToMinutes(text);
+    if (hhmm != null) return hhmm;
+    const parsed = num(text);
+    return parsed == null ? null : Math.max(0, parsed);
+  }
+
+  function parseAtInput(value) {
+    const text = String(value || "").trim();
+    if (!text) return null;
+    return parseHhmmToMinutes(text);
+  }
+
+  function parseHhmmToMinutes(text) {
+    const compact = String(text || "").replace(/[^\d]/g, "");
+    if (!compact) return null;
+    if (compact.length <= 2) {
+      const minutesOnly = Number(compact);
+      return Number.isFinite(minutesOnly) ? Math.max(0, minutesOnly) : null;
+    }
+    const splitAt = compact.length - 2;
+    const hours = Number(compact.slice(0, splitAt));
+    const minutes = Number(compact.slice(splitAt));
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+    if (hours < 0 || minutes < 0 || minutes >= 60) return null;
+    return (hours * 60) + minutes;
   }
 
   function parseDurationInputWithTimeRounding(value, _roundTimeValues) {
@@ -4364,6 +4511,28 @@
     if (nums.length === 3 && minutes >= 60) return null;
     if (seconds >= 60) return null;
     return (hours * 60) + minutes + (seconds / 60);
+  }
+
+  function computeEtAtTimeline() {
+    const departureAtMinutes = parseAtInput(state.navlog.legs[0] && state.navlog.legs[0].at);
+    let elapsedMinutes = 0;
+    state.navlog.legs.forEach((leg, index) => {
+      leg._derived = leg._derived || {};
+      if (index === 0) {
+        leg.et = "";
+        delete leg._derived.et;
+        return;
+      }
+      const eeMinutes = parseEeInput(leg.ee);
+      if (departureAtMinutes == null || eeMinutes == null || !Number.isFinite(eeMinutes) || eeMinutes < 0) {
+        leg.et = "";
+        delete leg._derived.et;
+        return;
+      }
+      elapsedMinutes += eeMinutes;
+      leg.et = formatMinutesAsHhmm(departureAtMinutes + elapsedMinutes);
+      leg._derived.et = true;
+    });
   }
 
   function normalizeAngle(angle) {
