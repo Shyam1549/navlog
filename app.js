@@ -112,6 +112,7 @@
   let adminGameState = null;
   let adminGameAnimation = null;
   let kioskPadState = null;
+  let viewportFitResizeBound = false;
 
   function createBlankLeg(route) {
     return {
@@ -331,6 +332,7 @@
   }
 
   function render() {
+    if (state.view !== "ipad-kiosk") document.body.classList.remove("kiosk-mode");
     evaluateAnnouncementsPrompt();
     computeRouteMath();
     if (state.view === "setup") app.innerHTML = renderSetupScreen();
@@ -951,11 +953,24 @@
   }
 
   function renderIpadKioskScreen() {
+    const h = state.navlog.header;
     return `
       <main class="ipad-kiosk-page">
         <section class="ipad-kiosk-navlog">
           <div class="sheet">
+            <section class="sheet-header">
+              ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
+              <div class="header-box dark static planning-box">PREFLIGHT PLANNER</div>
+              ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
+               ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
+              ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
+              <div class="header-box static navlog-box">NAVIGATION LOG</div>
+              ${renderHeaderInputBox("UTC TIME", `<input data-header="timeUtc" value="${escapeAttr(h.timeUtc)}" />`, "utc-box")}
+            </section>
             ${renderRouteTable()}
+            ${renderTocTod()}
+            ${renderLocationTable()}
+            ${renderAtisSection()}
           </div>
         </section>
         <section class="ipad-kiosk-pad">
@@ -1724,11 +1739,23 @@
 
     syncFirstAltHint();
     syncRouteHints();
+    fitSheetToViewport(".sheet-wrap");
   }
 
   function wireIpadKiosk() {
     document.querySelectorAll(".mini-plus, .remove-chip, .blank-chip").forEach((node) => {
       node.style.display = "none";
+    });
+    document.body.classList.add("kiosk-mode");
+    fitSheetToViewport(".ipad-kiosk-navlog");
+    document.querySelectorAll("input, select, textarea, button").forEach((node) => {
+      if (node.id === "kiosk-pad-clear") return;
+      const legField = String(node.getAttribute("data-leg-field") || "");
+      if (legField.endsWith(":at")) return;
+      if (node.tagName === "BUTTON") node.style.display = "none";
+      if ("readOnly" in node) node.readOnly = true;
+      if ("disabled" in node) node.disabled = true;
+      node.tabIndex = -1;
     });
     const legInputs = document.querySelectorAll("[data-leg-field]");
     legInputs.forEach((input) => {
@@ -1874,6 +1901,36 @@
       window.scrollTo(0, 1);
     } catch {
       // best effort on mobile browsers
+    }
+  }
+
+  function fitSheetToViewport(containerSelector) {
+    if (!isIpadDevice()) return;
+    const container = document.querySelector(containerSelector);
+    const sheet = container ? container.querySelector(".sheet") : null;
+    if (!container || !sheet) return;
+
+    const baseWidth = 1366;
+    sheet.style.transform = "none";
+    sheet.style.width = `${baseWidth}px`;
+    sheet.style.minWidth = `${baseWidth}px`;
+    sheet.style.maxWidth = `${baseWidth}px`;
+    sheet.style.transformOrigin = "top left";
+    container.style.overflowX = "hidden";
+    container.style.overflowY = "auto";
+
+    const available = Math.max(320, container.clientWidth - 4);
+    const scale = Math.min(1, available / baseWidth);
+    sheet.style.transform = `scale(${scale})`;
+    const rawHeight = sheet.offsetHeight;
+    container.style.height = `${Math.ceil(rawHeight * scale) + 8}px`;
+
+    if (!viewportFitResizeBound) {
+      viewportFitResizeBound = true;
+      window.addEventListener("resize", () => {
+        if (state.view === "navlog") fitSheetToViewport(".sheet-wrap");
+        if (state.view === "ipad-kiosk") fitSheetToViewport(".ipad-kiosk-navlog");
+      });
     }
   }
 

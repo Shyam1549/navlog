@@ -38,6 +38,11 @@ select { font: inherit; }
   flex-direction: column;
 }
 
+body.kiosk-mode {
+  padding: 0;
+  overflow: hidden;
+}
+
 .ui-scale {
   width: 100%;
   zoom: var(--ui-scale);
