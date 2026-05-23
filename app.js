@@ -1840,6 +1840,10 @@
     sheet.style.minWidth = `${baseWidth}px`;
     sheet.style.maxWidth = `${baseWidth}px`;
     sheet.style.transformOrigin = "top left";
+    sheet.style.position = "absolute";
+    sheet.style.left = "0";
+    sheet.style.top = "0";
+    container.style.position = "relative";
     container.style.overflowX = "hidden";
     container.style.overflowY = "visible";
 
