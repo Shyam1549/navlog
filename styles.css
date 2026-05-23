@@ -821,6 +821,11 @@ select { font: inherit; }
   grid-template-columns: 1.35fr repeat(13, 1fr);
 }
 
+.nav-head-grid.nav-head-grid-vd,
+.leg-row.leg-row-vd {
+  grid-template-columns: 1.35fr repeat(14, 1fr);
+}
+
 .nav-head-grid > div,
 .leg-row > div { border-right: 2px solid var(--line); }
 .leg-row > div:last-child { border-right: 0; }
@@ -839,6 +844,10 @@ select { font: inherit; }
 
 .head-cell.group {
   font-size: 0.95rem;
+  border-bottom: 2px solid var(--line);
+}
+
+.head-cell.split-top {
   border-bottom: 2px solid var(--line);
 }
 
@@ -866,6 +875,19 @@ select { font: inherit; }
 .dir-head { grid-column: 5; grid-row: 2; }
 .spd-head { grid-column: 6; grid-row: 2; }
 
+.tcv-head { grid-column: 7; grid-row: 1; }
+.wcav-head { grid-column: 7; grid-row: 2; }
+.thv-head { grid-column: 8; grid-row: 1; }
+.varv-head { grid-column: 8; grid-row: 2; }
+.mhv-head { grid-column: 9; grid-row: 1; }
+.devv-head { grid-column: 9; grid-row: 2; }
+.ta-head-vd { grid-column: 10; }
+.gs-head-vd { grid-column: 11; }
+.dis-head-vd { grid-column: 12; }
+.ee-head-vd { grid-column: 13; }
+.et-head-vd { grid-column: 14; }
+.at-head-vd { grid-column: 15; border-right: 0 !important; }
+
 .leg-row {
   min-height: 86px;
   border-bottom: 1.5px solid var(--line);
@@ -882,6 +904,22 @@ select { font: inherit; }
   padding: 12px 10px;
   text-align: center;
   font-size: 0.94rem;
+}
+
+.stack-field {
+  display: grid;
+  grid-template-rows: 1fr 1fr;
+}
+
+.stack-field input {
+  min-height: 43px;
+  height: 43px;
+  border-bottom: 1.5px solid var(--line);
+  padding: 8px 8px;
+}
+
+.stack-field input:last-child {
+  border-bottom: 0;
 }
 
 .field.derived input {

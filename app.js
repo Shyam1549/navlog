@@ -119,6 +119,10 @@
       windSpd: "",
       tc: "",
       wca: "",
+      th: "",
+      var: "",
+      mh: "",
+      dev: "",
       ta: "",
       gs: "",
       distance: "",
@@ -356,6 +360,7 @@
       roundTimeValues: true,
       roundDistanceValues: true,
       showDistanceToGo: false,
+      variationDeviationEnabled: false,
       pdfLayout: "default",
     };
   }
@@ -942,6 +947,7 @@
   }
 
   function renderRouteTable() {
+    const variationDeviationEnabled = Boolean(state.settings.variationDeviationEnabled);
     const speedUnitLabel =
       state.settings.speedUnit === "mph"
         ? "MPH"
@@ -957,9 +963,34 @@
         : state.settings.temperatureUnit === "k"
           ? "K"
           : "C";
-    return `
-      <section class="nav-table">
-        <div class="nav-head-grid">
+    const headClass = variationDeviationEnabled ? "nav-head-grid nav-head-grid-vd" : "nav-head-grid";
+    const tableHead = variationDeviationEnabled
+      ? `
+        <div class="${headClass}">
+          <div class="head-cell tall route-head">ROUTE <button class="mini-plus inline" id="add-leg" type="button">+</button></div>
+          <div class="head-cell group cruise-head">CRUISE</div>
+          <div class="head-cell group wind-head">WIND</div>
+          <div class="head-cell split-top tcv-head">TC</div>
+          <div class="head-cell split-top thv-head">TH</div>
+          <div class="head-cell split-top mhv-head">MH</div>
+          <div class="head-cell tall ta-head-vd">TA (${speedUnitLabel})</div>
+          <div class="head-cell tall gs-head-vd">GS (${speedUnitLabel})</div>
+          <div class="head-cell tall dis-head-vd">DIS (NM)</div>
+          <div class="head-cell tall ee-head-vd">EE</div>
+          <div class="head-cell tall et-head-vd">ET</div>
+          <div class="head-cell tall at-head-vd">AT</div>
+          <div class="head-cell sub cas-head">CAS (${speedUnitLabel})</div>
+          <div class="head-cell sub alt-head">ALT (${altUnitLabel})</div>
+          <div class="head-cell sub temp-head">TEMP (${tempUnitLabel})</div>
+          <div class="head-cell sub dir-head">DIR</div>
+          <div class="head-cell sub spd-head">SPD (${speedUnitLabel})</div>
+          <div class="head-cell sub wcav-head">WCA</div>
+          <div class="head-cell sub varv-head">VAR</div>
+          <div class="head-cell sub devv-head">DEV</div>
+        </div>
+      `
+      : `
+        <div class="${headClass}">
           <div class="head-cell tall route-head">ROUTE <button class="mini-plus inline" id="add-leg" type="button">+</button></div>
           <div class="head-cell group cruise-head">CRUISE</div>
           <div class="head-cell group wind-head">WIND</div>
@@ -977,8 +1008,12 @@
           <div class="head-cell sub dir-head">DIR</div>
           <div class="head-cell sub spd-head">SPD (${speedUnitLabel})</div>
         </div>
+      `;
+    return `
+      <section class="nav-table">
+        ${tableHead}
         <div class="table-body">
-          ${state.navlog.legs.map((leg, index) => renderLegRow(leg, index)).join("")}
+          ${state.navlog.legs.map((leg, index) => renderLegRow(leg, index, variationDeviationEnabled)).join("")}
         </div>
       </section>
     `;
@@ -1028,15 +1063,35 @@
     return formatDistanceDisplay(Math.max(0, distanceToGo));
   }
 
-  function renderLegRow(leg, index) {
+  function renderLegRow(leg, index, variationDeviationEnabled = false) {
     const removable = index > 0 && index < state.navlog.legs.length - 1;
     const altExtra = index === 0 ? "first-alt" : "";
     const distanceToGo = getDistanceToGoDisplay(index);
     const isFirstRoute = index === 0;
     const isLastRoute = index === state.navlog.legs.length - 1;
     const routeCellExtra = isFirstRoute ? "first-route-hint" : (isLastRoute ? "last-route-hint" : "");
+    const rowClass = variationDeviationEnabled ? "leg-row leg-row-vd" : "leg-row";
+    const lateralCells = variationDeviationEnabled
+      ? `
+        <div class="${legFieldClass(leg, "tc", "stack-field")}">
+          <input data-leg-field="${index}:tc" value="${escapeAttr(legFieldValue(leg, "tc"))}" />
+          <input data-leg-field="${index}:wca" value="${escapeAttr(legFieldValue(leg, "wca"))}" />
+        </div>
+        <div class="${legFieldClass(leg, "th", "stack-field")}">
+          <input data-leg-field="${index}:th" value="${escapeAttr(legFieldValue(leg, "th"))}" />
+          <input data-leg-field="${index}:var" value="${escapeAttr(legFieldValue(leg, "var"))}" />
+        </div>
+        <div class="${legFieldClass(leg, "mh", "stack-field")}">
+          <input data-leg-field="${index}:mh" value="${escapeAttr(legFieldValue(leg, "mh"))}" />
+          <input data-leg-field="${index}:dev" value="${escapeAttr(legFieldValue(leg, "dev"))}" />
+        </div>
+      `
+      : `
+        <div class="${legFieldClass(leg, "tc")}"><input data-leg-field="${index}:tc" value="${escapeAttr(legFieldValue(leg, "tc"))}" /></div>
+        <div class="${legFieldClass(leg, "wca")}"><input data-leg-field="${index}:wca" value="${escapeAttr(legFieldValue(leg, "wca"))}" /></div>
+      `;
     return `
-      <div class="leg-row">
+      <div class="${rowClass}">
         <div class="${legFieldClass(leg, "route", `route route-cell ${routeCellExtra}`.trim())}">
           <div class="route-main">
             <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" />
@@ -1063,8 +1118,7 @@
         <div class="${legFieldClass(leg, "temp")}"><input data-leg-field="${index}:temp" value="${escapeAttr(legFieldValue(leg, "temp"))}" /></div>
         <div class="${legFieldClass(leg, "windDir")}"><input data-leg-field="${index}:windDir" value="${escapeAttr(legFieldValue(leg, "windDir"))}" /></div>
         <div class="${legFieldClass(leg, "windSpd")}"><input data-leg-field="${index}:windSpd" value="${escapeAttr(legFieldValue(leg, "windSpd"))}" /></div>
-        <div class="${legFieldClass(leg, "tc")}"><input data-leg-field="${index}:tc" value="${escapeAttr(legFieldValue(leg, "tc"))}" /></div>
-        <div class="${legFieldClass(leg, "wca")}"><input data-leg-field="${index}:wca" value="${escapeAttr(legFieldValue(leg, "wca"))}" /></div>
+        ${lateralCells}
         <div class="${legFieldClass(leg, "ta")}"><input data-leg-field="${index}:ta" value="${escapeAttr(legFieldValue(leg, "ta"))}" /></div>
         <div class="${legFieldClass(leg, "gs")}"><input data-leg-field="${index}:gs" value="${escapeAttr(legFieldValue(leg, "gs"))}" /></div>
         <div class="${legFieldClass(leg, "distance")}"><input data-leg-field="${index}:distance" value="${escapeAttr(legFieldValue(leg, "distance"))}" /></div>
@@ -1135,8 +1189,8 @@
               <input type="checkbox" id="setting-distance-to-go" ${s.showDistanceToGo ? "checked" : ""} />
               <span>Show distance-to-go under route waypoints</span>
             </label>
-            <label class="settings-item settings-item-check settings-coming-soon-wrap" data-coming="coming soon">
-              <input type="checkbox" id="setting-variation-deviation" disabled />
+            <label class="settings-item settings-item-check">
+              <input type="checkbox" id="setting-variation-deviation" ${s.variationDeviationEnabled ? "checked" : ""} />
               <span>Variation/Deviation</span>
             </label>
           </div>
@@ -1539,6 +1593,12 @@
         applySettingsChange({ showDistanceToGo: event.target.checked });
       });
     }
+    const variationDeviationToggle = document.getElementById("setting-variation-deviation");
+    if (variationDeviationToggle) {
+      variationDeviationToggle.addEventListener("change", (event) => {
+        applySettingsChange({ variationDeviationEnabled: event.target.checked });
+      });
+    }
     document.querySelectorAll('[name="setting-pdf-layout"]').forEach((input) => {
       input.addEventListener("change", (event) => {
         applySettingsChange({ pdfLayout: event.target.value });
@@ -1554,6 +1614,7 @@
           roundTimeValues: true,
           roundDistanceValues: true,
           showDistanceToGo: false,
+          variationDeviationEnabled: false,
           pdfLayout: "default",
         });
       });
@@ -1575,6 +1636,7 @@
     const changed =
       affectsMathFormatting
       || previous.showDistanceToGo !== next.showDistanceToGo
+      || previous.variationDeviationEnabled !== next.variationDeviationEnabled
       || previous.pdfLayout !== next.pdfLayout;
     if (!changed) return;
 
