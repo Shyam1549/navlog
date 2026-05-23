@@ -960,7 +960,7 @@
           <div class="sheet ipad-kiosk-sheet">
             <section class="sheet-header">
               ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
-              <div class="header-box dark static planning-box" id="kiosk-planner-toggle">PREFLIGHT PLANNER</div>
+              <div class="header-box dark static planning-box">PREFLIGHT PLANNER</div>
               ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
                ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
               ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
@@ -971,18 +971,6 @@
             ${renderTocTod()}
             ${renderLocationTable()}
             ${renderAtisSection()}
-          </div>
-        </section>
-        <section class="kiosk-pad-overlay" id="kiosk-pad-overlay" aria-hidden="true">
-          <div class="kiosk-pad-card">
-            <div class="ipad-kiosk-pad-head">
-              <h3>Scratch Pad</h3>
-              <div class="ipad-kiosk-actions">
-                <button class="action" id="kiosk-pad-close" type="button">Close</button>
-                <button class="action" id="kiosk-pad-clear" type="button">Clear</button>
-              </div>
-            </div>
-            <canvas id="kiosk-pad-canvas" width="1400" height="420" aria-label="Scratch pad"></canvas>
           </div>
         </section>
       </main>
@@ -1797,8 +1785,6 @@
         });
       }
     });
-    wireKioskScratchPadToggle();
-    setupKioskScratchPad();
   }
 
   function isIpadDevice() {
@@ -1836,99 +1822,6 @@
     }
   }
 
-  function setupKioskScratchPad() {
-    const canvas = document.getElementById("kiosk-pad-canvas");
-    const clearButton = document.getElementById("kiosk-pad-clear");
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const stage = { drawing: false, lastX: 0, lastY: 0 };
-    const resize = () => {
-      const box = canvas.getBoundingClientRect();
-      const ratio = Math.max(1, window.devicePixelRatio || 1);
-      canvas.width = Math.max(600, Math.round(box.width * ratio));
-      canvas.height = Math.max(220, Math.round(box.height * ratio));
-      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-      ctx.lineWidth = 2.2;
-      ctx.strokeStyle = "#1f2a30";
-    };
-    const pointFromEvent = (event) => {
-      const rect = canvas.getBoundingClientRect();
-      const touch = event.touches && event.touches[0];
-      const x = (touch ? touch.clientX : event.clientX) - rect.left;
-      const y = (touch ? touch.clientY : event.clientY) - rect.top;
-      return { x, y };
-    };
-    const startDraw = (event) => {
-      event.preventDefault();
-      const p = pointFromEvent(event);
-      stage.drawing = true;
-      stage.lastX = p.x;
-      stage.lastY = p.y;
-    };
-    const moveDraw = (event) => {
-      if (!stage.drawing) return;
-      event.preventDefault();
-      const p = pointFromEvent(event);
-      ctx.beginPath();
-      ctx.moveTo(stage.lastX, stage.lastY);
-      ctx.lineTo(p.x, p.y);
-      ctx.stroke();
-      stage.lastX = p.x;
-      stage.lastY = p.y;
-    };
-    const endDraw = () => {
-      stage.drawing = false;
-    };
-    resize();
-    window.addEventListener("resize", resize);
-    canvas.addEventListener("mousedown", startDraw);
-    canvas.addEventListener("mousemove", moveDraw);
-    canvas.addEventListener("mouseup", endDraw);
-    canvas.addEventListener("mouseleave", endDraw);
-    canvas.addEventListener("touchstart", startDraw, { passive: false });
-    canvas.addEventListener("touchmove", moveDraw, { passive: false });
-    canvas.addEventListener("touchend", endDraw, { passive: false });
-    if (clearButton) {
-      clearButton.addEventListener("click", () => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      });
-    }
-    kioskPadState = { resize };
-  }
-
-  function wireKioskScratchPadToggle() {
-    const plannerToggle = document.getElementById("kiosk-planner-toggle");
-    const overlay = document.getElementById("kiosk-pad-overlay");
-    const closeButton = document.getElementById("kiosk-pad-close");
-    if (!plannerToggle || !overlay) return;
-    let tapCount = 0;
-    let lastTapAt = 0;
-    const windowMs = 1400;
-    const toggleOverlay = (show) => {
-      if (show) overlay.classList.add("open");
-      else overlay.classList.remove("open");
-    };
-    const onTap = () => {
-      const now = Date.now();
-      if (now - lastTapAt > windowMs) tapCount = 0;
-      tapCount += 1;
-      lastTapAt = now;
-      if (tapCount >= 3) {
-        tapCount = 0;
-        toggleOverlay(true);
-      }
-    };
-    plannerToggle.addEventListener("click", onTap);
-    plannerToggle.addEventListener("touchstart", onTap, { passive: true });
-    if (closeButton) closeButton.addEventListener("click", () => toggleOverlay(false));
-    overlay.addEventListener("click", (event) => {
-      if (event.target === overlay) toggleOverlay(false);
-    });
-  }
-
   function fitSheetToViewport(containerSelector) {
     if (!isIpadDevice()) return;
     const container = document.querySelector(containerSelector);
@@ -1937,6 +1830,7 @@
 
     const baseWidth = 1366;
     sheet.style.transform = "none";
+    sheet.style.zoom = "";
     sheet.style.width = `${baseWidth}px`;
     sheet.style.minWidth = `${baseWidth}px`;
     sheet.style.maxWidth = `${baseWidth}px`;
@@ -1946,9 +1840,8 @@
 
     const available = Math.max(320, container.clientWidth - 4);
     const scale = Math.min(1, available / baseWidth);
-    sheet.style.transform = `scale(${scale})`;
-    const rawHeight = sheet.offsetHeight;
-    container.style.height = `${Math.ceil(rawHeight * scale) + 8}px`;
+    sheet.style.zoom = String(scale);
+    container.style.height = "auto";
 
     if (!viewportFitResizeBound) {
       viewportFitResizeBound = true;

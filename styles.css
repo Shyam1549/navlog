@@ -723,56 +723,6 @@ body.kiosk-mode {
   display: none !important;
 }
 
-.kiosk-pad-overlay {
-  position: fixed;
-  inset: 0;
-  display: none;
-  z-index: 1800;
-  padding: 10px;
-  background: rgba(14, 18, 22, 0.22);
-  backdrop-filter: blur(1px);
-}
-
-.kiosk-pad-overlay.open {
-  display: block;
-}
-
-.kiosk-pad-card {
-  width: 100%;
-  height: 100%;
-  border: 2px solid rgba(46, 41, 35, 0.48);
-  border-radius: 12px;
-  background: rgba(251, 247, 239, 0.28);
-  padding: 10px;
-}
-
-.ipad-kiosk-pad-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
-}
-
-.ipad-kiosk-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ipad-kiosk-pad-head h3 {
-  margin: 0;
-  font-size: 0.95rem;
-}
-
-#kiosk-pad-canvas {
-  width: 100%;
-  height: calc(100% - 44px);
-  border: 2px solid var(--line);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.2);
-  touch-action: none;
-}
-
 .navlog-topbar {
   grid-template-columns: auto 1fr auto;
   gap: 10px;
@@ -2023,6 +1973,7 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     overflow-x: hidden;
     overflow-y: visible;
     padding-bottom: 4px;
+    height: auto !important;
   }
 
   .sheet { min-width: 1000px; }
