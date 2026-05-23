@@ -333,6 +333,10 @@
 
   function render() {
     if (state.view !== "ipad-kiosk") document.body.classList.remove("kiosk-mode");
+    document.body.classList.remove("ipad-desktop-scale");
+    if (isIpadDevice() && (state.view === "navlog" || state.view === "ipad-kiosk")) {
+      document.body.classList.add("ipad-desktop-scale");
+    }
     evaluateAnnouncementsPrompt();
     computeRouteMath();
     if (state.view === "setup") app.innerHTML = renderSetupScreen();

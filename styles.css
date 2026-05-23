@@ -2352,3 +2352,70 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 .pdf-export .atis-cell {
   grid-template-columns: 210px 1fr;
 }
+
+/* iPad: force navlog to match desktop proportions/typography, then scale as one unit via JS. */
+body.ipad-desktop-scale .ui-scale {
+  zoom: var(--ui-scale) !important;
+}
+
+body.ipad-desktop-scale .topbar.centered.navlog-topbar {
+  grid-template-columns: auto 1fr auto !important;
+  gap: 10px !important;
+  padding: 10px 18px !important;
+}
+
+body.ipad-desktop-scale .topbar.centered.navlog-topbar .top-center {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 12px !important;
+}
+
+body.ipad-desktop-scale .sheet-wrap {
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+  height: auto !important;
+}
+
+body.ipad-desktop-scale .sheet {
+  min-width: 0 !important;
+  padding: 12px !important;
+}
+
+body.ipad-desktop-scale .header-box.static.navlog-box {
+  font-size: 1.68rem !important;
+}
+
+body.ipad-desktop-scale .head-cell.group {
+  font-size: 0.95rem !important;
+}
+
+body.ipad-desktop-scale .head-cell.sub,
+body.ipad-desktop-scale .head-cell.tall {
+  font-size: 0.95rem !important;
+}
+
+body.ipad-desktop-scale .leg-row {
+  min-height: 86px !important;
+}
+
+body.ipad-desktop-scale .field input {
+  min-height: 86px !important;
+  height: 86px !important;
+  font-size: 0.94rem !important;
+}
+
+body.ipad-desktop-scale .route-main .remove-chip,
+body.ipad-desktop-scale .route-main .blank-chip {
+  min-height: 86px !important;
+  height: 86px !important;
+}
+
+body.ipad-desktop-scale .radio-row {
+  min-height: 80px !important;
+}
+
+body.ipad-desktop-scale .radio-row input {
+  min-height: 78px !important;
+  font-size: 0.9rem !important;
+}
