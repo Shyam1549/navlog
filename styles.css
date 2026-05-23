@@ -808,6 +808,7 @@ body.kiosk-mode .toc-tod-title.kiosk-static-toc {
 }
 
 .navlog-topbar {
+  position: relative;
   grid-template-columns: auto 1fr auto;
   grid-template-areas:
     "title title title"
@@ -821,6 +822,10 @@ body.kiosk-mode .toc-tod-title.kiosk-static-toc {
 
 .navlog-topbar .navlog-back {
   grid-area: back;
+  position: absolute;
+  top: 10px;
+  left: 18px;
+  z-index: 2;
 }
 
 .navlog-topbar .navlog-title-row {
