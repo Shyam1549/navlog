@@ -2487,7 +2487,7 @@ body.ipad-desktop-scale .ui-scale {
 }
 
 body.ipad-desktop-scale .topbar.centered.navlog-topbar {
-  grid-template-columns: auto 1fr auto !important;
+  grid-template-columns: 1fr auto 1fr !important;
   grid-template-areas:
     "title title title"
     "back clock actions" !important;
