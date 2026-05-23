@@ -986,8 +986,8 @@
           <div class="head-cell tall gs-head-vd">GS (${speedUnitLabel})</div>
           <div class="head-cell tall dis-head-vd">DIS (${distanceUnitLabel})</div>
           <div class="head-cell tall ee-head-vd">EE</div>
-          <div class="head-cell tall et-head-vd"><span class="time-head"><span>ET</span><small>(HHMM)</small></span></div>
-          <div class="head-cell tall at-head-vd"><span class="time-head"><span>AT</span><small>(HHMM)</small></span></div>
+          <div class="head-cell tall et-head-vd"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
+          <div class="head-cell tall at-head-vd"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
           <div class="head-cell sub cas-head">CAS (${speedUnitLabel})</div>
           <div class="head-cell sub alt-head">ALT (${altUnitLabel})</div>
           <div class="head-cell sub temp-head">TEMP (${tempUnitLabel})</div>
@@ -1009,8 +1009,8 @@
           <div class="head-cell tall gs-head">GS (${speedUnitLabel})</div>
           <div class="head-cell tall dis-head">DIS (${distanceUnitLabel})</div>
           <div class="head-cell tall ee-head">EE</div>
-          <div class="head-cell tall et-head"><span class="time-head"><span>ET</span><small>(HHMM)</small></span></div>
-          <div class="head-cell tall at-head"><span class="time-head"><span>AT</span><small>(HHMM)</small></span></div>
+          <div class="head-cell tall et-head"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
+          <div class="head-cell tall at-head"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
           <div class="head-cell sub cas-head">CAS (${speedUnitLabel})</div>
           <div class="head-cell sub alt-head">ALT (${altUnitLabel})</div>
           <div class="head-cell sub temp-head">TEMP (${tempUnitLabel})</div>
@@ -4516,6 +4516,7 @@
   function computeEtAtTimeline() {
     const departureAtMinutes = parseAtInput(state.navlog.legs[0] && state.navlog.legs[0].at);
     let elapsedMinutes = 0;
+    let chainValid = Number.isFinite(departureAtMinutes);
     state.navlog.legs.forEach((leg, index) => {
       leg._derived = leg._derived || {};
       if (index === 0) {
@@ -4524,9 +4525,10 @@
         return;
       }
       const eeMinutes = parseEeInput(leg.ee);
-      if (departureAtMinutes == null || eeMinutes == null || !Number.isFinite(eeMinutes) || eeMinutes < 0) {
+      if (!chainValid || eeMinutes == null || !Number.isFinite(eeMinutes) || eeMinutes < 0) {
         leg.et = "";
         delete leg._derived.et;
+        chainValid = false;
         return;
       }
       elapsedMinutes += eeMinutes;
