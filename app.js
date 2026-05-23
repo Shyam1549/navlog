@@ -900,7 +900,7 @@
       <div class="ui-scale">
       <main class="page">
         <section class="topbar centered">
-          <div class="top-side"><button class="back-link" id="back-to-setup">Route setup</button></div>
+          <div class="top-side"><button class="back-link" id="back-to-setup">Back</button></div>
           <div class="top-center">
             <h1>Navlog</h1>
             <div class="utc-pill" id="utc-clock">UTC ${formatUtcNow()}</div>
@@ -1471,13 +1471,6 @@
         const index = Number(indexText);
         const leg = state.navlog.legs[index];
         let nextValue = event.target.value;
-        if (field === "at") {
-          const parsedAtMinutes = parseAtInput(nextValue);
-          if (parsedAtMinutes != null) {
-            nextValue = formatMinutesAsHhmm(parsedAtMinutes);
-            event.target.value = nextValue;
-          }
-        }
         if (isDegreeField(field)) {
           const parsed = num(nextValue);
           if (parsed != null) {
@@ -1497,7 +1490,22 @@
         syncFirstAltHint();
         syncRouteHints();
       });
-      input.addEventListener("blur", () => {
+      input.addEventListener("blur", (event) => {
+        const [indexText, field] = event.target.dataset.legField.split(":");
+        if (field === "at") {
+          const index = Number(indexText);
+          const leg = state.navlog.legs[index];
+          const parsedAtMinutes = parseAtInput(event.target.value);
+          if (parsedAtMinutes != null) {
+            const normalized = formatMinutesAsHhmm(parsedAtMinutes);
+            event.target.value = normalized;
+            leg[field] = normalized;
+            leg._manual = leg._manual || {};
+            leg._manual[field] = normalized.trim() !== "";
+            computeRouteMath({ index, field });
+            updateComputedCells({ index, field });
+          }
+        }
         syncFirstAltHint();
         syncRouteHints();
       });

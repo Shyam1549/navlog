@@ -851,10 +851,10 @@ select { font: inherit; }
   border-bottom: 2px solid var(--line);
 }
 
-.head-cell.sub { font-size: 0.76rem; }
+.head-cell.sub { font-size: 0.95rem; }
 .head-cell.tall {
   grid-row: 1 / 3;
-  font-size: 0.82rem;
+  font-size: 0.95rem;
 }
 
 .time-head {
@@ -1939,7 +1939,7 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   .header-box.static.navlog-box { font-size: 1.4rem; }
   .head-cell.group { font-size: 0.84rem; }
   .head-cell.sub,
-  .head-cell.tall { font-size: 0.72rem; }
+  .head-cell.tall { font-size: 0.84rem; }
 
   .leg-row { min-height: 76px; }
   .field input {
