@@ -1199,7 +1199,7 @@
         <div class="${legFieldClass(leg, "distance")}"><input data-leg-field="${index}:distance" value="${escapeAttr(legFieldValue(leg, "distance"))}" /></div>
         <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(legFieldValue(leg, "ee"))}" /></div>
         <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(legFieldValue(leg, "et"))}" /></div>
-        <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" ${(index === 0 && state.view !== "ipad-kiosk") ? 'placeholder="AB TIME"' : ""} /></div>
+        <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" ${(index === 0 && state.view !== "ipad-kiosk") ? 'placeholder="AB TIME"' : ""} ${state.view === "ipad-kiosk" ? 'inputmode="numeric" pattern="[0-9]*"' : ""} /></div>
       </div>
     `;
   }
