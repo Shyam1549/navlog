@@ -2487,10 +2487,11 @@ body.ipad-desktop-scale .ui-scale {
 }
 
 body.ipad-desktop-scale .topbar.centered.navlog-topbar {
-  grid-template-columns: 1fr auto 1fr !important;
+  position: relative !important;
+  grid-template-columns: auto 1fr auto !important;
   grid-template-areas:
     "title title title"
-    "back clock actions" !important;
+    "back . actions" !important;
   row-gap: 8px !important;
   column-gap: 10px !important;
   padding: 10px 18px !important;
@@ -2502,6 +2503,16 @@ body.ipad-desktop-scale .topbar.centered.navlog-topbar .navlog-title-row {
   justify-content: center !important;
   justify-self: center !important;
   width: auto !important;
+}
+
+body.ipad-desktop-scale .topbar.centered.navlog-topbar .navlog-clock {
+  grid-area: auto !important;
+  position: absolute !important;
+  left: 50% !important;
+  bottom: 10px !important;
+  transform: translateX(-50%) !important;
+  justify-self: auto !important;
+  z-index: 1 !important;
 }
 
 body.ipad-desktop-scale .sheet-wrap {
