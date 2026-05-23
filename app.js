@@ -21,6 +21,8 @@
   const ADMIN_GAME_HIGH_SCORE_KEY = "navlog_admin_game_high_score";
   const ANNOUNCEMENT_SEEN_KEY = "navlog_announcement_seen_signature";
   const NAVLOG_KIOSK_PAYLOAD_KEY = "navlog_kiosk_payload_v1";
+  const ACTIVATE_MIN_LEGS = 8;
+  const ACTIVATE_MIN_RADIOS = 5;
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
   const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
   const ADDITIONAL_INFO_DEFAULT_ROWS = 19;
@@ -46,6 +48,7 @@
         announcements: [],
         maintenanceMode: false,
         additionalInfoTable: [],
+        adminGameHighScore: 0,
       },
     },
     announcement: {
@@ -177,6 +180,16 @@
       depAtisCode: "",
       destinAtisCode: "",
     };
+  }
+
+  function ensureActivateMinimumRows() {
+    while (state.navlog.legs.length < ACTIVATE_MIN_LEGS) {
+      const insertIndex = Math.max(1, state.navlog.legs.length - 1);
+      state.navlog.legs.splice(insertIndex, 0, createBlankLeg(""));
+    }
+    while (state.navlog.radios.length < ACTIVATE_MIN_RADIOS) {
+      state.navlog.radios.push(createBlankRadioRow());
+    }
   }
 
   function createEmptyPresetForm() {
@@ -502,7 +515,7 @@
     return `
       <div class="ui-scale">
       <main class="entry-page">
-        <section class="topbar centered navlog-topbar">
+        <section class="topbar centered">
           <div class="top-side"><button class="back-link" id="back-from-manual">Back</button></div>
           <div class="top-center">
             <h1>User Manual</h1>
@@ -911,7 +924,7 @@
     return `
       <div class="ui-scale">
       <main class="page">
-        <section class="topbar centered">
+        <section class="topbar centered navlog-topbar">
           <div class="top-side"><button class="back-link" id="back-to-setup">Back</button></div>
           <div class="top-center">
             <h1>Navlog</h1>
@@ -964,7 +977,7 @@
           <div class="sheet ipad-kiosk-sheet">
             <section class="sheet-header">
               ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
-              <div class="header-box dark static planning-box">PREFLIGHT PLANNER</div>
+              <div class="header-box dark static planning-box" id="kiosk-planner-toggle">PREFLIGHT PLANNER</div>
               ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
                ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
               ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
@@ -975,6 +988,15 @@
             ${renderTocTod()}
             ${renderLocationTable()}
             ${renderAtisSection()}
+          </div>
+        </section>
+        <section class="kiosk-pad-overlay" id="kiosk-pad-overlay" aria-hidden="true">
+          <div class="kiosk-pad-card">
+            <div class="kiosk-pad-head">
+              <button class="action" id="kiosk-pad-close" type="button">Close</button>
+              <button class="action" id="kiosk-pad-clear" type="button">Clear</button>
+            </div>
+            <canvas id="kiosk-pad-canvas" aria-label="Scratch pad"></canvas>
           </div>
         </section>
       </main>
@@ -1013,6 +1035,7 @@
         : state.settings.temperatureUnit === "k"
           ? "K"
           : "C";
+    const eeUnitLabel = state.settings.roundTimeValues ? "mins" : "min+sec";
     const withUnit = (label, unitText) => `<span class="time-head"><span>${label}</span><span class="head-format-note">(${unitText})</span></span>`;
     const headClass = variationDeviationEnabled ? "nav-head-grid nav-head-grid-vd" : "nav-head-grid";
     const tableHead = variationDeviationEnabled
@@ -1027,7 +1050,7 @@
           <div class="head-cell tall ta-head-vd">${withUnit("TA", speedUnitLabel)}</div>
           <div class="head-cell tall gs-head-vd">${withUnit("GS", speedUnitLabel)}</div>
           <div class="head-cell tall dis-head-vd">${withUnit("DIS", distanceUnitLabel)}</div>
-          <div class="head-cell tall ee-head-vd">EE</div>
+          <div class="head-cell tall ee-head-vd">${withUnit("EE", eeUnitLabel)}</div>
           <div class="head-cell tall et-head-vd"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
           <div class="head-cell tall at-head-vd"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
           <div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>
@@ -1050,7 +1073,7 @@
           <div class="head-cell tall ta-head">${withUnit("TA", speedUnitLabel)}</div>
           <div class="head-cell tall gs-head">${withUnit("GS", speedUnitLabel)}</div>
           <div class="head-cell tall dis-head">${withUnit("DIS", distanceUnitLabel)}</div>
-          <div class="head-cell tall ee-head">EE</div>
+          <div class="head-cell tall ee-head">${withUnit("EE", eeUnitLabel)}</div>
           <div class="head-cell tall et-head"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
           <div class="head-cell tall at-head"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
           <div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>
@@ -1175,7 +1198,7 @@
         <div class="${legFieldClass(leg, "distance")}"><input data-leg-field="${index}:distance" value="${escapeAttr(legFieldValue(leg, "distance"))}" /></div>
         <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(legFieldValue(leg, "ee"))}" /></div>
         <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(legFieldValue(leg, "et"))}" /></div>
-        <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" ${index === 0 ? 'placeholder="AB TIME"' : ""} /></div>
+        <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" ${(index === 0 && state.view !== "ipad-kiosk") ? 'placeholder="AB TIME"' : ""} /></div>
       </div>
     `;
   }
@@ -1596,6 +1619,14 @@
       });
       if (dateDisplayInput) {
         dateDisplayInput.setAttribute("readonly", "readonly");
+        dateDisplayInput.addEventListener("click", () => {
+          if (typeof datePickerInput.showPicker === "function") {
+            datePickerInput.showPicker();
+            return;
+          }
+          datePickerInput.focus();
+          datePickerInput.click();
+        });
       }
     }
 
@@ -1733,9 +1764,11 @@
     syncFirstAltHint();
     syncRouteHints();
     fitSheetToViewport(".sheet-wrap");
+    requestAnimationFrame(() => fitSheetToViewport(".sheet-wrap"));
   }
 
   function wireIpadKiosk() {
+    ensureActivateMinimumRows();
     document.querySelectorAll(".mini-plus, .remove-chip, .blank-chip").forEach((node) => {
       node.style.display = "none";
     });
@@ -1743,12 +1776,19 @@
     fitSheetToViewport(".ipad-kiosk-wrap");
     document.querySelectorAll("input, select, textarea, button").forEach((node) => {
       if (node.id === "kiosk-pad-clear") return;
+      if (node.id === "kiosk-pad-close") return;
       const legField = String(node.getAttribute("data-leg-field") || "");
-      if (legField.endsWith(":at")) return;
-      if (node.tagName === "BUTTON") node.style.display = "none";
-      if ("readOnly" in node) node.readOnly = true;
-      if ("disabled" in node) node.disabled = true;
+      const radioField = String(node.getAttribute("data-radio-field") || "");
+      const footerField = String(node.getAttribute("data-footer") || "");
+      const allowAt = legField.endsWith(":at");
+      const allowLocation = radioField.endsWith(":location");
+      const allowAtisCode = footerField === "depAtisCode" || footerField === "destinAtisCode";
+      const keepInteractive = allowAt || allowLocation || allowAtisCode;
+      if (!keepInteractive && node.tagName === "BUTTON") node.style.display = "none";
+      if ("readOnly" in node) node.readOnly = !keepInteractive;
+      if ("disabled" in node) node.disabled = !keepInteractive;
       if ("placeholder" in node) node.placeholder = "";
+      if (allowAt) node.placeholder = "";
       node.tabIndex = -1;
     });
     const legInputs = document.querySelectorAll("[data-leg-field]");
@@ -1786,6 +1826,167 @@
         });
       }
     });
+
+    document.querySelectorAll("[data-radio-field$=':location']").forEach((input) => {
+      input.addEventListener("input", (event) => {
+        const [indexText] = event.target.dataset.radioField.split(":");
+        const index = Number(indexText);
+        const value = String(event.target.value || "");
+        state.navlog.radios[index].location = value;
+        if (value.trim() === "") {
+          state.navlog.radios[index] = {
+            ...state.navlog.radios[index],
+            cptAtis: "",
+            depAap: "",
+            twr: "",
+            gnd: "",
+            fss: "",
+            remarks: "",
+          };
+          render();
+        }
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        const [indexText] = event.target.dataset.radioField.split(":");
+        autofillAirportRow(Number(indexText), event.target.value);
+      });
+    });
+
+    document.querySelectorAll('[data-footer="depAtisCode"], [data-footer="destinAtisCode"]').forEach((input) => {
+      input.addEventListener("input", (event) => {
+        const key = String(event.target.dataset.footer || "");
+        state.navlog[key] = event.target.value;
+      });
+    });
+
+    wireKioskScratchPadToggle();
+    setupKioskScratchPad();
+    requestAnimationFrame(() => fitSheetToViewport(".ipad-kiosk-wrap"));
+  }
+
+  function wireKioskScratchPadToggle() {
+    const plannerCell = document.getElementById("kiosk-planner-toggle");
+    const overlay = document.getElementById("kiosk-pad-overlay");
+    const closeButton = document.getElementById("kiosk-pad-close");
+    if (!plannerCell || !overlay) return;
+
+    const openOverlay = () => {
+      overlay.classList.add("open");
+      overlay.setAttribute("aria-hidden", "false");
+      if (kioskPadState && typeof kioskPadState.resize === "function") kioskPadState.resize();
+    };
+    const closeOverlay = () => {
+      overlay.classList.remove("open");
+      overlay.setAttribute("aria-hidden", "true");
+    };
+
+    if (!plannerCell.dataset.tripleBound) {
+      let tapCount = 0;
+      let lastTapAt = 0;
+      const windowMs = 1400;
+      const onPlannerTap = () => {
+        const now = Date.now();
+        if (now - lastTapAt > windowMs) tapCount = 0;
+        tapCount += 1;
+        lastTapAt = now;
+        if (tapCount >= 3) {
+          tapCount = 0;
+          openOverlay();
+        }
+      };
+      if (window.PointerEvent) plannerCell.addEventListener("pointerdown", onPlannerTap);
+      else plannerCell.addEventListener("click", onPlannerTap);
+      plannerCell.dataset.tripleBound = "1";
+    }
+    if (closeButton && !closeButton.dataset.bound) {
+      closeButton.addEventListener("click", closeOverlay);
+      closeButton.dataset.bound = "1";
+    }
+    if (!overlay.dataset.bound) {
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) closeOverlay();
+      });
+      overlay.dataset.bound = "1";
+    }
+  }
+
+  function setupKioskScratchPad() {
+    const canvas = document.getElementById("kiosk-pad-canvas");
+    const clearButton = document.getElementById("kiosk-pad-clear");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const resize = () => {
+      const rect = canvas.getBoundingClientRect();
+      const ratio = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.max(1, Math.floor(rect.width * ratio));
+      canvas.height = Math.max(1, Math.floor(rect.height * ratio));
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = "rgba(24, 22, 18, 0.92)";
+    };
+
+    const pointer = { drawing: false, x: 0, y: 0 };
+    const getPoint = (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const t = event.touches && event.touches[0];
+      const clientX = t ? t.clientX : event.clientX;
+      const clientY = t ? t.clientY : event.clientY;
+      return { x: clientX - rect.left, y: clientY - rect.top };
+    };
+    const start = (event) => {
+      event.preventDefault();
+      const p = getPoint(event);
+      pointer.drawing = true;
+      pointer.x = p.x;
+      pointer.y = p.y;
+    };
+    const move = (event) => {
+      if (!pointer.drawing) return;
+      event.preventDefault();
+      const p = getPoint(event);
+      ctx.beginPath();
+      ctx.moveTo(pointer.x, pointer.y);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      pointer.x = p.x;
+      pointer.y = p.y;
+    };
+    const stop = () => {
+      pointer.drawing = false;
+    };
+
+    if (!canvas.dataset.bound) {
+      canvas.addEventListener("mousedown", start);
+      canvas.addEventListener("mousemove", move);
+      canvas.addEventListener("mouseup", stop);
+      canvas.addEventListener("mouseleave", stop);
+      canvas.addEventListener("touchstart", start, { passive: false });
+      canvas.addEventListener("touchmove", move, { passive: false });
+      canvas.addEventListener("touchend", stop, { passive: false });
+      canvas.dataset.bound = "1";
+    }
+    if (clearButton && !clearButton.dataset.bound) {
+      clearButton.addEventListener("click", () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      });
+      clearButton.dataset.bound = "1";
+    }
+    if (!window.__kioskPadResizeBound) {
+      window.addEventListener("resize", () => {
+        if (state.view !== "ipad-kiosk") return;
+        if (kioskPadState && typeof kioskPadState.resize === "function") kioskPadState.resize();
+      });
+      window.__kioskPadResizeBound = "1";
+    }
+
+    resize();
+    kioskPadState = { resize };
   }
 
   function isIpadDevice() {
@@ -2757,13 +2958,16 @@
     if (!canvas || !startButton || !status) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const readHighScore = () => {
+    const readLocalHighScore = () => {
       const raw = Number(readStoredValue(ADMIN_GAME_HIGH_SCORE_KEY));
       return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
     };
+    const readGlobalHighScore = () => Math.max(0, Math.floor(Number(state.catalog.content.adminGameHighScore || 0)));
+    const readHighScore = () => Math.max(readLocalHighScore(), readGlobalHighScore());
     const writeHighScore = (score) => {
       const normalized = Math.max(0, Math.floor(score));
       writeStoredValue(ADMIN_GAME_HIGH_SCORE_KEY, String(normalized));
+      state.catalog.content.adminGameHighScore = Math.max(readGlobalHighScore(), normalized);
       if (highScoreNode) highScoreNode.textContent = `High ${normalized}`;
     };
     const setHighScoreLabel = () => {
@@ -2784,6 +2988,7 @@
         obstacles: [],
         spawnTick: 0,
         highScore: readHighScore(),
+        lastFrameAt: 0,
       };
     }
 
@@ -2811,28 +3016,32 @@
       drawCtx.fillText(`Score: ${Math.floor(game.score)}`, 10, 16);
     };
 
-    const step = () => {
+    const step = (timestamp) => {
       const game = adminGameState;
       if (!game || !game.running || game.canvas !== canvas) return;
-      game.score += 0.14;
-      game.speed = Math.min(7, 3.2 + game.score / 90);
+      const now = Number(timestamp || performance.now());
+      if (!game.lastFrameAt) game.lastFrameAt = now;
+      const dtScale = Math.max(0.6, Math.min(3, (now - game.lastFrameAt) / 16.6667));
+      game.lastFrameAt = now;
+      game.score += 0.42 * dtScale;
+      game.speed = Math.min(15, 5.6 + game.score / 55);
 
-      game.player.vy += game.gravity;
-      game.player.y += game.player.vy;
+      game.player.vy += game.gravity * dtScale;
+      game.player.y += game.player.vy * dtScale;
       if (game.player.y >= 126) {
         game.player.y = 126;
         game.player.vy = 0;
         game.player.onGround = true;
       } else game.player.onGround = false;
 
-      game.spawnTick -= 1;
+      game.spawnTick -= dtScale;
       if (game.spawnTick <= 0) {
         const height = Math.random() > 0.62 ? 26 : 18;
-        game.obstacles.push({ x: canvas.width + 4, y: 146 - height, w: 12, h: height });
-        game.spawnTick = 65 + Math.floor(Math.random() * 45);
+        game.obstacles.push({ x: canvas.width + 4, y: 146 - height, w: 14, h: height });
+        game.spawnTick = 34 + Math.floor(Math.random() * 22);
       }
 
-      game.obstacles.forEach((o) => { o.x -= game.speed; });
+      game.obstacles.forEach((o) => { o.x -= game.speed * dtScale; });
       game.obstacles = game.obstacles.filter((o) => o.x + o.w > -8);
 
       const hit = game.obstacles.some((o) => (
@@ -2847,6 +3056,7 @@
         if (scored > game.highScore) {
           game.highScore = scored;
           writeHighScore(scored);
+          persistAdminGameHighScore(scored);
         } else setHighScoreLabel();
         status.textContent = `Game over. Score ${scored}.`;
         draw();
@@ -2882,12 +3092,13 @@
       if (!game) return;
       game.highScore = readHighScore();
       game.score = 0;
-      game.speed = 3.2;
+      game.speed = 5.6;
       game.player.y = 126;
       game.player.vy = 0;
       game.player.onGround = true;
       game.obstacles = [];
-      game.spawnTick = 20;
+      game.spawnTick = 14;
+      game.lastFrameAt = 0;
       game.running = true;
       status.textContent = "Running...";
       if (adminGameAnimation) cancelAnimationFrame(adminGameAnimation);
@@ -3070,6 +3281,7 @@
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
       state.catalog.content.maintenanceMode = parseMaintenanceModeContent(contentMap.maintenance_mode || "");
       state.catalog.content.additionalInfoTable = parseAdditionalInfoContent(contentMap.additional_info || "");
+      state.catalog.content.adminGameHighScore = parseAdminGameHighScoreContent(contentMap.admin_game_highscore || "");
       state.admin.manualHtmlDraft = contentHtmlToEditorText("manual", state.catalog.content.manualHtml);
       state.admin.privacyHtmlDraft = contentHtmlToEditorText("privacy", state.catalog.content.privacyHtml);
       state.admin.manualDraftBaselineHtml = state.catalog.content.manualHtml;
@@ -3590,6 +3802,12 @@
     }
   }
 
+  function parseAdminGameHighScoreContent(raw) {
+    const value = Number(String(raw || "").trim());
+    if (!Number.isFinite(value) || value <= 0) return 0;
+    return Math.floor(value);
+  }
+
   function isAnnouncementActive(item, nowMs) {
     if (!item) return false;
     if (item.permanent) return true;
@@ -4074,6 +4292,23 @@
       state.admin.error = error && error.message ? error.message : "Could not save additional information.";
       state.admin.additionalInfoSaveStatus = "Save failed";
       render();
+    }
+  }
+
+  async function persistAdminGameHighScore(score) {
+    const normalized = Math.max(0, Math.floor(Number(score) || 0));
+    if (!normalized) return;
+    if (normalized <= Math.floor(Number(state.catalog.content.adminGameHighScore || 0))) return;
+    state.catalog.content.adminGameHighScore = normalized;
+    const ok = await connectSupabaseClient(false);
+    if (!ok) return;
+    try {
+      await supabaseClient.from("content_pages").upsert(
+        { key: "admin_game_highscore", body_html: String(normalized) },
+        { onConflict: "key" },
+      );
+    } catch {
+      // keep local update; cloud retry happens on next higher score
     }
   }
 
@@ -4962,6 +5197,7 @@
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
       state.catalog.content.maintenanceMode = parseMaintenanceModeContent(contentMap.maintenance_mode || "");
       state.catalog.content.additionalInfoTable = parseAdditionalInfoContent(contentMap.additional_info || "");
+      state.catalog.content.adminGameHighScore = parseAdminGameHighScoreContent(contentMap.admin_game_highscore || "");
     } finally {
       loadingPublicCatalog = false;
     }
@@ -4973,6 +5209,7 @@
     if (kioskRequested) {
       state.view = "ipad-kiosk";
       restoreKioskPayload();
+      ensureActivateMinimumRows();
     }
     await loadPublicCatalogFromSupabase();
     evaluateAnnouncementsPrompt();
