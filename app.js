@@ -924,7 +924,7 @@
     return `
       <div class="ui-scale">
       <main class="page">
-        <section class="topbar centered navlog-topbar">
+        <section class="topbar centered">
           <div class="top-side"><button class="back-link" id="back-to-setup">Back</button></div>
           <div class="top-center">
             <h1>Navlog</h1>
@@ -958,7 +958,7 @@
           </div>
         </section>
         <section class="activate-wrap">
-          <button class="activate-button" id="activate-ipad-mode" type="button">ACTIVATE</button>
+          <button class="activate-button" id="activate-ipad-mode" type="button" title="Activate is for cockpit use.">ACTIVATE</button>
           ${activateError ? `<p class="activate-error">${escapeHtml(activateError)}</p>` : ""}
         </section>
         ${renderFrontFooter()}
@@ -973,6 +973,7 @@
     const h = state.navlog.header;
     return `
       <main class="ipad-kiosk-page">
+        <div class="kiosk-utc" id="utc-clock">UTC ${formatUtcNow()}</div>
         <section class="sheet-wrap ipad-kiosk-wrap">
           <div class="sheet ipad-kiosk-sheet">
             <section class="sheet-header">
@@ -1451,6 +1452,7 @@
           return;
         }
         state.meta.activateError = "";
+        ensureActivateMinimumRows();
         persistKioskPayload();
         const url = new URL(window.location.href);
         url.searchParams.set("kiosk", "1");
@@ -1780,11 +1782,16 @@
       const legField = String(node.getAttribute("data-leg-field") || "");
       const radioField = String(node.getAttribute("data-radio-field") || "");
       const footerField = String(node.getAttribute("data-footer") || "");
+      const isTocTodTitle = String(node.getAttribute("data-edit-toc") || "") !== "";
       const allowAt = legField.endsWith(":at");
       const allowLocation = radioField.endsWith(":location");
       const allowAtisCode = footerField === "depAtisCode" || footerField === "destinAtisCode";
       const keepInteractive = allowAt || allowLocation || allowAtisCode;
-      if (!keepInteractive && node.tagName === "BUTTON") node.style.display = "none";
+      if (!keepInteractive && node.tagName === "BUTTON" && !isTocTodTitle) node.style.display = "none";
+      if (isTocTodTitle) {
+        node.disabled = true;
+        node.style.pointerEvents = "none";
+      }
       if ("readOnly" in node) node.readOnly = !keepInteractive;
       if ("disabled" in node) node.disabled = !keepInteractive;
       if ("placeholder" in node) node.placeholder = "";
@@ -1973,6 +1980,7 @@
     }
     if (clearButton && !clearButton.dataset.bound) {
       clearButton.addEventListener("click", () => {
+        if (!window.confirm("Clear scratch pad?")) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
       });
       clearButton.dataset.bound = "1";

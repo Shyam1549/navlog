@@ -24,6 +24,13 @@ body {
   overflow-x: hidden;
 }
 
+@media (pointer: coarse) {
+  html,
+  body {
+    touch-action: manipulation;
+  }
+}
+
 body { padding: 18px 18px 30px; }
 button,
 input,
@@ -713,6 +720,19 @@ body.kiosk-mode .time-head {
   display: block;
   padding: 8px;
   overflow: visible;
+}
+
+.kiosk-utc {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 118px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--paper);
+  font-weight: 700;
+  margin: 0 0 8px auto;
 }
 
 .ipad-kiosk-wrap {
