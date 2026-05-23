@@ -809,61 +809,47 @@ body.kiosk-mode .toc-tod-title.kiosk-static-toc {
 
 .navlog-topbar {
   grid-template-columns: auto 1fr auto;
-  gap: 10px;
+  grid-template-areas:
+    "back title title"
+    ". clock ."
+    ". . actions";
+  row-gap: 8px;
+  column-gap: 10px;
   padding-top: 10px;
   padding-bottom: 10px;
   align-items: center;
 }
 
-.navlog-topbar .top-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  text-align: center;
-}
-
-.navlog-topbar .top-center h1 {
-  margin: 0;
-}
-
-.navlog-topbar .utc-pill {
-  min-width: 98px;
-  padding: 8px 12px;
-}
-
-body.ipad-desktop-scale:not(.kiosk-mode) .navlog-topbar {
-  grid-template-columns: auto 1fr auto;
-  grid-template-areas:
-    "back title title"
-    ". clock ."
-    ". actions .";
-  row-gap: 8px;
-  align-items: center;
-}
-
-body.ipad-desktop-scale:not(.kiosk-mode) .navlog-back {
+.navlog-topbar .navlog-back {
   grid-area: back;
 }
 
-body.ipad-desktop-scale:not(.kiosk-mode) .navlog-title-row {
+.navlog-topbar .navlog-title-row {
   grid-area: title;
-  justify-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 
-body.ipad-desktop-scale:not(.kiosk-mode) .navlog-title-row h1 {
+.navlog-topbar .navlog-title-row h1 {
   margin: 0;
 }
 
-body.ipad-desktop-scale:not(.kiosk-mode) .navlog-clock {
+.navlog-topbar .navlog-clock {
   grid-area: clock;
   justify-self: center;
 }
 
-body.ipad-desktop-scale:not(.kiosk-mode) .navlog-actions {
+.navlog-topbar .navlog-actions {
   grid-area: actions;
-  justify-self: center;
-  justify-content: center;
+  justify-self: end;
+  justify-content: flex-end;
+}
+
+.navlog-topbar .navlog-clock .utc-pill {
+  min-width: 98px;
+  padding: 8px 12px;
 }
 
 .sheet-header,

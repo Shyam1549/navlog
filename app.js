@@ -2797,7 +2797,7 @@
       const onAirportCodeInput = () => {
         readAirportFormFromInputs();
         loadAirportByCode();
-        render();
+        syncAdminAirportFormUi();
       };
       airportCodeInput.addEventListener("input", onAirportCodeInput);
       airportCodeInput.addEventListener("change", onAirportCodeInput);
@@ -3842,6 +3842,38 @@
       return normalizeAdditionalInfoTable(parsed);
     } catch {
       return createEmptyAdditionalInfoTable();
+    }
+  }
+
+  function syncAdminAirportFormUi() {
+    const setValue = (id, value) => {
+      const node = document.getElementById(id);
+      if (!node) return;
+      const next = String(value || "");
+      if (node.value !== next) node.value = next;
+    };
+    setValue("admin-airport-code", state.admin.airportForm.code);
+    setValue("admin-airport-cptAtis", state.admin.airportForm.cptAtis);
+    setValue("admin-airport-depAap", state.admin.airportForm.depAap);
+    setValue("admin-airport-twr", state.admin.airportForm.twr);
+    setValue("admin-airport-gnd", state.admin.airportForm.gnd);
+    setValue("admin-airport-fss", state.admin.airportForm.fss);
+    setValue("admin-airport-remarks", state.admin.airportForm.remarks);
+
+    const statusNode = document.querySelector(".manual-section:not(.hidden) .preset-status");
+    if (statusNode) {
+      const code = normalizeCode(state.admin.airportForm.code);
+      const exists = Boolean(code && state.admin.airports.some((airport) => airport.code === code || airport.id === code));
+      statusNode.classList.remove("available", "missing");
+      statusNode.textContent = code ? (exists ? "airport avbl" : "airport unavbl") : "";
+      if (code) statusNode.classList.add(exists ? "available" : "missing");
+    }
+
+    const deleteButton = document.getElementById("admin-airport-delete");
+    if (deleteButton) {
+      const code = normalizeCode(state.admin.airportForm.code);
+      const exists = Boolean(code && state.admin.airports.some((airport) => airport.code === code || airport.id === code));
+      deleteButton.disabled = !exists;
     }
   }
 
