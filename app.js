@@ -970,9 +970,9 @@
           <div class="head-cell tall route-head">ROUTE <button class="mini-plus inline" id="add-leg" type="button">+</button></div>
           <div class="head-cell group cruise-head">CRUISE</div>
           <div class="head-cell group wind-head">WIND</div>
-          <div class="head-cell split-top tcv-head">TC</div>
-          <div class="head-cell split-top thv-head">TH</div>
-          <div class="head-cell split-top mhv-head">MH</div>
+          <div class="head-cell sub split-top tcv-head">TC</div>
+          <div class="head-cell sub split-top thv-head">TH</div>
+          <div class="head-cell sub split-top mhv-head">MH</div>
           <div class="head-cell tall ta-head-vd">TA (${speedUnitLabel})</div>
           <div class="head-cell tall gs-head-vd">GS (${speedUnitLabel})</div>
           <div class="head-cell tall dis-head-vd">DIS (NM)</div>
