@@ -362,7 +362,7 @@
       temperatureUnit: "c",
       roundTimeValues: true,
       roundDistanceValues: true,
-      showDistanceToGo: false,
+      showDistanceToGo: true,
       variationDeviationEnabled: false,
       pdfLayout: "default",
     };
@@ -972,6 +972,7 @@
         : state.settings.temperatureUnit === "k"
           ? "K"
           : "C";
+    const withUnit = (label, unitText) => `<span class="time-head"><span>${label}</span><span class="head-format-note">(${unitText})</span></span>`;
     const headClass = variationDeviationEnabled ? "nav-head-grid nav-head-grid-vd" : "nav-head-grid";
     const tableHead = variationDeviationEnabled
       ? `
@@ -982,17 +983,17 @@
           <div class="head-cell sub split-top tcv-head">TC</div>
           <div class="head-cell sub split-top thv-head">TH</div>
           <div class="head-cell sub split-top mhv-head">MH</div>
-          <div class="head-cell tall ta-head-vd">TA (${speedUnitLabel})</div>
-          <div class="head-cell tall gs-head-vd">GS (${speedUnitLabel})</div>
-          <div class="head-cell tall dis-head-vd">DIS (${distanceUnitLabel})</div>
+          <div class="head-cell tall ta-head-vd">${withUnit("TA", speedUnitLabel)}</div>
+          <div class="head-cell tall gs-head-vd">${withUnit("GS", speedUnitLabel)}</div>
+          <div class="head-cell tall dis-head-vd">${withUnit("DIS", distanceUnitLabel)}</div>
           <div class="head-cell tall ee-head-vd">EE</div>
           <div class="head-cell tall et-head-vd"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
           <div class="head-cell tall at-head-vd"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
-          <div class="head-cell sub cas-head">CAS (${speedUnitLabel})</div>
-          <div class="head-cell sub alt-head">ALT (${altUnitLabel})</div>
-          <div class="head-cell sub temp-head">TEMP (${tempUnitLabel})</div>
+          <div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>
+          <div class="head-cell sub alt-head">${withUnit("ALT", altUnitLabel)}</div>
+          <div class="head-cell sub temp-head">${withUnit("TEMP", tempUnitLabel)}</div>
           <div class="head-cell sub dir-head">DIR</div>
-          <div class="head-cell sub spd-head">SPD (${speedUnitLabel})</div>
+          <div class="head-cell sub spd-head">${withUnit("SPD", speedUnitLabel)}</div>
           <div class="head-cell sub wcav-head">WCA</div>
           <div class="head-cell sub varv-head">VAR</div>
           <div class="head-cell sub devv-head">DEV</div>
@@ -1005,17 +1006,17 @@
           <div class="head-cell group wind-head">WIND</div>
           <div class="head-cell tall tc-head">TC</div>
           <div class="head-cell tall wca-head">WCA</div>
-          <div class="head-cell tall ta-head">TA (${speedUnitLabel})</div>
-          <div class="head-cell tall gs-head">GS (${speedUnitLabel})</div>
-          <div class="head-cell tall dis-head">DIS (${distanceUnitLabel})</div>
+          <div class="head-cell tall ta-head">${withUnit("TA", speedUnitLabel)}</div>
+          <div class="head-cell tall gs-head">${withUnit("GS", speedUnitLabel)}</div>
+          <div class="head-cell tall dis-head">${withUnit("DIS", distanceUnitLabel)}</div>
           <div class="head-cell tall ee-head">EE</div>
           <div class="head-cell tall et-head"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
           <div class="head-cell tall at-head"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
-          <div class="head-cell sub cas-head">CAS (${speedUnitLabel})</div>
-          <div class="head-cell sub alt-head">ALT (${altUnitLabel})</div>
-          <div class="head-cell sub temp-head">TEMP (${tempUnitLabel})</div>
+          <div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>
+          <div class="head-cell sub alt-head">${withUnit("ALT", altUnitLabel)}</div>
+          <div class="head-cell sub temp-head">${withUnit("TEMP", tempUnitLabel)}</div>
           <div class="head-cell sub dir-head">DIR</div>
-          <div class="head-cell sub spd-head">SPD (${speedUnitLabel})</div>
+          <div class="head-cell sub spd-head">${withUnit("SPD", speedUnitLabel)}</div>
         </div>
       `;
     return `
@@ -1470,13 +1471,7 @@
         const index = Number(indexText);
         const leg = state.navlog.legs[index];
         let nextValue = event.target.value;
-        if (field === "ee") {
-          const parsedEeMinutes = parseEeInput(nextValue);
-          if (parsedEeMinutes != null) {
-            nextValue = formatMinutesAsHhmm(parsedEeMinutes);
-            event.target.value = nextValue;
-          }
-        } else if (field === "at") {
+        if (field === "at") {
           const parsedAtMinutes = parseAtInput(nextValue);
           if (parsedAtMinutes != null) {
             nextValue = formatMinutesAsHhmm(parsedAtMinutes);
@@ -1535,7 +1530,6 @@
           else datePickerInput.click();
         };
         dateDisplayInput.addEventListener("click", openDatePicker);
-        dateDisplayInput.addEventListener("focus", openDatePicker);
       }
       datePickerInput.addEventListener("change", (event) => {
         const picked = formatDateToDisplay(event.target.value);
@@ -1669,7 +1663,7 @@
           temperatureUnit: "c",
           roundTimeValues: true,
           roundDistanceValues: true,
-          showDistanceToGo: false,
+          showDistanceToGo: true,
           variationDeviationEnabled: false,
           pdfLayout: "default",
         });
@@ -4420,9 +4414,14 @@
     return formatEeDisplayWithTimeRounding(minutesFloat, state.settings.roundTimeValues);
   }
 
-  function formatEeDisplayWithTimeRounding(minutesFloat, _roundTimeValues) {
+  function formatEeDisplayWithTimeRounding(minutesFloat, roundTimeValues) {
     if (!Number.isFinite(minutesFloat)) return "";
-    return formatMinutesAsHhmm(minutesFloat);
+    const bounded = Math.max(0, minutesFloat);
+    if (roundTimeValues) return String(Math.ceil(bounded));
+    const totalSeconds = Math.max(0, Math.round(bounded * 60));
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${mins}m ${secs}s`;
   }
 
   function formatMinutesAsHhmm(minutesFloat) {
@@ -4457,8 +4456,12 @@
   function parseEeInput(value) {
     const text = String(value || "").trim();
     if (!text) return null;
-    const hhmm = parseHhmmToMinutes(text);
-    if (hhmm != null) return hhmm;
+    const minsSecs = text.match(/^\s*(\d+)\s*m(?:in)?s?\s*(\d+)\s*s(?:ec)?s?\s*$/i);
+    if (minsSecs) {
+      const mins = Number(minsSecs[1]);
+      const secs = Number(minsSecs[2]);
+      if (Number.isFinite(mins) && Number.isFinite(secs) && secs >= 0 && secs < 60) return mins + (secs / 60);
+    }
     const parsed = num(text);
     return parsed == null ? null : Math.max(0, parsed);
   }
