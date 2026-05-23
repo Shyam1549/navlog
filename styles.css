@@ -732,7 +732,7 @@ body.kiosk-mode .time-head {
   background: var(--ink);
   color: var(--paper);
   font-weight: 700;
-  margin: 0 0 8px auto;
+  margin: 0 auto 8px;
 }
 
 .ipad-kiosk-wrap {
@@ -790,6 +790,20 @@ body.kiosk-mode .time-head {
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.24);
   touch-action: none;
+}
+
+body.kiosk-mode .field input,
+body.kiosk-mode .radio-row input,
+body.kiosk-mode .atis-cell input,
+body.kiosk-mode .toc-tod-card input {
+  color: #111 !important;
+  -webkit-text-fill-color: #111;
+  opacity: 1 !important;
+}
+
+body.kiosk-mode .toc-tod-title.kiosk-static-toc {
+  color: #111 !important;
+  opacity: 1 !important;
 }
 
 .navlog-topbar {

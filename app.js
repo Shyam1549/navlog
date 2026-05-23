@@ -1789,14 +1789,14 @@
       const keepInteractive = allowAt || allowLocation || allowAtisCode;
       if (!keepInteractive && node.tagName === "BUTTON" && !isTocTodTitle) node.style.display = "none";
       if (isTocTodTitle) {
-        node.disabled = true;
+        node.classList.add("kiosk-static-toc");
         node.style.pointerEvents = "none";
       }
-      if ("readOnly" in node) node.readOnly = !keepInteractive;
-      if ("disabled" in node) node.disabled = !keepInteractive;
+      if (node.tagName !== "BUTTON" && "readOnly" in node) node.readOnly = !keepInteractive;
+      if (node.tagName !== "BUTTON" && "disabled" in node) node.disabled = false;
       if ("placeholder" in node) node.placeholder = "";
       if (allowAt) node.placeholder = "";
-      node.tabIndex = -1;
+      node.tabIndex = keepInteractive ? 0 : -1;
     });
     const legInputs = document.querySelectorAll("[data-leg-field]");
     legInputs.forEach((input) => {
@@ -1869,8 +1869,32 @@
     });
 
     wireKioskScratchPadToggle();
+    bindKioskDoubleTapGuard();
     setupKioskScratchPad();
     requestAnimationFrame(() => fitSheetToViewport(".ipad-kiosk-wrap"));
+  }
+
+  function bindKioskDoubleTapGuard() {
+    const page = document.querySelector(".ipad-kiosk-page");
+    if (!page || page.dataset.doubleTapGuardBound === "1") return;
+    let lastTouchEnd = 0;
+    let lastX = 0;
+    let lastY = 0;
+    page.addEventListener("touchend", (event) => {
+      if (state.view !== "ipad-kiosk") return;
+      const touch = event.changedTouches && event.changedTouches[0];
+      if (!touch) return;
+      const now = Date.now();
+      const dx = Math.abs(touch.clientX - lastX);
+      const dy = Math.abs(touch.clientY - lastY);
+      if ((now - lastTouchEnd) <= 330 && dx < 24 && dy < 24) {
+        event.preventDefault();
+      }
+      lastTouchEnd = now;
+      lastX = touch.clientX;
+      lastY = touch.clientY;
+    }, { passive: false });
+    page.dataset.doubleTapGuardBound = "1";
   }
 
   function wireKioskScratchPadToggle() {
@@ -4945,7 +4969,7 @@
   function computeEtAtTimeline() {
     const departureAtMinutes = parseAtInput(state.navlog.legs[0] && state.navlog.legs[0].at);
     let elapsedMinutes = 0;
-    let chainValid = Number.isFinite(departureAtMinutes);
+    const hasDepartureAt = Number.isFinite(departureAtMinutes);
     state.navlog.legs.forEach((leg, index) => {
       leg._derived = leg._derived || {};
       if (index === 0) {
@@ -4954,10 +4978,15 @@
         return;
       }
       const eeMinutes = parseEeInput(leg.ee);
-      if (!chainValid || eeMinutes == null || !Number.isFinite(eeMinutes) || eeMinutes < 0) {
+      if (!hasDepartureAt) {
         leg.et = "";
         delete leg._derived.et;
-        chainValid = false;
+        return;
+      }
+      if (eeMinutes == null || !Number.isFinite(eeMinutes) || eeMinutes < 0) {
+        leg.et = elapsedMinutes > 0 ? formatMinutesAsHhmm(departureAtMinutes + elapsedMinutes) : "";
+        if (leg.et) leg._derived.et = true;
+        else delete leg._derived.et;
         return;
       }
       elapsedMinutes += eeMinutes;
