@@ -1831,6 +1831,7 @@
           updateComputedCells({ index, field: "at" });
           persistKioskPayload();
         });
+        wireActivateAtLongPress(input);
       }
     });
 
@@ -1872,6 +1873,69 @@
     bindKioskDoubleTapGuard();
     setupKioskScratchPad();
     requestAnimationFrame(() => fitSheetToViewport(".ipad-kiosk-wrap"));
+  }
+
+  function wireActivateAtLongPress(input) {
+    if (!input || input.dataset.longPressBound === "1") return;
+    let timer = null;
+    let fired = false;
+    const holdMs = 650;
+
+    const cancelHold = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      input.classList.remove("at-hold-armed");
+    };
+
+    const commitCurrentUtc = () => {
+      const [indexText] = String(input.dataset.legField || "").split(":");
+      const index = Number(indexText);
+      if (!Number.isFinite(index) || index < 0 || index >= state.navlog.legs.length) return;
+      const utcNow = formatUtcNowHhmm();
+      input.value = utcNow;
+      const leg = state.navlog.legs[index];
+      leg.at = utcNow;
+      leg._manual = leg._manual || {};
+      leg._manual.at = true;
+      computeRouteMath({ index, field: "at" });
+      updateComputedCells({ index, field: "at" });
+      persistKioskPayload();
+      input.classList.remove("at-hold-armed");
+      input.classList.add("at-hold-done");
+      setTimeout(() => input.classList.remove("at-hold-done"), 520);
+    };
+
+    const startHold = () => {
+      cancelHold();
+      fired = false;
+      input.classList.add("at-hold-armed");
+      timer = setTimeout(() => {
+        fired = true;
+        timer = null;
+        commitCurrentUtc();
+      }, holdMs);
+    };
+
+    const endHold = () => {
+      if (!fired) cancelHold();
+    };
+
+    if (window.PointerEvent) {
+      input.addEventListener("pointerdown", startHold);
+      input.addEventListener("pointerup", endHold);
+      input.addEventListener("pointerleave", endHold);
+      input.addEventListener("pointercancel", endHold);
+    } else {
+      input.addEventListener("touchstart", startHold, { passive: true });
+      input.addEventListener("touchend", endHold);
+      input.addEventListener("touchcancel", endHold);
+      input.addEventListener("mousedown", startHold);
+      input.addEventListener("mouseup", endHold);
+      input.addEventListener("mouseleave", endHold);
+    }
+    input.dataset.longPressBound = "1";
   }
 
   function bindKioskDoubleTapGuard() {
@@ -5088,6 +5152,13 @@
 
   function formatUtcNow() {
     return new Date().toISOString().slice(11, 19);
+  }
+
+  function formatUtcNowHhmm() {
+    const now = new Date();
+    const hh = String(now.getUTCHours()).padStart(2, "0");
+    const mm = String(now.getUTCMinutes()).padStart(2, "0");
+    return `${hh}${mm}`;
   }
 
   function startUtcClock() {

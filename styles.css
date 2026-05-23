@@ -810,7 +810,7 @@ body.kiosk-mode .toc-tod-title.kiosk-static-toc {
 .navlog-topbar {
   grid-template-columns: auto 1fr auto;
   grid-template-areas:
-    "back title title"
+    "back title ."
     ". clock ."
     ". . actions";
   row-gap: 8px;
@@ -830,6 +830,8 @@ body.kiosk-mode .toc-tod-title.kiosk-static-toc {
   align-items: center;
   justify-content: center;
   text-align: center;
+  justify-self: center;
+  width: 100%;
 }
 
 .navlog-topbar .navlog-title-row h1 {
@@ -845,6 +847,21 @@ body.kiosk-mode .toc-tod-title.kiosk-static-toc {
   grid-area: actions;
   justify-self: end;
   justify-content: flex-end;
+}
+
+body.kiosk-mode .field input.at-hold-armed {
+  box-shadow: inset 0 0 0 2px rgba(33, 76, 90, 0.35);
+  animation: at-hold-pulse 0.9s ease-in-out infinite;
+}
+
+body.kiosk-mode .field input.at-hold-done {
+  box-shadow: inset 0 0 0 2px rgba(31, 122, 51, 0.48);
+}
+
+@keyframes at-hold-pulse {
+  0% { background: rgba(33, 76, 90, 0.03); }
+  50% { background: rgba(33, 76, 90, 0.11); }
+  100% { background: rgba(33, 76, 90, 0.03); }
 }
 
 .navlog-topbar .navlog-clock .utc-pill {
@@ -2467,15 +2484,21 @@ body.ipad-desktop-scale .ui-scale {
 
 body.ipad-desktop-scale .topbar.centered.navlog-topbar {
   grid-template-columns: auto 1fr auto !important;
-  gap: 10px !important;
+  grid-template-areas:
+    "back title ."
+    ". clock ."
+    ". . actions" !important;
+  row-gap: 8px !important;
+  column-gap: 10px !important;
   padding: 10px 18px !important;
 }
 
-body.ipad-desktop-scale .topbar.centered.navlog-topbar .top-center {
+body.ipad-desktop-scale .topbar.centered.navlog-topbar .navlog-title-row {
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
-  gap: 12px !important;
+  justify-self: center !important;
+  width: 100% !important;
 }
 
 body.ipad-desktop-scale .sheet-wrap {
