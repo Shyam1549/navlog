@@ -976,7 +976,10 @@
         <section class="ipad-kiosk-pad">
           <div class="ipad-kiosk-pad-head">
             <h3>Scratch Pad</h3>
-            <button class="action" id="kiosk-pad-clear" type="button">Clear</button>
+            <div class="ipad-kiosk-actions">
+              <button class="action" id="kiosk-enter-fullscreen" type="button">Fullscreen</button>
+              <button class="action" id="kiosk-pad-clear" type="button">Clear</button>
+            </div>
           </div>
           <canvas id="kiosk-pad-canvas" width="1400" height="420" aria-label="Scratch pad"></canvas>
         </section>
@@ -1792,6 +1795,21 @@
         });
       }
     });
+    const fullscreenButton = document.getElementById("kiosk-enter-fullscreen");
+    if (fullscreenButton) {
+      fullscreenButton.addEventListener("click", () => {
+        enterKioskFullscreen();
+      });
+    }
+    const firstTapFullscreen = () => {
+      if (!document.fullscreenElement) enterKioskFullscreen();
+      document.removeEventListener("pointerdown", firstTapFullscreen);
+      document.removeEventListener("touchstart", firstTapFullscreen);
+    };
+    document.addEventListener("pointerdown", firstTapFullscreen, { once: true });
+    document.addEventListener("touchstart", firstTapFullscreen, { once: true, passive: true });
+    document.addEventListener("fullscreenchange", syncKioskFullscreenUi);
+    syncKioskFullscreenUi();
     setupKioskScratchPad();
     attemptKioskFullscreen();
   }
@@ -1896,12 +1914,30 @@
 
   function attemptKioskFullscreen() {
     try {
-      const root = document.documentElement;
-      if (root && root.requestFullscreen && !document.fullscreenElement) root.requestFullscreen().catch(() => {});
+      enterKioskFullscreen();
       window.scrollTo(0, 1);
     } catch {
       // best effort on mobile browsers
     }
+  }
+
+  function enterKioskFullscreen() {
+    try {
+      const root = document.documentElement;
+      if (root && root.requestFullscreen && !document.fullscreenElement) {
+        root.requestFullscreen().catch(() => {});
+      }
+      window.scrollTo(0, 1);
+      syncKioskFullscreenUi();
+    } catch {
+      // best effort on mobile browsers
+    }
+  }
+
+  function syncKioskFullscreenUi() {
+    const button = document.getElementById("kiosk-enter-fullscreen");
+    if (!button) return;
+    button.textContent = document.fullscreenElement ? "Fullscreen On" : "Fullscreen";
   }
 
   function fitSheetToViewport(containerSelector) {

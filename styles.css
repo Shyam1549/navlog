@@ -739,6 +739,12 @@ body.kiosk-mode {
   margin-bottom: 8px;
 }
 
+.ipad-kiosk-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .ipad-kiosk-pad-head h3 {
   margin: 0;
   font-size: 0.95rem;
