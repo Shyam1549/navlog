@@ -808,6 +808,7 @@ body.kiosk-mode .time-head {
 .header-box .date-input-wrap input[data-header="date"] {
   min-width: 0;
   padding-right: 8px;
+  pointer-events: none;
 }
 
 .date-picker-proxy {
@@ -821,6 +822,7 @@ body.kiosk-mode .time-head {
   border: 0;
   padding: 0;
   cursor: pointer;
+  z-index: 2;
 }
 
 .header-box.static {
