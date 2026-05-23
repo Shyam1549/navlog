@@ -44,6 +44,14 @@ body.kiosk-mode {
   overflow-y: auto;
 }
 
+body.kiosk-mode .head-format-note {
+  display: none !important;
+}
+
+body.kiosk-mode .time-head {
+  gap: 0;
+}
+
 .ui-scale {
   width: 100%;
   zoom: var(--ui-scale);
@@ -728,6 +736,7 @@ body.kiosk-mode {
   gap: 10px;
   padding-top: 10px;
   padding-bottom: 10px;
+  align-items: center;
 }
 
 .navlog-topbar .top-center {
@@ -735,6 +744,7 @@ body.kiosk-mode {
   align-items: center;
   justify-content: center;
   gap: 12px;
+  text-align: center;
 }
 
 .navlog-topbar .top-center h1 {

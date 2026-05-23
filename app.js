@@ -528,7 +528,7 @@
     return `
       <div class="ui-scale">
       <main class="entry-page">
-        <section class="topbar centered">
+        <section class="topbar centered navlog-topbar">
           <div class="top-side"><button class="back-link" id="back-from-privacy">Back</button></div>
           <div class="top-center">
             <h1>Privacy Policy</h1>
@@ -1748,6 +1748,7 @@
       if (node.tagName === "BUTTON") node.style.display = "none";
       if ("readOnly" in node) node.readOnly = true;
       if ("disabled" in node) node.disabled = true;
+      if ("placeholder" in node) node.placeholder = "";
       node.tabIndex = -1;
     });
     const legInputs = document.querySelectorAll("[data-leg-field]");
