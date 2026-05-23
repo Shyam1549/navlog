@@ -4979,8 +4979,15 @@
 
   function computeEtAtTimeline() {
     const departureAtMinutes = parseAtInput(state.navlog.legs[0] && state.navlog.legs[0].at);
-    let elapsedMinutes = 0;
     const hasDepartureAt = Number.isFinite(departureAtMinutes);
+    const lastIndex = state.navlog.legs.length - 1;
+    const cumulativeEeFromDeparture = state.navlog.legs.reduce((sum, leg, index) => {
+      if (index === 0) return sum;
+      const ee = parseEeInput(leg.ee);
+      const safeEe = (ee == null || !Number.isFinite(ee) || ee < 0) ? 0 : ee;
+      return sum + safeEe;
+    }, 0);
+
     state.navlog.legs.forEach((leg, index) => {
       leg._derived = leg._derived || {};
       if (index === 0) {
@@ -4988,16 +4995,38 @@
         delete leg._derived.et;
         return;
       }
-      const eeMinutes = parseEeInput(leg.ee);
       if (!hasDepartureAt) {
         leg.et = "";
         delete leg._derived.et;
         return;
       }
+
+      const eeMinutes = parseEeInput(leg.ee);
       const safeEe = (eeMinutes == null || !Number.isFinite(eeMinutes) || eeMinutes < 0) ? 0 : eeMinutes;
-      elapsedMinutes += safeEe;
-      leg.et = formatMinutesAsHhmm(departureAtMinutes + elapsedMinutes);
-      leg._derived.et = true;
+
+      // Rule 1: departure AT + EE of next row => ET of that row.
+      if (index === 1) {
+        leg.et = formatMinutesAsHhmm(departureAtMinutes + safeEe);
+        leg._derived.et = true;
+        return;
+      }
+
+      // Rule 2: destination ET = departure AT + cumulative EE of all rows.
+      if (index === lastIndex) {
+        leg.et = formatMinutesAsHhmm(departureAtMinutes + cumulativeEeFromDeparture);
+        leg._derived.et = true;
+        return;
+      }
+
+      // Rule 3: remaining ET = AT of row above + EE of current row.
+      const atAbove = parseAtInput(state.navlog.legs[index - 1] && state.navlog.legs[index - 1].at);
+      if (Number.isFinite(atAbove)) {
+        leg.et = formatMinutesAsHhmm(atAbove + safeEe);
+        leg._derived.et = true;
+      } else {
+        leg.et = "";
+        delete leg._derived.et;
+      }
     });
   }
 
