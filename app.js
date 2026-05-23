@@ -498,7 +498,7 @@
     return `
       <div class="ui-scale">
       <main class="entry-page">
-        <section class="topbar centered">
+        <section class="topbar centered navlog-topbar">
           <div class="top-side"><button class="back-link" id="back-from-manual">Back</button></div>
           <div class="top-center">
             <h1>User Manual</h1>
@@ -956,11 +956,11 @@
     const h = state.navlog.header;
     return `
       <main class="ipad-kiosk-page">
-        <section class="ipad-kiosk-navlog">
-          <div class="sheet">
+        <section class="sheet-wrap ipad-kiosk-wrap">
+          <div class="sheet ipad-kiosk-sheet">
             <section class="sheet-header">
               ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
-              <div class="header-box dark static planning-box">PREFLIGHT PLANNER</div>
+              <div class="header-box dark static planning-box" id="kiosk-planner-toggle">PREFLIGHT PLANNER</div>
               ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
                ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
               ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
@@ -973,15 +973,17 @@
             ${renderAtisSection()}
           </div>
         </section>
-        <section class="ipad-kiosk-pad">
-          <div class="ipad-kiosk-pad-head">
-            <h3>Scratch Pad</h3>
-            <div class="ipad-kiosk-actions">
-              <button class="action" id="kiosk-enter-fullscreen" type="button">Fullscreen</button>
-              <button class="action" id="kiosk-pad-clear" type="button">Clear</button>
+        <section class="kiosk-pad-overlay" id="kiosk-pad-overlay" aria-hidden="true">
+          <div class="kiosk-pad-card">
+            <div class="ipad-kiosk-pad-head">
+              <h3>Scratch Pad</h3>
+              <div class="ipad-kiosk-actions">
+                <button class="action" id="kiosk-pad-close" type="button">Close</button>
+                <button class="action" id="kiosk-pad-clear" type="button">Clear</button>
+              </div>
             </div>
+            <canvas id="kiosk-pad-canvas" width="1400" height="420" aria-label="Scratch pad"></canvas>
           </div>
-          <canvas id="kiosk-pad-canvas" width="1400" height="420" aria-label="Scratch pad"></canvas>
         </section>
       </main>
     `;
@@ -1750,7 +1752,7 @@
       node.style.display = "none";
     });
     document.body.classList.add("kiosk-mode");
-    fitSheetToViewport(".ipad-kiosk-navlog");
+    fitSheetToViewport(".ipad-kiosk-wrap");
     document.querySelectorAll("input, select, textarea, button").forEach((node) => {
       if (node.id === "kiosk-pad-clear") return;
       const legField = String(node.getAttribute("data-leg-field") || "");
@@ -1795,23 +1797,8 @@
         });
       }
     });
-    const fullscreenButton = document.getElementById("kiosk-enter-fullscreen");
-    if (fullscreenButton) {
-      fullscreenButton.addEventListener("click", () => {
-        enterKioskFullscreen();
-      });
-    }
-    const firstTapFullscreen = () => {
-      if (!document.fullscreenElement) enterKioskFullscreen();
-      document.removeEventListener("pointerdown", firstTapFullscreen);
-      document.removeEventListener("touchstart", firstTapFullscreen);
-    };
-    document.addEventListener("pointerdown", firstTapFullscreen, { once: true });
-    document.addEventListener("touchstart", firstTapFullscreen, { once: true, passive: true });
-    document.addEventListener("fullscreenchange", syncKioskFullscreenUi);
-    syncKioskFullscreenUi();
+    wireKioskScratchPadToggle();
     setupKioskScratchPad();
-    attemptKioskFullscreen();
   }
 
   function isIpadDevice() {
@@ -1912,32 +1899,34 @@
     kioskPadState = { resize };
   }
 
-  function attemptKioskFullscreen() {
-    try {
-      enterKioskFullscreen();
-      window.scrollTo(0, 1);
-    } catch {
-      // best effort on mobile browsers
-    }
-  }
-
-  function enterKioskFullscreen() {
-    try {
-      const root = document.documentElement;
-      if (root && root.requestFullscreen && !document.fullscreenElement) {
-        root.requestFullscreen().catch(() => {});
+  function wireKioskScratchPadToggle() {
+    const plannerToggle = document.getElementById("kiosk-planner-toggle");
+    const overlay = document.getElementById("kiosk-pad-overlay");
+    const closeButton = document.getElementById("kiosk-pad-close");
+    if (!plannerToggle || !overlay) return;
+    let tapCount = 0;
+    let lastTapAt = 0;
+    const windowMs = 1400;
+    const toggleOverlay = (show) => {
+      if (show) overlay.classList.add("open");
+      else overlay.classList.remove("open");
+    };
+    const onTap = () => {
+      const now = Date.now();
+      if (now - lastTapAt > windowMs) tapCount = 0;
+      tapCount += 1;
+      lastTapAt = now;
+      if (tapCount >= 3) {
+        tapCount = 0;
+        toggleOverlay(true);
       }
-      window.scrollTo(0, 1);
-      syncKioskFullscreenUi();
-    } catch {
-      // best effort on mobile browsers
-    }
-  }
-
-  function syncKioskFullscreenUi() {
-    const button = document.getElementById("kiosk-enter-fullscreen");
-    if (!button) return;
-    button.textContent = document.fullscreenElement ? "Fullscreen On" : "Fullscreen";
+    };
+    plannerToggle.addEventListener("click", onTap);
+    plannerToggle.addEventListener("touchstart", onTap, { passive: true });
+    if (closeButton) closeButton.addEventListener("click", () => toggleOverlay(false));
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) toggleOverlay(false);
+    });
   }
 
   function fitSheetToViewport(containerSelector) {
@@ -1953,7 +1942,7 @@
     sheet.style.maxWidth = `${baseWidth}px`;
     sheet.style.transformOrigin = "top left";
     container.style.overflowX = "hidden";
-    container.style.overflowY = "auto";
+    container.style.overflowY = "visible";
 
     const available = Math.max(320, container.clientWidth - 4);
     const scale = Math.min(1, available / baseWidth);
@@ -1965,7 +1954,7 @@
       viewportFitResizeBound = true;
       window.addEventListener("resize", () => {
         if (state.view === "navlog") fitSheetToViewport(".sheet-wrap");
-        if (state.view === "ipad-kiosk") fitSheetToViewport(".ipad-kiosk-navlog");
+        if (state.view === "ipad-kiosk") fitSheetToViewport(".ipad-kiosk-wrap");
       });
     }
   }

@@ -40,7 +40,8 @@ select { font: inherit; }
 
 body.kiosk-mode {
   padding: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .ui-scale {
@@ -699,21 +700,18 @@ body.kiosk-mode {
 
 .ipad-kiosk-page {
   width: 100%;
-  min-height: 100dvh;
+  min-height: 100vh;
   background: var(--paper);
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 10px;
+  display: block;
   padding: 8px;
-  overflow: hidden;
+  overflow: visible;
 }
 
-.ipad-kiosk-navlog {
-  min-height: 0;
-  overflow: auto;
+.ipad-kiosk-wrap {
+  margin-bottom: 0;
 }
 
-.ipad-kiosk-page .sheet {
+.ipad-kiosk-sheet {
   height: 100%;
   padding: 8px;
 }
@@ -725,11 +723,27 @@ body.kiosk-mode {
   display: none !important;
 }
 
-.ipad-kiosk-pad {
-  border: 2px solid var(--line);
+.kiosk-pad-overlay {
+  position: fixed;
+  inset: 0;
+  display: none;
+  z-index: 1800;
+  padding: 10px;
+  background: rgba(14, 18, 22, 0.22);
+  backdrop-filter: blur(1px);
+}
+
+.kiosk-pad-overlay.open {
+  display: block;
+}
+
+.kiosk-pad-card {
+  width: 100%;
+  height: 100%;
+  border: 2px solid rgba(46, 41, 35, 0.48);
   border-radius: 12px;
-  padding: 8px;
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(251, 247, 239, 0.28);
+  padding: 10px;
 }
 
 .ipad-kiosk-pad-head {
@@ -752,11 +766,34 @@ body.kiosk-mode {
 
 #kiosk-pad-canvas {
   width: 100%;
-  height: min(28vh, 300px);
+  height: calc(100% - 44px);
   border: 2px solid var(--line);
   border-radius: 10px;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.2);
   touch-action: none;
+}
+
+.navlog-topbar {
+  grid-template-columns: auto 1fr auto;
+  gap: 10px;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
+.navlog-topbar .top-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.navlog-topbar .top-center h1 {
+  margin: 0;
+}
+
+.navlog-topbar .utc-pill {
+  min-width: 98px;
+  padding: 8px 12px;
 }
 
 .sheet-header,
@@ -1983,9 +2020,8 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   }
 
   .sheet-wrap {
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: visible;
-    -webkit-overflow-scrolling: touch;
     padding-bottom: 4px;
   }
 
@@ -2021,6 +2057,11 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   .topbar.centered {
     grid-template-columns: 1fr;
     gap: 12px;
+  }
+
+  .navlog-topbar {
+    grid-template-columns: auto 1fr auto;
+    gap: 8px;
   }
 
   .top-side { justify-content: flex-start; }
@@ -2113,6 +2154,16 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     height: 38px;
   }
 
+}
+
+@media (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+  .entry-page .setup-card .entry-actions {
+    justify-content: center;
+  }
+
+  .entry-page .setup-card .swap-button {
+    margin: 0 auto;
+  }
 }
 
 @media (max-width: 720px) {
