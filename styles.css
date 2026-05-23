@@ -1983,7 +1983,6 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     overflow-x: hidden;
     overflow-y: visible;
     padding-bottom: 4px;
-    height: auto !important;
   }
 
   .sheet { min-width: 1000px; }
@@ -2374,7 +2373,6 @@ body.ipad-desktop-scale .topbar.centered.navlog-topbar .top-center {
 body.ipad-desktop-scale .sheet-wrap {
   overflow-x: hidden !important;
   overflow-y: visible !important;
-  height: auto !important;
 }
 
 body.ipad-desktop-scale .sheet {

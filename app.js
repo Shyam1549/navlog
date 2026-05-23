@@ -532,7 +532,7 @@
     return `
       <div class="ui-scale">
       <main class="entry-page">
-        <section class="topbar centered navlog-topbar">
+        <section class="topbar centered">
           <div class="top-side"><button class="back-link" id="back-from-privacy">Back</button></div>
           <div class="top-center">
             <h1>Privacy Policy</h1>
@@ -1839,17 +1839,18 @@
     sheet.style.width = `${baseWidth}px`;
     sheet.style.minWidth = `${baseWidth}px`;
     sheet.style.maxWidth = `${baseWidth}px`;
-    sheet.style.transformOrigin = "top left";
-    container.style.overflowX = "hidden";
-    container.style.overflowY = "visible";
+    sheet.style.transformOrigin = "0 0";
+    sheet.style.position = "absolute";
+    sheet.style.left = "0";
+    sheet.style.top = "0";
+    container.style.position = "relative";
+    container.style.overflow = "visible";
 
     const available = Math.max(320, container.clientWidth - 4);
     const scale = Math.min(1, available / baseWidth);
-    // iPad Safari does not reliably honor CSS zoom on descendants.
-    // Use transform scale so text and geometry shrink together consistently.
     sheet.style.transform = `scale(${scale})`;
-    const rawHeight = sheet.offsetHeight;
-    container.style.height = `${Math.ceil(rawHeight * scale) + 2}px`;
+    const rawHeight = Math.max(sheet.scrollHeight, sheet.offsetHeight);
+    container.style.height = `${Math.ceil(rawHeight * scale)}px`;
 
     if (!viewportFitResizeBound) {
       viewportFitResizeBound = true;
