@@ -924,13 +924,13 @@
     return `
       <div class="ui-scale">
       <main class="page">
-        <section class="topbar centered">
-          <div class="top-side"><button class="back-link" id="back-to-setup">Back</button></div>
-          <div class="top-center">
+        <section class="topbar centered navlog-topbar">
+          <div class="top-side navlog-back"><button class="back-link" id="back-to-setup">Back</button></div>
+          <div class="top-center navlog-title-row">
             <h1>Navlog</h1>
-            <div class="utc-pill" id="utc-clock">UTC ${formatUtcNow()}</div>
           </div>
-          <div class="top-side right">
+          <div class="navlog-clock"><div class="utc-pill" id="utc-clock">UTC ${formatUtcNow()}</div></div>
+          <div class="top-side right navlog-actions">
             <button class="action" id="open-settings">Settings</button>
             <button class="action" id="new-sheet">New</button>
             <button class="action primary" id="save-sheet">Save</button>
@@ -1951,6 +1951,14 @@
     if (!ctx) return;
 
     const resize = () => {
+      let snapshot = null;
+      if (canvas.width > 0 && canvas.height > 0) {
+        snapshot = document.createElement("canvas");
+        snapshot.width = canvas.width;
+        snapshot.height = canvas.height;
+        const snapCtx = snapshot.getContext("2d");
+        if (snapCtx) snapCtx.drawImage(canvas, 0, 0);
+      }
       const rect = canvas.getBoundingClientRect();
       const ratio = Math.max(1, window.devicePixelRatio || 1);
       canvas.width = Math.max(1, Math.floor(rect.width * ratio));
@@ -1960,6 +1968,9 @@
       ctx.lineJoin = "round";
       ctx.lineWidth = 2.4;
       ctx.strokeStyle = "rgba(24, 22, 18, 0.92)";
+      if (snapshot) {
+        ctx.drawImage(snapshot, 0, 0, snapshot.width, snapshot.height, 0, 0, rect.width, rect.height);
+      }
     };
 
     const pointer = { drawing: false, x: 0, y: 0 };
@@ -4983,13 +4994,8 @@
         delete leg._derived.et;
         return;
       }
-      if (eeMinutes == null || !Number.isFinite(eeMinutes) || eeMinutes < 0) {
-        leg.et = elapsedMinutes > 0 ? formatMinutesAsHhmm(departureAtMinutes + elapsedMinutes) : "";
-        if (leg.et) leg._derived.et = true;
-        else delete leg._derived.et;
-        return;
-      }
-      elapsedMinutes += eeMinutes;
+      const safeEe = (eeMinutes == null || !Number.isFinite(eeMinutes) || eeMinutes < 0) ? 0 : eeMinutes;
+      elapsedMinutes += safeEe;
       leg.et = formatMinutesAsHhmm(departureAtMinutes + elapsedMinutes);
       leg._derived.et = true;
     });

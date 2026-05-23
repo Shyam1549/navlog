@@ -723,9 +723,10 @@ body.kiosk-mode .time-head {
 }
 
 .kiosk-utc {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
+  width: fit-content;
   min-width: 118px;
   padding: 8px 12px;
   border-radius: 12px;
@@ -829,6 +830,40 @@ body.kiosk-mode .toc-tod-title.kiosk-static-toc {
 .navlog-topbar .utc-pill {
   min-width: 98px;
   padding: 8px 12px;
+}
+
+body.ipad-desktop-scale:not(.kiosk-mode) .navlog-topbar {
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "back title title"
+    ". clock ."
+    ". actions .";
+  row-gap: 8px;
+  align-items: center;
+}
+
+body.ipad-desktop-scale:not(.kiosk-mode) .navlog-back {
+  grid-area: back;
+}
+
+body.ipad-desktop-scale:not(.kiosk-mode) .navlog-title-row {
+  grid-area: title;
+  justify-self: center;
+}
+
+body.ipad-desktop-scale:not(.kiosk-mode) .navlog-title-row h1 {
+  margin: 0;
+}
+
+body.ipad-desktop-scale:not(.kiosk-mode) .navlog-clock {
+  grid-area: clock;
+  justify-self: center;
+}
+
+body.ipad-desktop-scale:not(.kiosk-mode) .navlog-actions {
+  grid-area: actions;
+  justify-self: center;
+  justify-content: center;
 }
 
 .sheet-header,
