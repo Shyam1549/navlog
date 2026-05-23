@@ -1588,19 +1588,15 @@
     const datePickerInput = document.querySelector("[data-date-picker]");
     if (datePickerInput) {
       const dateDisplayInput = document.querySelector('[data-header="date"]');
-      if (dateDisplayInput) {
-        const openDatePicker = () => {
-          if (typeof datePickerInput.showPicker === "function") datePickerInput.showPicker();
-          else datePickerInput.click();
-        };
-        dateDisplayInput.addEventListener("click", openDatePicker);
-      }
       datePickerInput.addEventListener("change", (event) => {
         const picked = formatDateToDisplay(event.target.value);
         state.navlog.header.date = picked;
         const dateInput = document.querySelector('[data-header="date"]');
         if (dateInput) dateInput.value = picked;
       });
+      if (dateDisplayInput) {
+        dateDisplayInput.setAttribute("readonly", "readonly");
+      }
     }
 
     document.querySelectorAll("[data-toc-entry]").forEach((input) => {
@@ -4917,7 +4913,7 @@
     const isoValue = normalizeDateInputValue(normalizedDisplay);
     return `
       <span class="date-input-wrap">
-        <input data-header="date" value="${escapeAttr(normalizedDisplay)}" placeholder="yy/mm/dd" />
+        <input data-header="date" value="${escapeAttr(normalizedDisplay)}" placeholder="yy/mm/dd" readonly />
         <input type="date" class="date-picker-proxy" data-date-picker value="${escapeAttr(isoValue)}" tabindex="-1" aria-hidden="true" />
       </span>
     `;
