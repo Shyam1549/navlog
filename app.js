@@ -1845,8 +1845,11 @@
 
     const available = Math.max(320, container.clientWidth - 4);
     const scale = Math.min(1, available / baseWidth);
-    sheet.style.zoom = String(scale);
-    container.style.height = "auto";
+    // iPad Safari does not reliably honor CSS zoom on descendants.
+    // Use transform scale so text and geometry shrink together consistently.
+    sheet.style.transform = `scale(${scale})`;
+    const rawHeight = sheet.offsetHeight;
+    container.style.height = `${Math.ceil(rawHeight * scale) + 2}px`;
 
     if (!viewportFitResizeBound) {
       viewportFitResizeBound = true;
