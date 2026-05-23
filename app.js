@@ -20,6 +20,7 @@
   const ADMIN_PASSWORD_KEY = "navlog_admin_password";
   const ADMIN_GAME_HIGH_SCORE_KEY = "navlog_admin_game_high_score";
   const ANNOUNCEMENT_SEEN_KEY = "navlog_announcement_seen_signature";
+  const NAVLOG_KIOSK_PAYLOAD_KEY = "navlog_kiosk_payload_v1";
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
   const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
   const ADDITIONAL_INFO_DEFAULT_ROWS = 19;
@@ -110,6 +111,7 @@
   let manualMathRetryCount = 0;
   let adminGameState = null;
   let adminGameAnimation = null;
+  let kioskPadState = null;
 
   function createBlankLeg(route) {
     return {
@@ -337,6 +339,7 @@
     else if (state.view === "additional-info") app.innerHTML = renderAdditionalInfoScreen();
     else if (state.view === "admin-login") app.innerHTML = renderAdminLoginScreen();
     else if (state.view === "admin") app.innerHTML = renderAdminScreen();
+    else if (state.view === "ipad-kiosk") app.innerHTML = renderIpadKioskScreen();
     else app.innerHTML = renderNavlogScreen();
     startUtcClock();
     if (state.view === "setup") wireSetup();
@@ -345,7 +348,9 @@
     else if (state.view === "additional-info") wireAdditionalInfo();
     else if (state.view === "admin-login") wireAdminLogin();
     else if (state.view === "admin") wireAdminPanel();
+    else if (state.view === "ipad-kiosk") wireIpadKiosk();
     else wireNavlog();
+    if (state.view === "ipad-kiosk") return;
     wireUtcAdminTrigger();
     wireFooterActions();
     wireBugReportModal();
@@ -896,6 +901,7 @@
   function renderNavlogScreen() {
     const h = state.navlog.header;
     const settingsPanel = renderSettingsPanel();
+    const activateError = String(state.meta.activateError || "");
     return `
       <div class="ui-scale">
       <main class="page">
@@ -932,11 +938,34 @@
             ${renderAtisSection()}
           </div>
         </section>
+        <section class="activate-wrap">
+          <button class="activate-button" id="activate-ipad-mode" type="button">ACTIVATE</button>
+          ${activateError ? `<p class="activate-error">${escapeHtml(activateError)}</p>` : ""}
+        </section>
         ${renderFrontFooter()}
         ${renderBugReportModal()}
         ${renderAnnouncementModal()}
       </main>
       </div>
+    `;
+  }
+
+  function renderIpadKioskScreen() {
+    return `
+      <main class="ipad-kiosk-page">
+        <section class="ipad-kiosk-navlog">
+          <div class="sheet">
+            ${renderRouteTable()}
+          </div>
+        </section>
+        <section class="ipad-kiosk-pad">
+          <div class="ipad-kiosk-pad-head">
+            <h3>Scratch Pad</h3>
+            <button class="action" id="kiosk-pad-clear" type="button">Clear</button>
+          </div>
+          <canvas id="kiosk-pad-canvas" width="1400" height="420" aria-label="Scratch pad"></canvas>
+        </section>
+      </main>
     `;
   }
 
@@ -1378,6 +1407,21 @@
       render();
     });
     document.getElementById("save-sheet").addEventListener("click", downloadPdf);
+    const activateButton = document.getElementById("activate-ipad-mode");
+    if (activateButton) {
+      activateButton.addEventListener("click", () => {
+        if (!isIpadDevice()) {
+          state.meta.activateError = "Activate is only available on iPad.";
+          render();
+          return;
+        }
+        state.meta.activateError = "";
+        persistKioskPayload();
+        const url = new URL(window.location.href);
+        url.searchParams.set("kiosk", "1");
+        window.open(url.toString(), "_blank", "noopener");
+      });
+    }
     document.getElementById("add-leg").addEventListener("click", () => {
       const newLeg = createBlankLeg("");
       state.navlog.legs.splice(state.navlog.legs.length - 1, 0, newLeg);
@@ -1680,6 +1724,157 @@
 
     syncFirstAltHint();
     syncRouteHints();
+  }
+
+  function wireIpadKiosk() {
+    document.querySelectorAll(".mini-plus, .remove-chip, .blank-chip").forEach((node) => {
+      node.style.display = "none";
+    });
+    const legInputs = document.querySelectorAll("[data-leg-field]");
+    legInputs.forEach((input) => {
+      const key = String(input.dataset.legField || "");
+      const isAtField = key.endsWith(":at");
+      if (!isAtField) {
+        input.readOnly = true;
+        input.tabIndex = -1;
+      } else {
+        input.addEventListener("input", (event) => {
+          const [indexText] = event.target.dataset.legField.split(":");
+          const index = Number(indexText);
+          const leg = state.navlog.legs[index];
+          leg.at = event.target.value;
+          leg._manual = leg._manual || {};
+          leg._manual.at = String(event.target.value || "").trim() !== "";
+          computeRouteMath({ index, field: "at" });
+          updateComputedCells({ index, field: "at" });
+        });
+        input.addEventListener("blur", (event) => {
+          const [indexText] = event.target.dataset.legField.split(":");
+          const index = Number(indexText);
+          const leg = state.navlog.legs[index];
+          const parsedAtMinutes = parseAtInput(event.target.value);
+          if (parsedAtMinutes == null) return;
+          const normalized = formatMinutesAsHhmm(parsedAtMinutes);
+          event.target.value = normalized;
+          leg.at = normalized;
+          leg._manual = leg._manual || {};
+          leg._manual.at = true;
+          computeRouteMath({ index, field: "at" });
+          updateComputedCells({ index, field: "at" });
+          persistKioskPayload();
+        });
+      }
+    });
+    setupKioskScratchPad();
+    attemptKioskFullscreen();
+  }
+
+  function isIpadDevice() {
+    const ua = String(navigator.userAgent || "");
+    const platform = String(navigator.platform || "");
+    const touchPoints = Number(navigator.maxTouchPoints || 0);
+    const classicIpad = /iPad/i.test(ua) || /iPad/i.test(platform);
+    const modernIpad = /Macintosh/i.test(ua) && touchPoints > 1;
+    return classicIpad || modernIpad;
+  }
+
+  function persistKioskPayload() {
+    try {
+      const payload = {
+        navlog: state.navlog,
+        settings: state.settings,
+        ts: Date.now(),
+      };
+      window.localStorage.setItem(NAVLOG_KIOSK_PAYLOAD_KEY, JSON.stringify(payload));
+    } catch {
+      // ignore storage failure
+    }
+  }
+
+  function restoreKioskPayload() {
+    try {
+      const raw = window.localStorage.getItem(NAVLOG_KIOSK_PAYLOAD_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return;
+      if (parsed.navlog && typeof parsed.navlog === "object") state.navlog = parsed.navlog;
+      if (parsed.settings && typeof parsed.settings === "object") state.settings = { ...createDefaultSettings(), ...parsed.settings };
+    } catch {
+      // ignore bad payload
+    }
+  }
+
+  function setupKioskScratchPad() {
+    const canvas = document.getElementById("kiosk-pad-canvas");
+    const clearButton = document.getElementById("kiosk-pad-clear");
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const stage = { drawing: false, lastX: 0, lastY: 0 };
+    const resize = () => {
+      const box = canvas.getBoundingClientRect();
+      const ratio = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.max(600, Math.round(box.width * ratio));
+      canvas.height = Math.max(220, Math.round(box.height * ratio));
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.lineWidth = 2.2;
+      ctx.strokeStyle = "#1f2a30";
+    };
+    const pointFromEvent = (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const touch = event.touches && event.touches[0];
+      const x = (touch ? touch.clientX : event.clientX) - rect.left;
+      const y = (touch ? touch.clientY : event.clientY) - rect.top;
+      return { x, y };
+    };
+    const startDraw = (event) => {
+      event.preventDefault();
+      const p = pointFromEvent(event);
+      stage.drawing = true;
+      stage.lastX = p.x;
+      stage.lastY = p.y;
+    };
+    const moveDraw = (event) => {
+      if (!stage.drawing) return;
+      event.preventDefault();
+      const p = pointFromEvent(event);
+      ctx.beginPath();
+      ctx.moveTo(stage.lastX, stage.lastY);
+      ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+      stage.lastX = p.x;
+      stage.lastY = p.y;
+    };
+    const endDraw = () => {
+      stage.drawing = false;
+    };
+    resize();
+    window.addEventListener("resize", resize);
+    canvas.addEventListener("mousedown", startDraw);
+    canvas.addEventListener("mousemove", moveDraw);
+    canvas.addEventListener("mouseup", endDraw);
+    canvas.addEventListener("mouseleave", endDraw);
+    canvas.addEventListener("touchstart", startDraw, { passive: false });
+    canvas.addEventListener("touchmove", moveDraw, { passive: false });
+    canvas.addEventListener("touchend", endDraw, { passive: false });
+    if (clearButton) {
+      clearButton.addEventListener("click", () => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      });
+    }
+    kioskPadState = { resize };
+  }
+
+  function attemptKioskFullscreen() {
+    try {
+      const root = document.documentElement;
+      if (root && root.requestFullscreen && !document.fullscreenElement) root.requestFullscreen().catch(() => {});
+      window.scrollTo(0, 1);
+    } catch {
+      // best effort on mobile browsers
+    }
   }
 
   function applySettingsChange(partial) {
@@ -4793,6 +4988,12 @@
   }
 
   async function initializeApp() {
+    const params = new URLSearchParams(window.location.search);
+    const kioskRequested = params.get("kiosk") === "1";
+    if (kioskRequested) {
+      state.view = "ipad-kiosk";
+      restoreKioskPayload();
+    }
     await loadPublicCatalogFromSupabase();
     evaluateAnnouncementsPrompt();
     render();
