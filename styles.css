@@ -2334,6 +2334,39 @@ body.kiosk-mode .field input.at-hold-done {
   text-align: center;
 }
 
+.toc-value-wrap {
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-right: 2px solid var(--line);
+  padding: 8px 10px;
+  min-width: 0;
+}
+
+.toc-value-wrap.is-last {
+  border-right: 0;
+}
+
+.toc-value-wrap input[data-toc] {
+  min-height: 0;
+  height: auto;
+  border: 0;
+  padding: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.toc-unit {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+  text-transform: none;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .toc-tod-card.resolved .toc-tod-title {
   background: rgba(46, 41, 35, 0.05);
 }
@@ -2756,6 +2789,13 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   background: transparent !important;
 }
 .pdf-export input::placeholder { color: transparent !important; }
+.pdf-export .head-format-note,
+.pdf-export .toc-unit { display: none !important; }
+.pdf-export .aircraft-box input,
+.pdf-export .rpc-box input,
+.pdf-export .gph-box input {
+  text-align: left !important;
+}
 
 /* iPad: force navlog to match desktop proportions/typography, then scale as one unit via JS. */
 body.ipad-desktop-scale .ui-scale {

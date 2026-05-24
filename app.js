@@ -1206,7 +1206,7 @@
             <ul class="cockpit-info-list">
               <li>Tap "SCRATCHPAD" (top right) 3 times to open the scratch pad.</li>
               <li>Press and hold Actual Time (AT) for 3 seconds to auto-enter current ZULU time.</li>
-              <li>To use keyboard entry for interactive fields (AT, ATIS, LOCATION), tap the respective table cell 2 times.</li>
+              <li>To use keyboard entry for interactive fields (AT, ATIS, LOCATION), tap the respective table cell 3 times.</li>
               <li>For inbound/outbound time estimate, press and hold the route for 3 seconds.</li>
             </ul>
           </div>
@@ -1528,6 +1528,12 @@
     const timeUnitLabel = state.settings.roundTimeValues ? "mins" : "min+sec";
     const tocDistancePlaceholder = `Distance (${distanceUnitLabel})`;
     const tocTimePlaceholder = `Time (${timeUnitLabel})`;
+    const renderTocValueCell = (field, value, placeholder, unitText, isLast = false) => `
+      <label class="toc-value-wrap${isLast ? " is-last" : ""}">
+        <input data-toc="${field}" value="${escapeAttr(value)}" placeholder="${escapeAttr(placeholder)}" />
+        <span class="toc-unit" aria-hidden="true">${escapeHtml(unitText)}</span>
+      </label>
+    `;
     return `
       <section class="toc-tod">
         <div class="toc-tod-card ${!t.tocEditing ? "resolved" : ""}">
@@ -1536,8 +1542,8 @@
             t.tocEditing
               ? `<input class="toc-entry" data-toc-entry="roc" value="${escapeAttr(t.roc)}" placeholder="Enter ROC" />`
               : `
-                <input data-toc="tocDistance" value="${escapeAttr(t.tocDistance)}" placeholder="${escapeAttr(tocDistancePlaceholder)}" />
-                <input data-toc="tocTime" value="${escapeAttr(t.tocTime)}" placeholder="${escapeAttr(tocTimePlaceholder)}" />
+                ${renderTocValueCell("tocDistance", t.tocDistance, tocDistancePlaceholder, distanceUnitLabel)}
+                ${renderTocValueCell("tocTime", t.tocTime, tocTimePlaceholder, timeUnitLabel, true)}
               `
           }
         </div>
@@ -1547,8 +1553,8 @@
             t.todEditing
               ? `<input class="toc-entry" data-toc-entry="rod" value="${escapeAttr(t.rod)}" placeholder="Enter ROD" />`
               : `
-                <input data-toc="todDistance" value="${escapeAttr(t.todDistance)}" placeholder="${escapeAttr(tocDistancePlaceholder)}" />
-                <input data-toc="todTime" value="${escapeAttr(t.todTime)}" placeholder="${escapeAttr(tocTimePlaceholder)}" />
+                ${renderTocValueCell("todDistance", t.todDistance, tocDistancePlaceholder, distanceUnitLabel)}
+                ${renderTocValueCell("todTime", t.todTime, tocTimePlaceholder, timeUnitLabel, true)}
               `
           }
         </div>
@@ -1561,8 +1567,8 @@
       <section class="radio-block">
         <div class="radio-head">
           <div>LOCATION <button class="mini-plus inline" id="add-radio-row" type="button">+</button></div>
-          <div>CPT*/ATIS</div>
-          <div>DEP**/AAP</div>
+          <div>ATIS</div>
+          <div>DEP/ARR</div>
           <div>TWR</div>
           <div>GND</div>
           <div>FSS</div>
