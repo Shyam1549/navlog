@@ -1109,12 +1109,6 @@
   function renderKioskRouteEstimateModal() {
     const model = state.meta.kioskRouteEstimate;
     if (!model || !model.open) return "";
-    const distanceUnitLabel =
-      state.settings.distanceUnit === "km"
-        ? "KM"
-        : state.settings.distanceUnit === "sm"
-          ? "SM"
-          : "NM";
     return `
       <div class="bug-report-overlay" id="kiosk-route-estimate-overlay">
         <section class="bug-report-modal kiosk-estimate-modal" role="dialog" aria-modal="true" aria-label="Route estimate calculator">
@@ -1123,17 +1117,19 @@
             <button class="action bug-report-close" id="kiosk-route-estimate-close" type="button">Close</button>
           </div>
           <p class="kiosk-estimate-context">${escapeHtml(model.routeLabel || "Waypoint")}</p>
+          <div class="kiosk-direction-toggle" id="kiosk-route-estimate-direction">
+            <button type="button" class="kiosk-direction-btn ${model.direction === "outbound" ? "active" : ""}" data-kiosk-direction="outbound">Outbound</button>
+            <button type="button" class="kiosk-direction-btn ${model.direction === "inbound" ? "active" : ""}" data-kiosk-direction="inbound">Inbound</button>
+          </div>
           <div class="kiosk-estimate-grid">
             <label>
-              <span>Direction</span>
-              <select id="kiosk-route-estimate-direction">
-                <option value="outbound" ${model.direction === "outbound" ? "selected" : ""}>Outbound</option>
-                <option value="inbound" ${model.direction === "inbound" ? "selected" : ""}>Inbound</option>
-              </select>
-            </label>
-            <label>
-              <span>Distance (${distanceUnitLabel})</span>
+              <span>Distance (NM)</span>
               <input id="kiosk-route-estimate-distance" value="${escapeAttr(model.distance)}" inputmode="decimal" />
+              <span class="kiosk-distance-presets">
+                <button type="button" class="kiosk-preset-btn" data-kiosk-distance-preset="5">5NM</button>
+                <button type="button" class="kiosk-preset-btn" data-kiosk-distance-preset="10">10NM</button>
+                <button type="button" class="kiosk-preset-btn" data-kiosk-distance-preset="15">15NM</button>
+              </span>
             </label>
             <label>
               <span>Groundspeed</span>
@@ -1143,8 +1139,8 @@
           ${model.resultHhmm ? `<p class="kiosk-estimate-result">Estimate: <strong>${escapeHtml(model.resultHhmm)}Z</strong></p>` : ""}
           ${model.error ? `<p class="kiosk-estimate-error">${escapeHtml(model.error)}</p>` : ""}
           <div class="kiosk-estimate-actions">
-            <button class="action" id="kiosk-route-estimate-compute" type="button">Compute</button>
-            <button class="action primary" id="kiosk-route-estimate-set-timer" type="button">Set Timer</button>
+            <button class="action" id="kiosk-route-estimate-compute" type="button">Execute</button>
+            <button class="action primary" id="kiosk-route-estimate-set-timer" type="button">Start Timer</button>
           </div>
         </section>
       </div>
@@ -2441,20 +2437,60 @@
     if (!input || input.dataset.routeHoldBound === "1") return;
     const cell = input.closest(".route-cell");
     let timer = null;
+    let rafId = 0;
     let startX = 0;
     let startY = 0;
+    let startedAt = 0;
     let started = false;
     let committed = false;
     const holdMs = 2000;
     const maxMovePx = 14;
 
-    const clear = () => {
+    const setProgress = (value) => {
+      if (!cell) return;
+      const next = Math.max(0, Math.min(1, Number(value) || 0));
+      cell.style.setProperty("--at-hold-progress", String(next));
+      cell.classList.toggle("at-hold-progress", next > 0 && next < 1);
+    };
+
+    const stopProgress = () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+      setProgress(0);
+    };
+
+    const tick = () => {
+      if (!started || committed) return;
+      const elapsed = Date.now() - startedAt;
+      const progress = elapsed / holdMs;
+      setProgress(progress);
+      if (progress >= 1) return;
+      rafId = requestAnimationFrame(tick);
+    };
+
+    const commit = () => {
+      if (committed) return;
+      committed = true;
+      openKioskRouteEstimateModalForLeg(legIndex);
+    };
+
+    const clear = (skipThresholdCommit = false) => {
+      if (!skipThresholdCommit && !committed && startedAt && (Date.now() - startedAt) >= (holdMs - 40)) {
+        commit();
+      }
       if (timer) {
         clearTimeout(timer);
         timer = null;
       }
+      startedAt = 0;
       started = false;
-      if (cell) cell.classList.remove("route-hold-armed");
+      stopProgress();
+      if (cell) {
+        cell.classList.remove("route-hold-armed");
+        cell.classList.remove("at-hold-armed");
+      }
     };
 
     const begin = (clientX, clientY) => {
@@ -2462,14 +2498,19 @@
       committed = false;
       startX = Number(clientX) || 0;
       startY = Number(clientY) || 0;
+      startedAt = Date.now();
       started = true;
-      if (cell) cell.classList.add("route-hold-armed");
+      if (cell) {
+        cell.classList.add("route-hold-armed");
+        cell.classList.add("at-hold-cell");
+        cell.classList.add("at-hold-armed");
+      }
+      setProgress(0.001);
+      rafId = requestAnimationFrame(tick);
       timer = setTimeout(() => {
         timer = null;
-        if (committed) return;
-        committed = true;
-        openKioskRouteEstimateModalForLeg(legIndex);
-        clear();
+        commit();
+        clear(true);
       }, holdMs);
     };
 
@@ -2512,17 +2553,30 @@
     const closeButton = document.getElementById("kiosk-route-estimate-close");
     const computeButton = document.getElementById("kiosk-route-estimate-compute");
     const setTimerButton = document.getElementById("kiosk-route-estimate-set-timer");
-
-    const directionInput = document.getElementById("kiosk-route-estimate-direction");
     const distanceInput = document.getElementById("kiosk-route-estimate-distance");
     const gsInput = document.getElementById("kiosk-route-estimate-gs");
-    const draftInputs = [directionInput, distanceInput, gsInput].filter(Boolean);
+    const draftInputs = [distanceInput, gsInput].filter(Boolean);
     draftInputs.forEach((input) => {
       input.addEventListener("input", () => {
         syncKioskRouteEstimateDraftFromDom();
       });
       input.addEventListener("change", () => {
         syncKioskRouteEstimateDraftFromDom();
+      });
+    });
+    document.querySelectorAll("[data-kiosk-direction]").forEach((button) => {
+      button.addEventListener("click", () => {
+        syncKioskRouteEstimateDraftFromDom();
+        state.meta.kioskRouteEstimate.direction = button.dataset.kioskDirection === "inbound" ? "inbound" : "outbound";
+        render();
+      });
+    });
+    document.querySelectorAll("[data-kiosk-distance-preset]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const value = String(button.dataset.kioskDistancePreset || "");
+        const inputNode = document.getElementById("kiosk-route-estimate-distance");
+        if (inputNode) inputNode.value = value;
+        state.meta.kioskRouteEstimate.distance = value;
       });
     });
 
@@ -2617,10 +2671,8 @@
   function syncKioskRouteEstimateDraftFromDom() {
     const model = state.meta.kioskRouteEstimate;
     if (!model || !model.open) return;
-    const directionInput = document.getElementById("kiosk-route-estimate-direction");
     const distanceInput = document.getElementById("kiosk-route-estimate-distance");
     const gsInput = document.getElementById("kiosk-route-estimate-gs");
-    if (directionInput) model.direction = directionInput.value === "inbound" ? "inbound" : "outbound";
     if (distanceInput) model.distance = distanceInput.value;
     if (gsInput) model.groundspeed = gsInput.value;
   }
@@ -2633,7 +2685,7 @@
     const leg = state.navlog.legs[legIndex];
     if (!leg) return null;
 
-    const distanceNm = parseDistanceInput(model.distance);
+    const distanceNm = parseDistanceInputWithUnit(model.distance, "nm");
     const groundspeedKnots = parseSpeedInput(model.groundspeed);
     if (distanceNm == null || !Number.isFinite(distanceNm) || distanceNm <= 0 || groundspeedKnots == null || !Number.isFinite(groundspeedKnots) || groundspeedKnots <= 0) {
       return { error: "Distance/groundspeed invalid. cannot compute." };
