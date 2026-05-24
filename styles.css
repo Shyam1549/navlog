@@ -1109,7 +1109,7 @@ body.kiosk-mode .toc-tod-title.kiosk-static-toc {
 }
 
 .navlog-topbar .navlog-back {
-  grid-area: back;
+  grid-area: auto;
   position: absolute !important;
   top: 0 !important;
   left: 16px !important;
