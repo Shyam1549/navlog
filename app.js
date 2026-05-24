@@ -176,6 +176,8 @@
         rod: "",
         tocEditing: true,
         todEditing: true,
+        tocManual: false,
+        todManual: false,
         tocDistance: "",
         tocTime: "",
         todDistance: "",
@@ -1293,7 +1295,7 @@
           <input data-leg-field="${index}:alt" value="${escapeAttr(legFieldValue(leg, "alt"))}" />
           ${
             index === 0
-              ? '<span class="alt-departure-hint" aria-hidden="true"><span>enter departure</span><span>elevation</span></span><span class="alt-info-wrap" aria-hidden="true"><span class="alt-info-badge">i</span><span class="alt-info-text">Differential (DEP elevation, WPT 1 ALT) is used for TOC calculation. Default=0</span></span>'
+              ? '<span class="alt-departure-hint" aria-hidden="true"><span>Departure</span><span>elevation</span></span><span class="alt-info-wrap" aria-hidden="true"><span class="alt-info-badge">i</span><span class="alt-info-text">Differential (DEP elevation, WPT 1 ALT) is used for TOC calculation. Default=0</span></span>'
               : ""
           }
         </div>
@@ -1841,6 +1843,8 @@
         state.navlog.tocTod[field] = value;
         if (field === "roc") state.navlog.tocTod.tocEditing = false;
         if (field === "rod") state.navlog.tocTod.todEditing = false;
+        if (field === "roc") state.navlog.tocTod.tocManual = false;
+        if (field === "rod") state.navlog.tocTod.todManual = false;
         computeRouteMath();
         render();
       });
@@ -1848,8 +1852,14 @@
 
     document.querySelectorAll("[data-edit-toc]").forEach((button) => {
       button.addEventListener("click", () => {
-        if (button.dataset.editToc === "toc") state.navlog.tocTod.tocEditing = true;
-        if (button.dataset.editToc === "tod") state.navlog.tocTod.todEditing = true;
+        if (button.dataset.editToc === "toc") {
+          state.navlog.tocTod.tocEditing = true;
+          state.navlog.tocTod.tocManual = false;
+        }
+        if (button.dataset.editToc === "tod") {
+          state.navlog.tocTod.todEditing = true;
+          state.navlog.tocTod.todManual = false;
+        }
         render();
       });
     });
@@ -1859,6 +1869,8 @@
         const field = String(event.target.dataset.toc || "");
         if (!field) return;
         state.navlog.tocTod[field] = event.target.value;
+        if (field === "tocDistance" || field === "tocTime") state.navlog.tocTod.tocManual = true;
+        if (field === "todDistance" || field === "todTime") state.navlog.tocTod.todManual = true;
       });
       input.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
@@ -1866,6 +1878,8 @@
         const field = String(event.target.dataset.toc || "");
         if (!field) return;
         state.navlog.tocTod[field] = event.target.value;
+        if (field === "tocDistance" || field === "tocTime") state.navlog.tocTod.tocManual = true;
+        if (field === "todDistance" || field === "todTime") state.navlog.tocTod.todManual = true;
         computeRouteMath();
         updateComputedCells();
       });
@@ -1873,6 +1887,8 @@
         const field = String(event.target.dataset.toc || "");
         if (!field) return;
         state.navlog.tocTod[field] = event.target.value;
+        if (field === "tocDistance" || field === "tocTime") state.navlog.tocTod.tocManual = true;
+        if (field === "todDistance" || field === "todTime") state.navlog.tocTod.todManual = true;
       });
     });
 
@@ -1981,10 +1997,30 @@
       });
     }
 
+    applyEditableNumericKeyboardDefaults();
     syncFirstAltHint();
     syncRouteHints();
     fitSheetToViewport(".sheet-wrap");
     requestAnimationFrame(() => fitSheetToViewport(".sheet-wrap"));
+  }
+
+  function applyEditableNumericKeyboardDefaults() {
+    document.querySelectorAll(".sheet input").forEach((input) => {
+      if (!input || input.type === "date") return;
+      const radioField = String(input.dataset.radioField || "");
+      const footerField = String(input.dataset.footer || "");
+      const isAtisField =
+        radioField.endsWith(":cptAtis")
+        || footerField === "depAtisCode"
+        || footerField === "destinAtisCode";
+      if (isAtisField) {
+        input.removeAttribute("inputmode");
+        input.removeAttribute("pattern");
+        return;
+      }
+      input.setAttribute("inputmode", "numeric");
+      input.setAttribute("pattern", "[0-9]*");
+    });
   }
 
   function wireIpadKiosk() {
@@ -4752,6 +4788,8 @@
   }
 
   function computeTocTod() {
+    state.navlog.tocTod.tocManual = Boolean(state.navlog.tocTod.tocManual);
+    state.navlog.tocTod.todManual = Boolean(state.navlog.tocTod.todManual);
     const firstLeg = state.navlog.legs[0];
     const secondLeg = state.navlog.legs[1];
     const last = state.navlog.legs[state.navlog.legs.length - 1];
@@ -4766,21 +4804,31 @@
     const secondLastAlt = parseAltitudeInput(secondLast?.alt);
     const lastGs = parseSpeedInput(last?.gs);
 
-    if (!state.navlog.tocTod.tocEditing && roc != null && roc > 0 && secondAlt != null && firstGs != null) {
-      const departureElevation = firstAlt == null ? 0 : firstAlt;
-      const altitudeToGain = secondAlt - departureElevation;
-      const tocTime = Math.max(0, altitudeToGain / roc);
-      const tocDistance = tocTime * (firstGs / 60);
-      state.navlog.tocTod.tocTime = formatGeneralMinutes(tocTime);
-      state.navlog.tocTod.tocDistance = formatDistanceDisplay(tocDistance);
+    if (!state.navlog.tocTod.tocEditing) {
+      if (!state.navlog.tocTod.tocManual && roc != null && roc > 0 && secondAlt != null && firstGs != null) {
+        const departureElevation = firstAlt == null ? 0 : firstAlt;
+        const altitudeToGain = secondAlt - departureElevation;
+        const tocTime = Math.max(0, altitudeToGain / roc);
+        const tocDistance = tocTime * (firstGs / 60);
+        state.navlog.tocTod.tocTime = formatGeneralMinutes(tocTime);
+        state.navlog.tocTod.tocDistance = formatDistanceDisplay(tocDistance);
+      } else if (!state.navlog.tocTod.tocManual) {
+        state.navlog.tocTod.tocDistance = "";
+        state.navlog.tocTod.tocTime = "";
+      }
     }
 
-    if (!state.navlog.tocTod.todEditing && rod != null && rod > 0 && lastAlt != null && secondLastAlt != null && lastGs != null) {
-      const altitudeToLose = Math.max(0, secondLastAlt - lastAlt);
-      const todTime = altitudeToLose / rod;
-      const todDistance = todTime * (lastGs / 60);
-      state.navlog.tocTod.todTime = formatGeneralMinutes(todTime);
-      state.navlog.tocTod.todDistance = formatDistanceDisplay(todDistance);
+    if (!state.navlog.tocTod.todEditing) {
+      if (!state.navlog.tocTod.todManual && rod != null && rod > 0 && lastAlt != null && secondLastAlt != null && lastGs != null) {
+        const altitudeToLose = Math.max(0, secondLastAlt - lastAlt);
+        const todTime = altitudeToLose / rod;
+        const todDistance = todTime * (lastGs / 60);
+        state.navlog.tocTod.todTime = formatGeneralMinutes(todTime);
+        state.navlog.tocTod.todDistance = formatDistanceDisplay(todDistance);
+      } else if (!state.navlog.tocTod.todManual) {
+        state.navlog.tocTod.todDistance = "";
+        state.navlog.tocTod.todTime = "";
+      }
     }
   }
 
@@ -5339,15 +5387,26 @@
   }
 
   function computeEtAtTimeline() {
-    const departureAtMinutes = parseAtInput(state.navlog.legs[0] && state.navlog.legs[0].at);
-    const hasDepartureAt = Number.isFinite(departureAtMinutes);
     const lastIndex = state.navlog.legs.length - 1;
-    const cumulativeEeFromDeparture = state.navlog.legs.reduce((sum, leg, index) => {
-      if (index === 0) return sum;
+    let latestAtIndex = -1;
+    let latestAtMinutes = null;
+    for (let index = lastIndex; index >= 0; index -= 1) {
+      const atMinutes = parseAtInput(state.navlog.legs[index] && state.navlog.legs[index].at);
+      if (!Number.isFinite(atMinutes)) continue;
+      latestAtIndex = index;
+      latestAtMinutes = atMinutes;
+      break;
+    }
+    const remainingEeToDestination = state.navlog.legs.reduce((sum, leg, index) => {
+      if (latestAtIndex < 0 || index <= latestAtIndex) return sum;
       const ee = parseEeInput(leg.ee);
       const safeEe = (ee == null || !Number.isFinite(ee) || ee < 0) ? 0 : ee;
       return sum + safeEe;
     }, 0);
+    const bestDestinationEstimate =
+      latestAtIndex >= 0 && Number.isFinite(latestAtMinutes)
+        ? latestAtMinutes + remainingEeToDestination
+        : null;
 
     state.navlog.legs.forEach((leg, index) => {
       leg._derived = leg._derived || {};
@@ -5356,30 +5415,19 @@
         delete leg._derived.et;
         return;
       }
-      if (!hasDepartureAt) {
-        leg.et = "";
-        delete leg._derived.et;
-        return;
-      }
-
       const eeMinutes = parseEeInput(leg.ee);
       const safeEe = (eeMinutes == null || !Number.isFinite(eeMinutes) || eeMinutes < 0) ? 0 : eeMinutes;
-
-      // Rule 1: departure AT + EE of next row => ET of that row.
-      if (index === 1) {
-        leg.et = formatMinutesAsHhmm(departureAtMinutes + safeEe);
-        leg._derived.et = true;
-        return;
-      }
-
-      // Rule 2: destination ET = departure AT + cumulative EE of all rows.
       if (index === lastIndex) {
-        leg.et = formatMinutesAsHhmm(departureAtMinutes + cumulativeEeFromDeparture);
-        leg._derived.et = true;
+        if (Number.isFinite(bestDestinationEstimate)) {
+          leg.et = formatMinutesAsHhmm(bestDestinationEstimate);
+          leg._derived.et = true;
+        } else {
+          leg.et = "";
+          delete leg._derived.et;
+        }
         return;
       }
 
-      // Rule 3: remaining ET = AT of row above + EE of current row.
       const atAbove = parseAtInput(state.navlog.legs[index - 1] && state.navlog.legs[index - 1].at);
       if (Number.isFinite(atAbove)) {
         leg.et = formatMinutesAsHhmm(atAbove + safeEe);
@@ -5467,31 +5515,6 @@
           // Force a desktop-like render box so mobile/tablet exports match desktop proportions.
           doc.documentElement.style.width = `${pdfViewportWidth}px`;
           doc.body.style.width = `${pdfViewportWidth}px`;
-
-          const clonedTableBody = doc.querySelector(".table-body");
-          const clonedRadioBody = doc.querySelector(".radio-body");
-          while (clonedTableBody && clonedTableBody.children.length < 8) {
-            clonedTableBody.insertAdjacentHTML("beforeend", renderLegRow(createBlankLeg(""), 0));
-          }
-          while (clonedRadioBody && clonedRadioBody.children.length < 5) {
-            clonedRadioBody.insertAdjacentHTML("beforeend", renderRadioRow(createBlankRadioRow(), 0));
-          }
-          doc.querySelectorAll(".field input, .location-cell input, .radio-row input, .atis-cell input, .toc-tod-card input").forEach((input) => {
-            const wrapped = doc.createElement("div");
-            wrapped.className = "pdf-wrap-value";
-            wrapped.textContent = input.value;
-            input.replaceWith(wrapped);
-          });
-          // Route cells use a strict single centered node in PDF mode.
-          doc.querySelectorAll(".route-cell").forEach((routeCell) => {
-            const routeValueNode = routeCell.querySelector(".pdf-wrap-value");
-            const routeValue = routeValueNode ? (routeValueNode.textContent || "") : "";
-            routeCell.innerHTML = "";
-            const centered = doc.createElement("div");
-            centered.className = "pdf-route-center";
-            centered.textContent = routeValue;
-            routeCell.appendChild(centered);
-          });
           doc.querySelectorAll("input").forEach((input) => {
             input.placeholder = "";
           });
@@ -5502,24 +5525,23 @@
       let pdf;
       if (pdfLayout === "printable") {
         pdf = new jsPDF("p", "mm", "a4");
+        const pageWidth = 210;
         const pageHeight = 297;
         const marginLeft = 4;
         const marginTop = 4;
-        const bottomPadding = 10;
-        const exportWidth = 108;
-        const usableWidth = exportWidth;
-        const usableHeight = pageHeight - marginTop - bottomPadding;
-        const imageHeight = (canvas.height * usableWidth) / canvas.width;
-        let remaining = imageHeight;
-        let y = marginTop;
-        pdf.addImage(image, "PNG", marginLeft, y, usableWidth, imageHeight);
-        remaining -= usableHeight;
-        while (remaining > 0) {
-          pdf.addPage();
-          y = marginTop - (imageHeight - remaining);
-          pdf.addImage(image, "PNG", marginLeft, y, usableWidth, imageHeight);
-          remaining -= usableHeight;
+        const marginRight = 4;
+        const marginBottom = 4;
+        const maxWidth = pageWidth - marginLeft - marginRight;
+        const maxHeight = pageHeight - marginTop - marginBottom;
+        const cornerWidth = 108;
+        const imageAspect = canvas.height / canvas.width;
+        let exportWidth = Math.min(cornerWidth, maxWidth);
+        let exportHeight = exportWidth * imageAspect;
+        if (exportHeight > maxHeight) {
+          exportHeight = maxHeight;
+          exportWidth = exportHeight / imageAspect;
         }
+        pdf.addImage(image, "PNG", marginLeft, marginTop, exportWidth, exportHeight);
       } else {
         const orientation = canvas.width >= canvas.height ? "l" : "p";
         pdf = new jsPDF({ orientation, unit: "px", format: [canvas.width, canvas.height] });

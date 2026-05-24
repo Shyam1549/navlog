@@ -819,6 +819,19 @@ body.kiosk-mode .field input[data-leg-field$=":at"] {
   user-select: none;
 }
 
+body.kiosk-mode .ipad-kiosk-page,
+body.kiosk-mode .ipad-kiosk-page * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body.kiosk-mode .ipad-kiosk-page input[data-radio-field$=":location"],
+body.kiosk-mode .ipad-kiosk-page input[data-footer="depAtisCode"],
+body.kiosk-mode .ipad-kiosk-page input[data-footer="destinAtisCode"] {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 body.kiosk-mode .field.at-hold-cell {
   position: relative;
 }
@@ -2459,114 +2472,27 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
 .pdf-export .mini-plus,
 .pdf-export .remove-chip,
-.pdf-export .blank-chip { display: none !important; }
-
-.pdf-export .leg-row { min-height: 96px; }
-.pdf-export .radio-row { min-height: 86px; }
-.pdf-export .field input {
-  min-height: 94px;
-  height: 94px;
-}
-.pdf-export .radio-row input { min-height: 84px; }
-.pdf-export .toc-tod-title,
-.pdf-export .toc-tod-card input { min-height: 74px; }
-.pdf-export .toc-tod-card {
-  grid-template-columns: 96px 1fr 1fr;
-}
-.pdf-export .toc-tod-card input::placeholder { color: transparent; }
-.pdf-export .route-cell,
-.pdf-export .location-cell { grid-template-columns: 1fr; }
-.pdf-export .route-cell {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 !important;
-  position: relative;
-}
-.pdf-export .route-main {
-  width: 100%;
-  grid-template-columns: 1fr !important;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-}
-.pdf-export .route-dtg { display: none !important; }
-.pdf-export .route-inline-hint { display: none !important; }
+.pdf-export .blank-chip,
+.pdf-export .route-inline-hint,
 .pdf-export .alt-departure-hint,
 .pdf-export .alt-info-wrap,
 .pdf-export .settings-info-wrap { display: none !important; }
-.pdf-export .sheet { font-size: 0.88em; }
-.pdf-export .route-cell,
-.pdf-export .location-cell,
+
+.pdf-export .sheet { font-size: 1em; }
 .pdf-export .field,
 .pdf-export .atis-cell,
 .pdf-export .header-box,
-.pdf-export .head-cell {
-  overflow: hidden;
-}
-.pdf-export .atis-cell span {
-  white-space: nowrap;
-  word-spacing: normal;
-  letter-spacing: 0.01em;
-  font-size: 0.7rem;
-  padding: 0 10px;
-  justify-content: center;
-}
-.pdf-export .pdf-wrap-value {
-  min-height: 94px;
-  width: 100%;
-  padding: 0 8px;
-  text-align: center;
-  white-space: normal;
-  word-break: normal;
-  overflow-wrap: break-word;
-  line-height: 1.15;
-  font-size: 1.08rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+.pdf-export .head-cell { overflow: hidden; }
+
 .pdf-export .field input,
 .pdf-export .radio-row input,
 .pdf-export .atis-cell input,
 .pdf-export .toc-tod-card input,
 .pdf-export .header-box input {
   text-align: center;
-  font-size: 1.08rem;
+  background: transparent !important;
 }
-.pdf-export .field input,
-.pdf-export .radio-row input,
-.pdf-export .atis-cell input {
-  padding: 0 8px;
-}
-.pdf-export .route-cell .pdf-route-center {
-  position: absolute;
-  inset: 0;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  line-height: 1.15;
-  font-size: 1.08rem;
-}
-.pdf-export .spd-head { border-right: 2px solid var(--line) !important; }
-.pdf-export .navlog-box {
-  font-size: 1.56rem;
-  justify-content: center;
-  text-align: center;
-}
-.pdf-export .planning-box {
-  white-space: nowrap;
-  word-spacing: normal;
-  letter-spacing: 0.01em;
-  font-size: 0.8rem;
-  justify-content: center;
-}
-.pdf-export .atis-cell {
-  grid-template-columns: 210px 1fr;
-}
+.pdf-export input::placeholder { color: transparent !important; }
 
 /* iPad: force navlog to match desktop proportions/typography, then scale as one unit via JS. */
 body.ipad-desktop-scale .ui-scale {
