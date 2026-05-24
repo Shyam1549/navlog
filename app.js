@@ -1282,9 +1282,9 @@
             ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
             ${
               isFirstRoute
-                ? '<span class="route-inline-hint route-inline-hint-dep" aria-hidden="true">departure<br>airport</span>'
+                ? '<span class="route-inline-hint route-inline-hint-dep" aria-hidden="true">Departure<br>Airport</span>'
                 : isLastRoute
-                  ? '<span class="route-inline-hint route-inline-hint-dest" aria-hidden="true">destination<br>airport</span>'
+                  ? '<span class="route-inline-hint route-inline-hint-dest" aria-hidden="true">Destination<br>Airport</span>'
                   : ""
             }
           </div>
@@ -1295,7 +1295,7 @@
           <input data-leg-field="${index}:alt" value="${escapeAttr(legFieldValue(leg, "alt"))}" />
           ${
             index === 0
-              ? '<span class="alt-departure-hint" aria-hidden="true"><span>Departure</span><span>elevation</span></span><span class="alt-info-wrap" aria-hidden="true"><span class="alt-info-badge">i</span><span class="alt-info-text">Differential (DEP elevation, WPT 1 ALT) is used for TOC calculation. Default=0</span></span>'
+              ? '<span class="alt-departure-hint" aria-hidden="true"><span>Departure</span><span>Elevation</span></span><span class="alt-info-wrap" aria-hidden="true"><span class="alt-info-badge">i</span><span class="alt-info-text">Differential (DEP elevation, WPT 1 ALT) is used for TOC calculation. Default=0</span></span>'
               : ""
           }
         </div>
@@ -2009,11 +2009,12 @@
       if (!input || input.type === "date") return;
       const radioField = String(input.dataset.radioField || "");
       const footerField = String(input.dataset.footer || "");
-      const isAtisField =
-        radioField.endsWith(":cptAtis")
+      const useAlphabetKeyboard =
+        radioField.endsWith(":location")
+        || radioField.endsWith(":cptAtis")
         || footerField === "depAtisCode"
         || footerField === "destinAtisCode";
-      if (isAtisField) {
+      if (useAlphabetKeyboard) {
         input.removeAttribute("inputmode");
         input.removeAttribute("pattern");
         return;
@@ -5387,27 +5388,8 @@
   }
 
   function computeEtAtTimeline() {
-    const lastIndex = state.navlog.legs.length - 1;
-    let latestAtIndex = -1;
-    let latestAtMinutes = null;
-    for (let index = lastIndex; index >= 0; index -= 1) {
-      const atMinutes = parseAtInput(state.navlog.legs[index] && state.navlog.legs[index].at);
-      if (!Number.isFinite(atMinutes)) continue;
-      latestAtIndex = index;
-      latestAtMinutes = atMinutes;
-      break;
-    }
-    const remainingEeToDestination = state.navlog.legs.reduce((sum, leg, index) => {
-      if (latestAtIndex < 0 || index <= latestAtIndex) return sum;
-      const ee = parseEeInput(leg.ee);
-      const safeEe = (ee == null || !Number.isFinite(ee) || ee < 0) ? 0 : ee;
-      return sum + safeEe;
-    }, 0);
-    const bestDestinationEstimate =
-      latestAtIndex >= 0 && Number.isFinite(latestAtMinutes)
-        ? latestAtMinutes + remainingEeToDestination
-        : null;
-
+    let activeAnchorAt = parseAtInput(state.navlog.legs[0] && state.navlog.legs[0].at);
+    let cumulativeEeFromAnchor = 0;
     state.navlog.legs.forEach((leg, index) => {
       leg._derived = leg._derived || {};
       if (index === 0) {
@@ -5417,20 +5399,14 @@
       }
       const eeMinutes = parseEeInput(leg.ee);
       const safeEe = (eeMinutes == null || !Number.isFinite(eeMinutes) || eeMinutes < 0) ? 0 : eeMinutes;
-      if (index === lastIndex) {
-        if (Number.isFinite(bestDestinationEstimate)) {
-          leg.et = formatMinutesAsHhmm(bestDestinationEstimate);
-          leg._derived.et = true;
-        } else {
-          leg.et = "";
-          delete leg._derived.et;
-        }
-        return;
-      }
-
       const atAbove = parseAtInput(state.navlog.legs[index - 1] && state.navlog.legs[index - 1].at);
       if (Number.isFinite(atAbove)) {
-        leg.et = formatMinutesAsHhmm(atAbove + safeEe);
+        activeAnchorAt = atAbove;
+        cumulativeEeFromAnchor = 0;
+      }
+      if (Number.isFinite(activeAnchorAt)) {
+        cumulativeEeFromAnchor += safeEe;
+        leg.et = formatMinutesAsHhmm(activeAnchorAt + cumulativeEeFromAnchor);
         leg._derived.et = true;
       } else {
         leg.et = "";

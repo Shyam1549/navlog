@@ -1569,7 +1569,7 @@ body.kiosk-mode .field input.at-hold-done {
   color: rgba(24, 22, 18, 0.48);
   font-size: clamp(0.78rem, 1.6vw, 0.94rem);
   line-height: 1.1;
-  text-transform: lowercase;
+  text-transform: none;
   pointer-events: none;
   white-space: normal;
   padding: 0 4px;
