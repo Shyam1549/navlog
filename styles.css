@@ -2507,23 +2507,27 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     padding: 12px;
   }
 
-  .topbar.centered:not(.navlog-topbar) .top-side { justify-content: flex-start; }
-  .topbar.centered:not(.navlog-topbar) .top-side.right { justify-content: flex-end; }
+  .topbar.centered:not(.navlog-topbar) .top-side,
+  .topbar.centered:not(.navlog-topbar) .top-side.right {
+    justify-content: center;
+  }
 
   .navlog-topbar {
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: 1fr;
     grid-template-areas:
-      "title title title"
-      "back clock actions";
-    gap: 8px;
-    padding: 10px 12px;
+      "title"
+      "clock"
+      "back"
+      "actions";
+    gap: 10px;
+    padding: 12px;
   }
 
   .navlog-topbar .navlog-back {
-    position: absolute !important;
-    top: 0 !important;
-    left: 12px !important;
-    justify-self: auto;
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    justify-self: center;
   }
 
   .navlog-topbar .navlog-clock,
@@ -2546,8 +2550,10 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
   .top-side { justify-content: flex-start; }
   .top-side.right { justify-content: flex-end; }
-  .navlog-topbar .top-side.navlog-back { justify-content: flex-start; }
-  .navlog-topbar .top-side.right.navlog-actions { justify-content: flex-end; }
+  .navlog-topbar .top-side.navlog-back,
+  .navlog-topbar .top-side.right.navlog-actions {
+    justify-content: center;
+  }
 
   .swap-button {
     width: 42px;
@@ -2640,6 +2646,58 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   .topbar h1 {
     margin-top: 4px;
     font-size: clamp(1.35rem, 7vw, 1.72rem);
+  }
+
+  .navlog-topbar {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "title"
+      "clock"
+      "actions";
+    row-gap: 8px;
+    padding: 10px 12px 12px;
+  }
+
+  .navlog-topbar .navlog-back {
+    position: absolute !important;
+    top: 8px !important;
+    left: 10px !important;
+    bottom: auto !important;
+    margin: 0 !important;
+    transform: none !important;
+    z-index: 5;
+    justify-self: auto;
+  }
+
+  .navlog-topbar .top-side.navlog-back {
+    justify-content: flex-start;
+  }
+
+  .navlog-topbar .navlog-back .back-link {
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 10px;
+    font-size: 0;
+    line-height: 0;
+  }
+
+  .navlog-topbar .navlog-back .back-link::before {
+    content: "\2190";
+    font-size: 1.08rem;
+    line-height: 1;
+  }
+
+  .navlog-topbar .navlog-title-row,
+  .navlog-topbar .navlog-clock,
+  .navlog-topbar .navlog-actions {
+    justify-self: center;
+  }
+
+  .navlog-topbar .navlog-actions {
+    justify-content: center;
+    width: 100%;
   }
 
   .action,
