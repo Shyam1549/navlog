@@ -1205,9 +1205,9 @@
             <p class="cockpit-info-recommend">Recommended: Turn on Guided Access and DND.</p>
             <ul class="cockpit-info-list">
               <li>Tap "SCRATCHPAD" (top right) 3 times to open the scratch pad.</li>
-              <li>Press and hold Actual Time (AT) for 3 seconds to auto-enter current ZULU time.</li>
+              <li>Press and hold Actual Time (AT) for 2 seconds to auto-enter current ZULU time.</li>
               <li>To use keyboard entry for interactive fields (AT, ATIS, LOCATION), tap the respective table cell 3 times.</li>
-              <li>For inbound/outbound time estimate, press and hold the route for 3 seconds.</li>
+              <li>For inbound/outbound time estimate, press and hold the route for 2 seconds.</li>
             </ul>
           </div>
           <div class="bug-report-actions">
@@ -1526,12 +1526,13 @@
           ? "SM"
           : "NM";
     const timeUnitLabel = state.settings.roundTimeValues ? "mins" : "min+sec";
-    const tocDistancePlaceholder = `Distance (${distanceUnitLabel})`;
-    const tocTimePlaceholder = `Time (${timeUnitLabel})`;
+    const showTocUnits = state.view !== "ipad-kiosk";
+    const tocDistancePlaceholder = showTocUnits ? `Distance (${distanceUnitLabel})` : "Distance";
+    const tocTimePlaceholder = showTocUnits ? `Time (${timeUnitLabel})` : "Time";
     const renderTocValueCell = (field, value, placeholder, unitText, isLast = false) => `
       <label class="toc-value-wrap${isLast ? " is-last" : ""}">
         <input data-toc="${field}" value="${escapeAttr(value)}" placeholder="${escapeAttr(placeholder)}" />
-        <span class="toc-unit" aria-hidden="true">${escapeHtml(unitText)}</span>
+        ${showTocUnits ? `<span class="toc-unit" aria-hidden="true">${escapeHtml(unitText)}</span>` : ""}
       </label>
     `;
     return `
@@ -2337,7 +2338,7 @@
     let rafId = 0;
     let startedAt = 0;
     let committed = false;
-    const holdMs = 3000;
+    const holdMs = 2000;
 
     const setProgress = (value) => {
       if (!cell) return;
@@ -2473,7 +2474,7 @@
     let startedAt = 0;
     let started = false;
     let committed = false;
-    const holdMs = 3000;
+    const holdMs = 2000;
     const maxMovePx = 14;
 
     const setProgress = (value) => {

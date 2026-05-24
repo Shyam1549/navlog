@@ -1011,7 +1011,8 @@ body.kiosk-mode .time-head {
 body.kiosk-mode .field input,
 body.kiosk-mode .radio-row input,
 body.kiosk-mode .atis-cell input,
-body.kiosk-mode .toc-tod-card input {
+body.kiosk-mode .toc-tod-card input,
+body.kiosk-mode .header-box input {
   color: #111 !important;
   -webkit-text-fill-color: #111;
   opacity: 1 !important;
@@ -1020,7 +1021,8 @@ body.kiosk-mode .toc-tod-card input {
 body.kiosk-mode .field input::placeholder,
 body.kiosk-mode .radio-row input::placeholder,
 body.kiosk-mode .atis-cell input::placeholder,
-body.kiosk-mode .toc-tod-card input::placeholder {
+body.kiosk-mode .toc-tod-card input::placeholder,
+body.kiosk-mode .header-box input::placeholder {
   color: rgba(17, 17, 17, 0.45) !important;
   -webkit-text-fill-color: rgba(17, 17, 17, 0.45);
   opacity: 1 !important;
@@ -2786,7 +2788,11 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 .pdf-export .toc-tod-card input,
 .pdf-export .header-box input {
   text-align: center;
+  vertical-align: middle;
   background: transparent !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  font-size: 1.08em !important;
 }
 .pdf-export input::placeholder { color: transparent !important; }
 .pdf-export .head-format-note,
