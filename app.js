@@ -104,6 +104,9 @@
       navlogUnlocked: readStoredValue(NAVLOG_ACCESS_KEY_UNLOCK) === "1",
       accessError: "",
       activateInfoOpen: false,
+      kioskRouteEstimate: createEmptyKioskRouteEstimateState(),
+      kioskEventTimer: createEmptyKioskEventTimerState(),
+      kioskTimerAlert: createEmptyKioskTimerAlertState(),
       monthlyVisitors: 0,
     },
   };
@@ -186,6 +189,37 @@
       radios: [createBlankRadioRow()],
       depAtisCode: "",
       destinAtisCode: "",
+    };
+  }
+
+  function createEmptyKioskRouteEstimateState() {
+    return {
+      open: false,
+      legIndex: -1,
+      routeLabel: "",
+      direction: "outbound",
+      distance: "10",
+      groundspeed: "",
+      error: "",
+      resultLabel: "",
+      resultHhmm: "",
+      resultMinuteOfDay: null,
+    };
+  }
+
+  function createEmptyKioskEventTimerState() {
+    return {
+      active: false,
+      label: "",
+      targetHhmm: "",
+      dueUtcMs: 0,
+    };
+  }
+
+  function createEmptyKioskTimerAlertState() {
+    return {
+      open: false,
+      label: "",
     };
   }
 
@@ -1026,6 +1060,7 @@
     return `
       <main class="ipad-kiosk-page">
         <div class="kiosk-utc" id="utc-clock">UTC ${formatUtcNow()}</div>
+        ${renderKioskEventTimerStrip()}
         <section class="sheet-wrap ipad-kiosk-wrap">
           <div class="sheet ipad-kiosk-sheet">
             <section class="sheet-header">
@@ -1052,7 +1087,85 @@
             <canvas id="kiosk-pad-canvas" aria-label="Scratch pad"></canvas>
           </div>
         </section>
+        ${renderKioskRouteEstimateModal()}
+        ${renderKioskTimerAlertModal()}
       </main>
+    `;
+  }
+
+  function renderKioskEventTimerStrip() {
+    const timer = state.meta.kioskEventTimer;
+    if (!timer || !timer.active) return "";
+    return `
+      <section class="kiosk-event-timer" id="kiosk-event-timer">
+        <span class="kiosk-event-label">${escapeHtml(timer.label || "Position estimate")}</span>
+        <span class="kiosk-event-countdown" id="kiosk-event-timer-countdown">T--:--</span>
+        <span class="kiosk-event-target" id="kiosk-event-timer-target">${escapeHtml(timer.targetHhmm || "")}Z</span>
+        <button class="kiosk-event-clear" id="kiosk-event-timer-clear" type="button" aria-label="Clear timer">×</button>
+      </section>
+    `;
+  }
+
+  function renderKioskRouteEstimateModal() {
+    const model = state.meta.kioskRouteEstimate;
+    if (!model || !model.open) return "";
+    const distanceUnitLabel =
+      state.settings.distanceUnit === "km"
+        ? "KM"
+        : state.settings.distanceUnit === "sm"
+          ? "SM"
+          : "NM";
+    return `
+      <div class="bug-report-overlay" id="kiosk-route-estimate-overlay">
+        <section class="bug-report-modal kiosk-estimate-modal" role="dialog" aria-modal="true" aria-label="Route estimate calculator">
+          <div class="bug-report-head">
+            <h3>Route Estimate</h3>
+            <button class="action bug-report-close" id="kiosk-route-estimate-close" type="button">Close</button>
+          </div>
+          <p class="kiosk-estimate-context">${escapeHtml(model.routeLabel || "Waypoint")}</p>
+          <div class="kiosk-estimate-grid">
+            <label>
+              <span>Direction</span>
+              <select id="kiosk-route-estimate-direction">
+                <option value="outbound" ${model.direction === "outbound" ? "selected" : ""}>Outbound</option>
+                <option value="inbound" ${model.direction === "inbound" ? "selected" : ""}>Inbound</option>
+              </select>
+            </label>
+            <label>
+              <span>Distance (${distanceUnitLabel})</span>
+              <input id="kiosk-route-estimate-distance" value="${escapeAttr(model.distance)}" inputmode="decimal" />
+            </label>
+            <label>
+              <span>Groundspeed</span>
+              <input id="kiosk-route-estimate-gs" value="${escapeAttr(model.groundspeed)}" inputmode="decimal" />
+            </label>
+          </div>
+          ${model.resultHhmm ? `<p class="kiosk-estimate-result">Estimate: <strong>${escapeHtml(model.resultHhmm)}Z</strong></p>` : ""}
+          ${model.error ? `<p class="kiosk-estimate-error">${escapeHtml(model.error)}</p>` : ""}
+          <div class="kiosk-estimate-actions">
+            <button class="action" id="kiosk-route-estimate-compute" type="button">Compute</button>
+            <button class="action primary" id="kiosk-route-estimate-set-timer" type="button">Set Timer</button>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderKioskTimerAlertModal() {
+    const alertState = state.meta.kioskTimerAlert;
+    if (!alertState || !alertState.open) return "";
+    return `
+      <div class="bug-report-overlay" id="kiosk-timer-alert-overlay">
+        <section class="bug-report-modal kiosk-timer-alert" role="dialog" aria-modal="true" aria-label="Timer complete">
+          <div class="bug-report-head">
+            <h3>Timer Complete</h3>
+          </div>
+          <p class="kiosk-estimate-result">${escapeHtml(alertState.label || "Position estimate reached")}</p>
+          <div class="kiosk-estimate-actions">
+            <button class="action primary" id="kiosk-timer-alert-ack" type="button">Acknowledge</button>
+          </div>
+        </section>
+      </div>
     `;
   }
 
@@ -2066,6 +2179,8 @@
       if (!isAtField) {
         input.readOnly = true;
         input.tabIndex = -1;
+        const [indexText, field] = key.split(":");
+        if (field === "route") wireKioskRouteEstimateHold(input, Number(indexText));
       } else {
         input.addEventListener("input", (event) => {
           const [indexText] = event.target.dataset.legField.split(":");
@@ -2133,6 +2248,10 @@
       });
     });
 
+    wireKioskRouteEstimateModal();
+    wireKioskEventTimerControls();
+    wireKioskTimerAlertControls();
+    syncKioskEventTimerDisplay();
     wireKioskScratchPadToggle();
     bindKioskDoubleTapGuard();
     bindKioskPullToRefreshGuard();
@@ -2301,6 +2420,319 @@
       input.addEventListener("mouseleave", end);
     }
     input.dataset.atHoldBound = "1";
+  }
+
+  function openKioskRouteEstimateModalForLeg(legIndex) {
+    if (!Number.isFinite(legIndex) || legIndex < 0 || legIndex >= state.navlog.legs.length) return;
+    const leg = state.navlog.legs[legIndex] || {};
+    const routeLabel = String(leg.route || "").trim() || `Waypoint ${legIndex + 1}`;
+    state.meta.kioskRouteEstimate = {
+      ...createEmptyKioskRouteEstimateState(),
+      open: true,
+      legIndex,
+      routeLabel,
+      distance: "10",
+      groundspeed: String(leg.gs || "").trim(),
+    };
+    render();
+  }
+
+  function wireKioskRouteEstimateHold(input, legIndex) {
+    if (!input || input.dataset.routeHoldBound === "1") return;
+    const cell = input.closest(".route-cell");
+    let timer = null;
+    let startX = 0;
+    let startY = 0;
+    let started = false;
+    let committed = false;
+    const holdMs = 2000;
+    const maxMovePx = 14;
+
+    const clear = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      started = false;
+      if (cell) cell.classList.remove("route-hold-armed");
+    };
+
+    const begin = (clientX, clientY) => {
+      clear();
+      committed = false;
+      startX = Number(clientX) || 0;
+      startY = Number(clientY) || 0;
+      started = true;
+      if (cell) cell.classList.add("route-hold-armed");
+      timer = setTimeout(() => {
+        timer = null;
+        if (committed) return;
+        committed = true;
+        openKioskRouteEstimateModalForLeg(legIndex);
+        clear();
+      }, holdMs);
+    };
+
+    const maybeCancelOnMove = (clientX, clientY) => {
+      if (!started) return;
+      const dx = Math.abs((Number(clientX) || 0) - startX);
+      const dy = Math.abs((Number(clientY) || 0) - startY);
+      if (dx > maxMovePx || dy > maxMovePx) clear();
+    };
+
+    if (window.PointerEvent) {
+      input.addEventListener("pointerdown", (event) => begin(event.clientX, event.clientY));
+      input.addEventListener("pointermove", (event) => maybeCancelOnMove(event.clientX, event.clientY));
+      input.addEventListener("pointerup", clear);
+      input.addEventListener("pointercancel", clear);
+      input.addEventListener("pointerleave", clear);
+    } else {
+      input.addEventListener("touchstart", (event) => {
+        const touch = event.touches && event.touches[0];
+        begin(touch ? touch.clientX : 0, touch ? touch.clientY : 0);
+      }, { passive: true });
+      input.addEventListener("touchmove", (event) => {
+        const touch = event.touches && event.touches[0];
+        maybeCancelOnMove(touch ? touch.clientX : 0, touch ? touch.clientY : 0);
+      }, { passive: true });
+      input.addEventListener("touchend", clear);
+      input.addEventListener("touchcancel", clear);
+      input.addEventListener("mousedown", (event) => begin(event.clientX, event.clientY));
+      input.addEventListener("mousemove", (event) => maybeCancelOnMove(event.clientX, event.clientY));
+      input.addEventListener("mouseup", clear);
+      input.addEventListener("mouseleave", clear);
+    }
+    input.addEventListener("contextmenu", (event) => event.preventDefault());
+    input.dataset.routeHoldBound = "1";
+  }
+
+  function wireKioskRouteEstimateModal() {
+    const overlay = document.getElementById("kiosk-route-estimate-overlay");
+    if (!overlay) return;
+    const closeButton = document.getElementById("kiosk-route-estimate-close");
+    const computeButton = document.getElementById("kiosk-route-estimate-compute");
+    const setTimerButton = document.getElementById("kiosk-route-estimate-set-timer");
+
+    const directionInput = document.getElementById("kiosk-route-estimate-direction");
+    const distanceInput = document.getElementById("kiosk-route-estimate-distance");
+    const gsInput = document.getElementById("kiosk-route-estimate-gs");
+    const draftInputs = [directionInput, distanceInput, gsInput].filter(Boolean);
+    draftInputs.forEach((input) => {
+      input.addEventListener("input", () => {
+        syncKioskRouteEstimateDraftFromDom();
+      });
+      input.addEventListener("change", () => {
+        syncKioskRouteEstimateDraftFromDom();
+      });
+    });
+
+    if (closeButton) {
+      closeButton.addEventListener("click", () => {
+        state.meta.kioskRouteEstimate = createEmptyKioskRouteEstimateState();
+        render();
+      });
+    }
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target !== overlay) return;
+      state.meta.kioskRouteEstimate = createEmptyKioskRouteEstimateState();
+      render();
+    });
+
+    if (computeButton) {
+      computeButton.addEventListener("click", () => {
+        syncKioskRouteEstimateDraftFromDom();
+        const result = computeKioskRouteEstimateFromDraft();
+        const model = state.meta.kioskRouteEstimate;
+        if (!result) {
+          model.error = "ET/AT unavailable. cannot compute.";
+          model.resultLabel = "";
+          model.resultHhmm = "";
+          model.resultMinuteOfDay = null;
+          render();
+          return;
+        }
+        if (result.error) {
+          model.error = result.error;
+          model.resultLabel = "";
+          model.resultHhmm = "";
+          model.resultMinuteOfDay = null;
+          render();
+          return;
+        }
+        model.error = "";
+        model.resultLabel = result.label;
+        model.resultHhmm = result.hhmm;
+        model.resultMinuteOfDay = result.minuteOfDay;
+        render();
+      });
+    }
+
+    if (setTimerButton) {
+      setTimerButton.addEventListener("click", () => {
+        syncKioskRouteEstimateDraftFromDom();
+        const result = computeKioskRouteEstimateFromDraft();
+        const model = state.meta.kioskRouteEstimate;
+        if (!result) {
+          model.error = "ET/AT unavailable. cannot compute.";
+          model.resultLabel = "";
+          model.resultHhmm = "";
+          model.resultMinuteOfDay = null;
+          render();
+          return;
+        }
+        if (result.error) {
+          model.error = result.error;
+          model.resultLabel = "";
+          model.resultHhmm = "";
+          model.resultMinuteOfDay = null;
+          render();
+          return;
+        }
+        setKioskEventTimerFromEstimate(result);
+        state.meta.kioskRouteEstimate = createEmptyKioskRouteEstimateState();
+        render();
+      });
+    }
+  }
+
+  function wireKioskEventTimerControls() {
+    const clearButton = document.getElementById("kiosk-event-timer-clear");
+    if (!clearButton) return;
+    clearButton.addEventListener("click", () => {
+      state.meta.kioskEventTimer = createEmptyKioskEventTimerState();
+      render();
+    });
+  }
+
+  function wireKioskTimerAlertControls() {
+    const acknowledgeButton = document.getElementById("kiosk-timer-alert-ack");
+    if (!acknowledgeButton) return;
+    acknowledgeButton.addEventListener("click", () => {
+      state.meta.kioskTimerAlert = createEmptyKioskTimerAlertState();
+      render();
+    });
+  }
+
+  function syncKioskRouteEstimateDraftFromDom() {
+    const model = state.meta.kioskRouteEstimate;
+    if (!model || !model.open) return;
+    const directionInput = document.getElementById("kiosk-route-estimate-direction");
+    const distanceInput = document.getElementById("kiosk-route-estimate-distance");
+    const gsInput = document.getElementById("kiosk-route-estimate-gs");
+    if (directionInput) model.direction = directionInput.value === "inbound" ? "inbound" : "outbound";
+    if (distanceInput) model.distance = distanceInput.value;
+    if (gsInput) model.groundspeed = gsInput.value;
+  }
+
+  function computeKioskRouteEstimateFromDraft() {
+    const model = state.meta.kioskRouteEstimate;
+    if (!model || !model.open) return null;
+    const legIndex = Number(model.legIndex);
+    if (!Number.isFinite(legIndex) || legIndex < 0 || legIndex >= state.navlog.legs.length) return null;
+    const leg = state.navlog.legs[legIndex];
+    if (!leg) return null;
+
+    const distanceNm = parseDistanceInput(model.distance);
+    const groundspeedKnots = parseSpeedInput(model.groundspeed);
+    if (distanceNm == null || !Number.isFinite(distanceNm) || distanceNm <= 0 || groundspeedKnots == null || !Number.isFinite(groundspeedKnots) || groundspeedKnots <= 0) {
+      return { error: "Distance/groundspeed invalid. cannot compute." };
+    }
+
+    const offsetMinutes = (distanceNm / groundspeedKnots) * 60;
+    const direction = model.direction === "inbound" ? "inbound" : "outbound";
+    let baseMinutes = null;
+    if (direction === "outbound") {
+      const atMinutes = parseAtInput(leg.at);
+      const etMinutes = parseAtInput(leg.et);
+      baseMinutes = Number.isFinite(atMinutes) ? atMinutes : etMinutes;
+    } else {
+      baseMinutes = parseAtInput(leg.et);
+    }
+    if (!Number.isFinite(baseMinutes)) {
+      return { error: "ET/AT unavailable. cannot compute." };
+    }
+
+    const resultMinutes = direction === "outbound" ? (baseMinutes + offsetMinutes) : (baseMinutes - offsetMinutes);
+    const minuteOfDay = normalizeMinuteOfDay(resultMinutes);
+    const hhmm = formatMinutesAsHhmmWrapped(resultMinutes);
+    const distanceLabel = formatDistanceDisplay(distanceNm);
+    const distanceUnitLabel =
+      state.settings.distanceUnit === "km"
+        ? "KM"
+        : state.settings.distanceUnit === "sm"
+          ? "SM"
+          : "NM";
+    const routeLabel = String(leg.route || "").trim() || `Waypoint ${legIndex + 1}`;
+    const label = `${distanceLabel} ${distanceUnitLabel} ${direction} from ${routeLabel}`;
+    return { minuteOfDay, hhmm, label };
+  }
+
+  function setKioskEventTimerFromEstimate(estimate) {
+    if (!estimate || !Number.isFinite(estimate.minuteOfDay)) return;
+    const dueUtcMs = computeNextUtcDueMs(estimate.minuteOfDay);
+    state.meta.kioskEventTimer = {
+      active: true,
+      label: String(estimate.label || "Position estimate"),
+      targetHhmm: String(estimate.hhmm || ""),
+      dueUtcMs,
+    };
+    state.meta.kioskTimerAlert = createEmptyKioskTimerAlertState();
+  }
+
+  function normalizeMinuteOfDay(minutesFloat) {
+    if (!Number.isFinite(minutesFloat)) return 0;
+    let roundedMinutes = roundHalfUp(minutesFloat) % 1440;
+    if (roundedMinutes < 0) roundedMinutes += 1440;
+    return roundedMinutes;
+  }
+
+  function formatMinutesAsHhmmWrapped(minutesFloat) {
+    if (!Number.isFinite(minutesFloat)) return "";
+    const minuteOfDay = normalizeMinuteOfDay(minutesFloat);
+    const hours = Math.floor(minuteOfDay / 60);
+    const minutes = minuteOfDay % 60;
+    return `${String(hours).padStart(2, "0")}${String(minutes).padStart(2, "0")}`;
+  }
+
+  function computeNextUtcDueMs(targetMinuteOfDay) {
+    const now = new Date();
+    const normalizedTarget = normalizeMinuteOfDay(targetMinuteOfDay);
+    const nowWholeMinutes = (now.getUTCHours() * 60) + now.getUTCMinutes();
+    let deltaMinutes = (normalizedTarget - nowWholeMinutes + 1440) % 1440;
+    if (deltaMinutes === 0) {
+      const secondsIntoMinute = now.getUTCSeconds() + (now.getUTCMilliseconds() / 1000);
+      deltaMinutes = Math.max(0, (60 - secondsIntoMinute) / 60);
+    }
+    return Date.now() + Math.round(deltaMinutes * 60000);
+  }
+
+  function syncKioskEventTimerDisplay() {
+    const timer = state.meta.kioskEventTimer;
+    if (!timer || !timer.active) return;
+    const countdownNode = document.getElementById("kiosk-event-timer-countdown");
+    const targetNode = document.getElementById("kiosk-event-timer-target");
+    if (!countdownNode || !targetNode) return;
+    const remainingMs = Number(timer.dueUtcMs || 0) - Date.now();
+    if (!(remainingMs > 0)) {
+      const label = timer.label || "Position estimate reached";
+      state.meta.kioskEventTimer = createEmptyKioskEventTimerState();
+      state.meta.kioskTimerAlert = {
+        open: true,
+        label,
+      };
+      render();
+      return;
+    }
+    const remainingSeconds = Math.ceil(remainingMs / 1000);
+    const hours = Math.floor(remainingSeconds / 3600);
+    const minutes = Math.floor((remainingSeconds % 3600) / 60);
+    const seconds = remainingSeconds % 60;
+    countdownNode.textContent =
+      hours > 0
+        ? `T-${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+        : `T-${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    targetNode.textContent = `${timer.targetHhmm}Z`;
   }
 
   function bindKioskDoubleTapGuard() {
@@ -5466,6 +5898,7 @@
     document.querySelectorAll("#utc-clock").forEach((node) => {
       node.textContent = `UTC ${now}`;
     });
+    if (state.view === "ipad-kiosk") syncKioskEventTimerDisplay();
   }
 
   async function downloadPdf() {
