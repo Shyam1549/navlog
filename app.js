@@ -1569,7 +1569,7 @@
         <div class="radio-head">
           <div>LOCATION <button class="mini-plus inline" id="add-radio-row" type="button">+</button></div>
           <div>ATIS</div>
-          <div>DEP/ARR</div>
+          <div>DEP/APP</div>
           <div>TWR</div>
           <div>GND</div>
           <div>FSS</div>
@@ -4491,7 +4491,7 @@
     if (!dep || !dest) return { active: false, exists: false, message: "" };
     const match = findPresetByPair(dep, dest);
     if (match) return { active: true, exists: true, message: `Existing preset found (${match.name || `${dep} to ${dest}`}).` };
-    return { active: true, exists: false, message: "No preset found for this DEP/ARR pair. Saving will create one." };
+    return { active: true, exists: false, message: "No preset found for this DEP/APP pair. Saving will create one." };
   }
 
   function selectAirportForEditing(code) {

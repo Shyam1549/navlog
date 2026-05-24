@@ -1111,7 +1111,7 @@ body.kiosk-mode .toc-tod-title.kiosk-static-toc {
 .navlog-topbar .navlog-back {
   grid-area: auto;
   position: absolute !important;
-  top: 14px !important;
+  top: 16px !important;
   left: 16px !important;
   bottom: auto !important;
   margin: 0 !important;
@@ -2523,7 +2523,7 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
   .navlog-topbar .navlog-back {
     position: absolute !important;
-    top: 14px !important;
+    top: 16px !important;
     left: 10px !important;
     justify-self: auto;
   }
@@ -2654,7 +2654,7 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
   .navlog-topbar .navlog-back {
     position: absolute !important;
-    top: 8px !important;
+    top: 10px !important;
     left: 10px !important;
     bottom: auto !important;
     margin: 0 !important;
@@ -2847,6 +2847,14 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 .pdf-export .rpc-box input,
 .pdf-export .gph-box input {
   text-align: left !important;
+}
+
+.pdf-export .planning-box {
+  justify-content: center !important;
+  text-align: center;
+  white-space: normal;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
 }
 
 /* iPad: force navlog to match desktop proportions/typography, then scale as one unit via JS. */
