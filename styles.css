@@ -812,6 +812,13 @@ body.kiosk-mode .toc-tod-card input::placeholder {
   opacity: 1 !important;
 }
 
+body.kiosk-mode .field input[data-leg-field$=":at"] {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 body.kiosk-mode .toc-tod-title.kiosk-static-toc {
   color: #111 !important;
   opacity: 1 !important;

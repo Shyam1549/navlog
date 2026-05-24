@@ -2164,6 +2164,8 @@
   function wireKioskAtHoldUtc(input) {
     if (!input || input.dataset.atHoldBound === "1") return;
     let timer = null;
+    let startedAt = 0;
+    let committed = false;
     const holdMs = 3000;
 
     const clear = () => {
@@ -2171,13 +2173,16 @@
         clearTimeout(timer);
         timer = null;
       }
+      startedAt = 0;
       input.classList.remove("at-hold-armed");
     };
 
     const commit = () => {
+      if (committed) return;
       const [indexText] = String(input.dataset.legField || "").split(":");
       const index = Number(indexText);
       if (!Number.isFinite(index) || index < 0 || index >= state.navlog.legs.length) return;
+      committed = true;
       const utcNow = formatUtcNowHhmm();
       input.value = utcNow;
       const leg = state.navlog.legs[index];
@@ -2195,7 +2200,9 @@
     };
 
     const start = () => {
-      clear();
+      if (timer) clearTimeout(timer);
+      committed = false;
+      startedAt = Date.now();
       input.classList.add("at-hold-armed");
       timer = setTimeout(() => {
         timer = null;
@@ -2204,8 +2211,11 @@
     };
 
     const end = () => {
+      if (!committed && startedAt && (Date.now() - startedAt) >= (holdMs - 40)) commit();
       clear();
     };
+
+    input.addEventListener("contextmenu", (event) => event.preventDefault());
 
     if (window.PointerEvent) {
       input.addEventListener("pointerdown", start);
