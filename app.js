@@ -24,8 +24,6 @@
   const NAVLOG_ACCESS_KEY_UNLOCK = "navlog_access_unlocked_v1";
   const NAVLOG_MONTHLY_VISITOR_KEY = "navlog_monthly_visitor_marker";
   const NAVLOG_MONTHLY_VISITOR_COUNT_KEY = "navlog_monthly_visitor_count";
-  const ACTIVATE_MIN_LEGS = 8;
-  const ACTIVATE_MIN_RADIOS = 5;
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
   const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
   const ADDITIONAL_INFO_DEFAULT_ROWS = 19;
@@ -189,22 +187,18 @@
     };
   }
 
-  function ensureActivateMinimumRows() {
+  function normalizeActivateRows(addExtraAirportRow = false) {
     normalizeDestinationLegPlacement();
-    while (state.navlog.legs.length < ACTIVATE_MIN_LEGS) {
-      const insertIndex = Math.max(1, state.navlog.legs.length - 1);
-      state.navlog.legs.splice(insertIndex, 0, createBlankLeg(""));
-    }
-    while (state.navlog.radios.length < ACTIVATE_MIN_RADIOS) {
-      state.navlog.radios.push(createBlankRadioRow());
-    }
+    if (!Array.isArray(state.navlog.radios)) state.navlog.radios = [];
+    if (state.navlog.radios.length === 0) state.navlog.radios.push(createBlankRadioRow());
+    if (addExtraAirportRow) state.navlog.radios.push(createBlankRadioRow());
   }
 
-  function normalizeDestinationLegPlacement() {
-    const legs = Array.isArray(state.navlog.legs) ? state.navlog.legs : [];
+  function normalizeDestinationLegPlacement(navlog = state.navlog) {
+    const legs = Array.isArray(navlog.legs) ? navlog.legs : [];
     if (legs.length < 2) return;
 
-    const destinationCode = normalizeCode(state.navlog.setup.destination);
+    const destinationCode = normalizeCode(navlog.setup && navlog.setup.destination);
     let destinationIndex = -1;
 
     if (destinationCode) {
@@ -226,6 +220,14 @@
     if (destinationIndex <= 0 || destinationIndex >= (legs.length - 1)) return;
     const [destinationLeg] = legs.splice(destinationIndex, 1);
     legs.push(destinationLeg);
+  }
+
+  function buildActivateNavlogSnapshot() {
+    const snapshot = JSON.parse(JSON.stringify(state.navlog || createBlankNavlog()));
+    normalizeDestinationLegPlacement(snapshot);
+    if (!Array.isArray(snapshot.radios)) snapshot.radios = [];
+    snapshot.radios.push(createBlankRadioRow());
+    return snapshot;
   }
 
   function createEmptyPresetForm() {
@@ -1644,10 +1646,10 @@
     if (activateInfoContinue) {
       activateInfoContinue.addEventListener("click", () => {
         state.meta.activateInfoOpen = false;
-        ensureActivateMinimumRows();
+        const kioskNavlog = buildActivateNavlogSnapshot();
         state.navlog.tocTod.tocEditing = false;
         state.navlog.tocTod.todEditing = false;
-        persistKioskPayload();
+        persistKioskPayload({ navlog: kioskNavlog });
         const url = new URL(window.location.href);
         url.searchParams.set("kiosk", "1");
         window.open(url.toString(), "_blank", "noopener");
@@ -1986,7 +1988,7 @@
   }
 
   function wireIpadKiosk() {
-    ensureActivateMinimumRows();
+    normalizeActivateRows(false);
     document.querySelectorAll(".mini-plus, .remove-chip, .blank-chip").forEach((node) => {
       node.style.display = "none";
     });
@@ -2162,7 +2164,7 @@
   function wireKioskAtHoldUtc(input) {
     if (!input || input.dataset.atHoldBound === "1") return;
     let timer = null;
-    const holdMs = 1500;
+    const holdMs = 3000;
 
     const clear = () => {
       if (timer) {
@@ -2208,7 +2210,6 @@
     if (window.PointerEvent) {
       input.addEventListener("pointerdown", start);
       input.addEventListener("pointerup", end);
-      input.addEventListener("pointerleave", end);
       input.addEventListener("pointercancel", end);
     } else {
       input.addEventListener("touchstart", start, { passive: true });
@@ -2503,11 +2504,11 @@
     return classicIpad || modernIpad;
   }
 
-  function persistKioskPayload() {
+  function persistKioskPayload(overrides = {}) {
     try {
       const payload = {
-        navlog: state.navlog,
-        settings: state.settings,
+        navlog: overrides.navlog || state.navlog,
+        settings: overrides.settings || state.settings,
         ts: Date.now(),
       };
       window.localStorage.setItem(NAVLOG_KIOSK_PAYLOAD_KEY, JSON.stringify(payload));
@@ -4721,11 +4722,6 @@
     const secondLastAlt = parseAltitudeInput(secondLast?.alt);
     const lastGs = parseSpeedInput(last?.gs);
 
-    state.navlog.tocTod.tocDistance = "";
-    state.navlog.tocTod.tocTime = "";
-    state.navlog.tocTod.todDistance = "";
-    state.navlog.tocTod.todTime = "";
-
     if (!state.navlog.tocTod.tocEditing && roc != null && roc > 0 && secondAlt != null && firstGs != null) {
       const departureElevation = firstAlt == null ? 0 : firstAlt;
       const altitudeToGain = secondAlt - departureElevation;
@@ -5638,7 +5634,7 @@
       restoreKioskPayload();
       state.navlog.tocTod.tocEditing = false;
       state.navlog.tocTod.todEditing = false;
-      ensureActivateMinimumRows();
+      normalizeActivateRows(false);
     } else if (kioskRequested && !state.meta.navlogUnlocked) {
       state.view = "access";
       state.meta.accessError = "Enter access key before opening Activate mode.";

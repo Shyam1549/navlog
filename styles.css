@@ -803,6 +803,15 @@ body.kiosk-mode .toc-tod-card input {
   opacity: 1 !important;
 }
 
+body.kiosk-mode .field input::placeholder,
+body.kiosk-mode .radio-row input::placeholder,
+body.kiosk-mode .atis-cell input::placeholder,
+body.kiosk-mode .toc-tod-card input::placeholder {
+  color: rgba(17, 17, 17, 0.45) !important;
+  -webkit-text-fill-color: rgba(17, 17, 17, 0.45);
+  opacity: 1 !important;
+}
+
 body.kiosk-mode .toc-tod-title.kiosk-static-toc {
   color: #111 !important;
   opacity: 1 !important;
