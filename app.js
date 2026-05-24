@@ -1095,7 +1095,8 @@
             <p>Activate opens a focused cockpit view.</p>
             <p>AT, LOCATION, and ATIS code fields are interactive.</p>
             <p>Interactive fields stay locked on normal tap to avoid accidental keyboard popups.</p>
-            <p>Tap any interactive field 3 times quickly to unlock keyboard entry.</p>
+            <p>Tap any interactive field 2 times quickly to unlock keyboard entry.</p>
+            <p>Press and hold an AT field to auto-fill current UTC time (HHMM).</p>
             <p>Triple-tap PREFLIGHT PLANNER to open the translucent scratch pad.</p>
             <p>Scratch pad stays saved, even if Activate page reloads.</p>
           </div>
@@ -1408,6 +1409,15 @@
 
   function renderTocTod() {
     const t = state.navlog.tocTod;
+    const distanceUnitLabel =
+      state.settings.distanceUnit === "km"
+        ? "KM"
+        : state.settings.distanceUnit === "sm"
+          ? "SM"
+          : "NM";
+    const timeUnitLabel = state.settings.roundTimeValues ? "mins" : "min+sec";
+    const tocDistancePlaceholder = `Distance (${distanceUnitLabel})`;
+    const tocTimePlaceholder = `Time (${timeUnitLabel})`;
     return `
       <section class="toc-tod">
         <div class="toc-tod-card ${!t.tocEditing ? "resolved" : ""}">
@@ -1416,8 +1426,8 @@
             t.tocEditing
               ? `<input class="toc-entry" data-toc-entry="roc" value="${escapeAttr(t.roc)}" placeholder="Enter ROC" />`
               : `
-                <input data-toc="tocDistance" value="${escapeAttr(t.tocDistance)}" placeholder="Distance" readonly />
-                <input data-toc="tocTime" value="${escapeAttr(t.tocTime)}" placeholder="Time" readonly />
+                <input data-toc="tocDistance" value="${escapeAttr(t.tocDistance)}" placeholder="${escapeAttr(tocDistancePlaceholder)}" />
+                <input data-toc="tocTime" value="${escapeAttr(t.tocTime)}" placeholder="${escapeAttr(tocTimePlaceholder)}" />
               `
           }
         </div>
@@ -1427,8 +1437,8 @@
             t.todEditing
               ? `<input class="toc-entry" data-toc-entry="rod" value="${escapeAttr(t.rod)}" placeholder="Enter ROD" />`
               : `
-                <input data-toc="todDistance" value="${escapeAttr(t.todDistance)}" placeholder="Distance" readonly />
-                <input data-toc="todTime" value="${escapeAttr(t.todTime)}" placeholder="Time" readonly />
+                <input data-toc="todDistance" value="${escapeAttr(t.todDistance)}" placeholder="${escapeAttr(tocDistancePlaceholder)}" />
+                <input data-toc="todTime" value="${escapeAttr(t.todTime)}" placeholder="${escapeAttr(tocTimePlaceholder)}" />
               `
           }
         </div>
@@ -1842,6 +1852,28 @@
       });
     });
 
+    document.querySelectorAll("[data-toc]").forEach((input) => {
+      input.addEventListener("input", (event) => {
+        const field = String(event.target.dataset.toc || "");
+        if (!field) return;
+        state.navlog.tocTod[field] = event.target.value;
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        const field = String(event.target.dataset.toc || "");
+        if (!field) return;
+        state.navlog.tocTod[field] = event.target.value;
+        computeRouteMath();
+        updateComputedCells();
+      });
+      input.addEventListener("blur", (event) => {
+        const field = String(event.target.dataset.toc || "");
+        if (!field) return;
+        state.navlog.tocTod[field] = event.target.value;
+      });
+    });
+
     document.querySelectorAll("[data-radio-field]").forEach((input) => {
       input.addEventListener("input", (event) => {
         const [indexText, field] = event.target.dataset.radioField.split(":");
@@ -2022,6 +2054,7 @@
           persistKioskPayload();
         });
         wireKioskDelayedKeyboard(input);
+        wireKioskAtHoldUtc(input);
       }
     });
 
@@ -2092,11 +2125,16 @@
 
     const registerTap = () => {
       if (!input.readOnly) return;
+      if (input.dataset.atHoldCommitted === "1") {
+        input.dataset.atHoldCommitted = "";
+        tapCount = 0;
+        return;
+      }
       const now = Date.now();
       if ((now - lastTapAt) > tapWindowMs) tapCount = 0;
       tapCount += 1;
       lastTapAt = now;
-      if (tapCount >= 3) {
+      if (tapCount >= 2) {
         tapCount = 0;
         unlockKeyboard();
       }
@@ -2119,6 +2157,68 @@
       tapCount = 0;
     });
     input.dataset.longPressBound = "1";
+  }
+
+  function wireKioskAtHoldUtc(input) {
+    if (!input || input.dataset.atHoldBound === "1") return;
+    let timer = null;
+    const holdMs = 1500;
+
+    const clear = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = null;
+      }
+      input.classList.remove("at-hold-armed");
+    };
+
+    const commit = () => {
+      const [indexText] = String(input.dataset.legField || "").split(":");
+      const index = Number(indexText);
+      if (!Number.isFinite(index) || index < 0 || index >= state.navlog.legs.length) return;
+      const utcNow = formatUtcNowHhmm();
+      input.value = utcNow;
+      const leg = state.navlog.legs[index];
+      leg.at = utcNow;
+      leg._manual = leg._manual || {};
+      leg._manual.at = true;
+      computeRouteMath({ index, field: "at" });
+      updateComputedCells({ index, field: "at" });
+      persistKioskPayload();
+      input.dataset.atHoldCommitted = "1";
+      input.classList.remove("at-hold-armed");
+      input.classList.add("at-hold-done");
+      setTimeout(() => input.classList.remove("at-hold-done"), 520);
+      if (!input.readOnly) input.blur();
+    };
+
+    const start = () => {
+      clear();
+      input.classList.add("at-hold-armed");
+      timer = setTimeout(() => {
+        timer = null;
+        commit();
+      }, holdMs);
+    };
+
+    const end = () => {
+      clear();
+    };
+
+    if (window.PointerEvent) {
+      input.addEventListener("pointerdown", start);
+      input.addEventListener("pointerup", end);
+      input.addEventListener("pointerleave", end);
+      input.addEventListener("pointercancel", end);
+    } else {
+      input.addEventListener("touchstart", start, { passive: true });
+      input.addEventListener("touchend", end);
+      input.addEventListener("touchcancel", end);
+      input.addEventListener("mousedown", start);
+      input.addEventListener("mouseup", end);
+      input.addEventListener("mouseleave", end);
+    }
+    input.dataset.atHoldBound = "1";
   }
 
   function bindKioskDoubleTapGuard() {
@@ -2246,14 +2346,25 @@
 
     const readPadSnapshot = () => {
       try {
-        return String(window.localStorage.getItem(NAVLOG_KIOSK_PAD_KEY) || "");
+        const raw = String(window.localStorage.getItem(NAVLOG_KIOSK_PAD_KEY) || "");
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+          .filter((stroke) => Array.isArray(stroke) && stroke.length)
+          .map((stroke) => stroke
+            .map((point) => ({
+              x: Number(point && point.x),
+              y: Number(point && point.y),
+            }))
+            .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y)));
       } catch {
-        return "";
+        return [];
       }
     };
-    const writePadSnapshot = () => {
+    const writePadSnapshot = (strokes) => {
       try {
-        window.localStorage.setItem(NAVLOG_KIOSK_PAD_KEY, canvas.toDataURL("image/png"));
+        window.localStorage.setItem(NAVLOG_KIOSK_PAD_KEY, JSON.stringify(strokes || []));
       } catch {
         // ignore storage quota / private mode errors
       }
@@ -2266,16 +2377,25 @@
       }
     };
     let restoredFromStorage = false;
+    let strokes = [];
+    let currentStroke = null;
+    const drawStroke = (stroke) => {
+      if (!Array.isArray(stroke) || stroke.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(stroke[0].x, stroke[0].y);
+      for (let index = 1; index < stroke.length; index += 1) {
+        ctx.lineTo(stroke[index].x, stroke[index].y);
+      }
+      ctx.stroke();
+    };
+    const redrawAll = () => {
+      const rect = canvas.getBoundingClientRect();
+      ctx.clearRect(0, 0, rect.width, rect.height);
+      strokes.forEach((stroke) => drawStroke(stroke));
+      if (Array.isArray(currentStroke) && currentStroke.length > 1) drawStroke(currentStroke);
+    };
 
     const resize = () => {
-      let snapshot = null;
-      if (canvas.width > 0 && canvas.height > 0) {
-        snapshot = document.createElement("canvas");
-        snapshot.width = canvas.width;
-        snapshot.height = canvas.height;
-        const snapCtx = snapshot.getContext("2d");
-        if (snapCtx) snapCtx.drawImage(canvas, 0, 0);
-      }
       const rect = canvas.getBoundingClientRect();
       const ratio = Math.max(1, window.devicePixelRatio || 1);
       canvas.width = Math.max(1, Math.floor(rect.width * ratio));
@@ -2285,20 +2405,11 @@
       ctx.lineJoin = "round";
       ctx.lineWidth = 2.4;
       ctx.strokeStyle = "rgba(24, 22, 18, 0.92)";
-      if (snapshot) {
-        ctx.drawImage(snapshot, 0, 0, snapshot.width, snapshot.height, 0, 0, rect.width, rect.height);
-      } else if (!restoredFromStorage) {
-        const encoded = readPadSnapshot();
-        if (encoded) {
-          const image = new Image();
-          image.onload = () => {
-            const drawRect = canvas.getBoundingClientRect();
-            ctx.drawImage(image, 0, 0, image.width, image.height, 0, 0, drawRect.width, drawRect.height);
-          };
-          image.src = encoded;
-        }
+      if (!restoredFromStorage) {
+        strokes = readPadSnapshot();
         restoredFromStorage = true;
       }
+      redrawAll();
     };
 
     const pointer = { drawing: false, x: 0, y: 0 };
@@ -2316,6 +2427,7 @@
       pointer.drawing = true;
       pointer.x = p.x;
       pointer.y = p.y;
+      currentStroke = [{ x: p.x, y: p.y }];
     };
     const move = (event) => {
       if (!pointer.drawing) return;
@@ -2327,15 +2439,20 @@
       ctx.stroke();
       pointer.x = p.x;
       pointer.y = p.y;
+      if (Array.isArray(currentStroke)) currentStroke.push({ x: p.x, y: p.y });
       const now = Date.now();
       if ((now - lastPersistAt) > 1200) {
         lastPersistAt = now;
-        writePadSnapshot();
+        writePadSnapshot(strokes);
       }
     };
     const stop = () => {
       pointer.drawing = false;
-      writePadSnapshot();
+      if (Array.isArray(currentStroke) && currentStroke.length > 1) {
+        strokes.push(currentStroke);
+      }
+      currentStroke = null;
+      writePadSnapshot(strokes);
     };
 
     if (!canvas.dataset.bound) {
@@ -2351,7 +2468,9 @@
     if (clearButton && !clearButton.dataset.bound) {
       clearButton.addEventListener("click", () => {
         if (!window.confirm("Clear scratch pad?")) return;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        strokes = [];
+        currentStroke = null;
+        redrawAll();
         clearPadSnapshot();
       });
       clearButton.dataset.bound = "1";
@@ -2366,7 +2485,7 @@
     if (!window.__kioskPadUnloadBound) {
       window.addEventListener("beforeunload", () => {
         if (state.view !== "ipad-kiosk") return;
-        writePadSnapshot();
+        writePadSnapshot(strokes);
       });
       window.__kioskPadUnloadBound = "1";
     }
