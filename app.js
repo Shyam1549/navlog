@@ -2163,10 +2163,40 @@
 
   function wireKioskAtHoldUtc(input) {
     if (!input || input.dataset.atHoldBound === "1") return;
+    const cell = input.closest(".field");
+    if (cell) cell.classList.add("at-hold-cell");
     let timer = null;
+    let rafId = 0;
     let startedAt = 0;
     let committed = false;
     const holdMs = 3000;
+
+    const setProgress = (value) => {
+      if (!cell) return;
+      const next = Math.max(0, Math.min(1, Number(value) || 0));
+      cell.style.setProperty("--at-hold-progress", String(next));
+      cell.classList.toggle("at-hold-progress", next > 0 && next < 1);
+    };
+
+    const stopProgress = () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+      setProgress(0);
+    };
+
+    const tick = () => {
+      if (!startedAt || committed) return;
+      const elapsed = Date.now() - startedAt;
+      const progress = elapsed / holdMs;
+      setProgress(progress);
+      if (progress >= 1) {
+        commit();
+        return;
+      }
+      rafId = requestAnimationFrame(tick);
+    };
 
     const clear = () => {
       if (timer) {
@@ -2174,6 +2204,7 @@
         timer = null;
       }
       startedAt = 0;
+      stopProgress();
       input.classList.remove("at-hold-armed");
     };
 
@@ -2193,6 +2224,7 @@
       updateComputedCells({ index, field: "at" });
       persistKioskPayload();
       input.dataset.atHoldCommitted = "1";
+      setProgress(1);
       input.classList.remove("at-hold-armed");
       input.classList.add("at-hold-done");
       setTimeout(() => input.classList.remove("at-hold-done"), 520);
@@ -2203,11 +2235,13 @@
       if (timer) clearTimeout(timer);
       committed = false;
       startedAt = Date.now();
+      setProgress(0.001);
       input.classList.add("at-hold-armed");
       timer = setTimeout(() => {
         timer = null;
         commit();
       }, holdMs);
+      rafId = requestAnimationFrame(tick);
     };
 
     const end = () => {
