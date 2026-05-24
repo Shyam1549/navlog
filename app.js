@@ -2147,18 +2147,23 @@
       const radioField = String(node.getAttribute("data-radio-field") || "");
       const footerField = String(node.getAttribute("data-footer") || "");
       const isTocTodTitle = String(node.getAttribute("data-edit-toc") || "") !== "";
+      const isKioskUtilityUi = Boolean(
+        (node.closest && node.closest("#kiosk-route-estimate-overlay"))
+        || (node.closest && node.closest("#kiosk-timer-alert-overlay"))
+        || (node.closest && node.closest("#kiosk-event-timer")),
+      );
       const allowAt = legField.endsWith(":at");
       const allowLocation = radioField.endsWith(":location");
       const allowAtisCode = footerField === "depAtisCode" || footerField === "destinAtisCode";
-      const keepInteractive = allowAt || allowLocation || allowAtisCode;
+      const keepInteractive = allowAt || allowLocation || allowAtisCode || isKioskUtilityUi;
       if (!keepInteractive && node.tagName === "BUTTON" && !isTocTodTitle) node.style.display = "none";
       if (isTocTodTitle) {
         node.classList.add("kiosk-static-toc");
         node.style.pointerEvents = "none";
       }
-      if (node.tagName !== "BUTTON" && "readOnly" in node) node.readOnly = true;
-      if (node.tagName !== "BUTTON" && "disabled" in node) node.disabled = false;
-      if ("placeholder" in node) node.placeholder = "";
+      if (!isKioskUtilityUi && node.tagName !== "BUTTON" && "readOnly" in node) node.readOnly = true;
+      if (!isKioskUtilityUi && node.tagName !== "BUTTON" && "disabled" in node) node.disabled = false;
+      if (!isKioskUtilityUi && "placeholder" in node) node.placeholder = "";
       if (allowAt) {
         const [rowText] = legField.split(":");
         const rowIndex = Number(rowText);
