@@ -2513,31 +2513,27 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   }
 
   .navlog-topbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto 1fr auto;
     grid-template-areas:
-      "title"
-      "clock"
-      "back"
-      "actions";
-    gap: 10px;
-    padding: 12px;
+      "title title title"
+      "back clock actions";
+    gap: 8px;
+    padding: 10px 12px;
   }
 
   .navlog-topbar .navlog-back {
-    position: static !important;
-    left: auto !important;
-    top: auto !important;
-    justify-self: center;
+    position: absolute !important;
+    top: 0 !important;
+    left: 12px !important;
+    justify-self: auto;
   }
 
-  .navlog-topbar .navlog-clock,
-  .navlog-topbar .navlog-actions {
-    justify-self: center;
-  }
+  .navlog-topbar .navlog-clock { justify-self: center; }
+  .navlog-topbar .navlog-actions { justify-self: end; }
 
   .navlog-topbar .navlog-actions {
-    justify-content: center;
-    width: 100%;
+    justify-content: flex-end;
+    width: auto;
   }
 
   .entry-page .setup-card .setup-grid .swap-button {
@@ -2550,10 +2546,8 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
   .top-side { justify-content: flex-start; }
   .top-side.right { justify-content: flex-end; }
-  .navlog-topbar .top-side.navlog-back,
-  .navlog-topbar .top-side.right.navlog-actions {
-    justify-content: center;
-  }
+  .navlog-topbar .top-side.navlog-back { justify-content: flex-start; }
+  .navlog-topbar .top-side.right.navlog-actions { justify-content: flex-end; }
 
   .swap-button {
     width: 42px;
