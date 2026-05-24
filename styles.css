@@ -738,9 +738,16 @@ body.kiosk-mode .time-head {
   margin: 0 auto 8px;
 }
 
-.kiosk-event-timer {
+.kiosk-event-stack {
   width: min(1120px, 96vw);
   margin: 0 auto 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.kiosk-event-timer {
+  width: 100%;
+  margin: 0;
   padding: 8px 10px;
   border-radius: 12px;
   border: 2px solid rgba(33, 76, 90, 0.28);
@@ -879,6 +886,31 @@ body.kiosk-mode .time-head {
 
 .kiosk-timer-alert {
   width: min(520px, 100%);
+}
+
+.kiosk-alert-countdown {
+  margin: 10px 0 0;
+  font-family: "JetBrains Mono", "Cascadia Code", monospace;
+  font-weight: 700;
+  color: #8c2319;
+}
+
+.cockpit-info-modal {
+  width: min(720px, 100%);
+}
+
+.cockpit-info-copy {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.cockpit-info-copy p {
+  margin: 0;
+}
+
+.cockpit-info-modal .bug-report-actions {
+  margin-top: 8px;
 }
 
 #kiosk-route-estimate-overlay,
@@ -2425,6 +2457,9 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
       "label clear"
       "countdown target";
   }
+  .kiosk-event-stack {
+    width: 96vw;
+  }
   .kiosk-event-label { grid-area: label; }
   .kiosk-event-clear { grid-area: clear; justify-self: end; }
   .kiosk-event-countdown { grid-area: countdown; }
@@ -2535,10 +2570,8 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     padding: 10px;
   }
 
-  .kiosk-event-timer {
-    width: 96vw;
-    padding: 8px;
-  }
+  .kiosk-event-stack { width: 96vw; }
+  .kiosk-event-timer { padding: 8px; }
 
   .atis-block { grid-template-columns: 1fr; }
   .atis-cell {

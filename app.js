@@ -106,7 +106,7 @@
       activateInfoOpen: false,
       kioskRouteEstimate: createEmptyKioskRouteEstimateState(),
       kioskEventTimer: createEmptyKioskEventTimerState(),
-      kioskTimerAlert: createEmptyKioskTimerAlertState(),
+      kioskTimerAlerts: createEmptyKioskTimerAlertState(),
       monthlyVisitors: 0,
     },
   };
@@ -208,19 +208,11 @@
   }
 
   function createEmptyKioskEventTimerState() {
-    return {
-      active: false,
-      label: "",
-      targetHhmm: "",
-      dueUtcMs: 0,
-    };
+    return [];
   }
 
   function createEmptyKioskTimerAlertState() {
-    return {
-      open: false,
-      label: "",
-    };
+    return [];
   }
 
   function normalizeActivateRows(addExtraAirportRow = false) {
@@ -1094,15 +1086,18 @@
   }
 
   function renderKioskEventTimerStrip() {
-    const timer = state.meta.kioskEventTimer;
-    if (!timer || !timer.active) return "";
-    return `
-      <section class="kiosk-event-timer" id="kiosk-event-timer">
+    const timers = Array.isArray(state.meta.kioskEventTimer) ? state.meta.kioskEventTimer : [];
+    if (!timers.length) return "";
+    const rows = timers.map((timer) => `
+      <section class="kiosk-event-timer" data-kiosk-timer-id="${escapeAttr(timer.id)}">
         <span class="kiosk-event-label">${escapeHtml(timer.label || "Position estimate")}</span>
-        <span class="kiosk-event-countdown" id="kiosk-event-timer-countdown">T--:--</span>
-        <span class="kiosk-event-target" id="kiosk-event-timer-target">${escapeHtml(timer.targetHhmm || "")}Z</span>
-        <button class="kiosk-event-clear" id="kiosk-event-timer-clear" type="button" aria-label="Clear timer">×</button>
+        <span class="kiosk-event-countdown" data-kiosk-timer-countdown="${escapeAttr(timer.id)}">T--:--</span>
+        <span class="kiosk-event-target" data-kiosk-timer-target="${escapeAttr(timer.id)}">${escapeHtml(timer.targetHhmm || "")}Z</span>
+        <button class="kiosk-event-clear" data-kiosk-timer-clear="${escapeAttr(timer.id)}" type="button" aria-label="Clear timer">×</button>
       </section>
+    `).join("");
+    return `
+      <div class="kiosk-event-stack">${rows}</div>
     `;
   }
 
@@ -1118,8 +1113,8 @@
           </div>
           <p class="kiosk-estimate-context">${escapeHtml(model.routeLabel || "Waypoint")}</p>
           <div class="kiosk-direction-toggle" id="kiosk-route-estimate-direction">
-            <button type="button" class="kiosk-direction-btn ${model.direction === "outbound" ? "active" : ""}" data-kiosk-direction="outbound">Outbound</button>
             <button type="button" class="kiosk-direction-btn ${model.direction === "inbound" ? "active" : ""}" data-kiosk-direction="inbound">Inbound</button>
+            <button type="button" class="kiosk-direction-btn ${model.direction === "outbound" ? "active" : ""}" data-kiosk-direction="outbound">Outbound</button>
           </div>
           <div class="kiosk-estimate-grid">
             <label>
@@ -1148,15 +1143,17 @@
   }
 
   function renderKioskTimerAlertModal() {
-    const alertState = state.meta.kioskTimerAlert;
-    if (!alertState || !alertState.open) return "";
+    const alertQueue = Array.isArray(state.meta.kioskTimerAlerts) ? state.meta.kioskTimerAlerts : [];
+    const alertState = alertQueue[0];
+    if (!alertState) return "";
     return `
       <div class="bug-report-overlay" id="kiosk-timer-alert-overlay">
         <section class="bug-report-modal kiosk-timer-alert" role="dialog" aria-modal="true" aria-label="Timer complete">
           <div class="bug-report-head">
-            <h3>Timer Complete</h3>
+            <h3>Alert!</h3>
           </div>
           <p class="kiosk-estimate-result">${escapeHtml(alertState.label || "Position estimate reached")}</p>
+          <p class="kiosk-alert-countdown" id="kiosk-alert-countdown">-00:00</p>
           <div class="kiosk-estimate-actions">
             <button class="action primary" id="kiosk-timer-alert-ack" type="button">Acknowledge</button>
           </div>
@@ -1199,20 +1196,19 @@
     if (!state.meta.activateInfoOpen) return "";
     return `
       <div class="bug-report-overlay" id="activate-info-overlay">
-        <section class="bug-report-modal" role="dialog" aria-modal="true" aria-label="Activate mode information">
+        <section class="bug-report-modal cockpit-info-modal" role="dialog" aria-modal="true" aria-label="Cockpit mode information">
           <div class="bug-report-head">
-            <h3>Activate Mode Info</h3>
-            <button class="action bug-report-close" id="activate-info-close" type="button">Close</button>
+            <h3>Cockpit Mode</h3>
           </div>
-          <div class="manual-section">
-            <p>Activate opens a focused cockpit view.</p>
-            <p>AT, LOCATION, and ATIS code fields are interactive.</p>
-            <p>Interactive fields stay locked on normal tap to avoid accidental keyboard popups.</p>
-            <p>Tap any interactive field 2 times quickly to unlock keyboard entry.</p>
-            <p>Press and hold an AT field to auto-fill current UTC time (HHMM).</p>
-            <p>Triple-tap SCRATCHPAD to open the translucent scratch pad.</p>
-            <p>Scratch pad stays saved, even if Activate page reloads.</p>
+          <div class="manual-section cockpit-info-copy">
+            <p>You are about to enter Cockpit Mode.</p>
+            <p>Recommended: Turn on guided Access, Turn on DND.</p>
+            <p>Tap "SCRATCHPAD" (on the top right) 3 times to use the scratch pad.</p>
+            <p>Press and hold Actual Time (AT) for 3 seconds to auto-enter current ZULU time.</p>
+            <p>To use keyboard entry for any of the interactive fields (AT, ATIS, and LOCATION): tap the respective table cell 3 times.</p>
+            <p>For inbound/outbound Time estimate, press and hold the route for 3 seconds.</p>
           </div>
+          <br />
           <div class="bug-report-actions">
             <button class="action primary" id="activate-info-continue" type="button">Continue</button>
           </div>
@@ -2150,16 +2146,24 @@
       const isKioskUtilityUi = Boolean(
         (node.closest && node.closest("#kiosk-route-estimate-overlay"))
         || (node.closest && node.closest("#kiosk-timer-alert-overlay"))
-        || (node.closest && node.closest("#kiosk-event-timer")),
+        || (node.closest && node.closest(".kiosk-event-stack")),
       );
       const allowAt = legField.endsWith(":at");
       const allowLocation = radioField.endsWith(":location");
       const allowAtisCode = footerField === "depAtisCode" || footerField === "destinAtisCode";
+      const isDateHeader = String(node.getAttribute("data-header") || "") === "date" || node.hasAttribute("data-date-picker");
       const keepInteractive = allowAt || allowLocation || allowAtisCode || isKioskUtilityUi;
       if (!keepInteractive && node.tagName === "BUTTON" && !isTocTodTitle) node.style.display = "none";
       if (isTocTodTitle) {
         node.classList.add("kiosk-static-toc");
         node.style.pointerEvents = "none";
+      }
+      if (isDateHeader) {
+        if ("readOnly" in node) node.readOnly = true;
+        if ("disabled" in node) node.disabled = true;
+        node.tabIndex = -1;
+        node.style.pointerEvents = "none";
+        return;
       }
       if (!isKioskUtilityUi && node.tagName !== "BUTTON" && "readOnly" in node) node.readOnly = true;
       if (!isKioskUtilityUi && node.tagName !== "BUTTON" && "disabled" in node) node.disabled = false;
@@ -2293,7 +2297,7 @@
       if ((now - lastTapAt) > tapWindowMs) tapCount = 0;
       tapCount += 1;
       lastTapAt = now;
-      if (tapCount >= 2) {
+      if (tapCount >= 3) {
         tapCount = 0;
         unlockKeyboard();
       }
@@ -2326,7 +2330,7 @@
     let rafId = 0;
     let startedAt = 0;
     let committed = false;
-    const holdMs = 2000;
+    const holdMs = 3000;
 
     const setProgress = (value) => {
       if (!cell) return;
@@ -2423,6 +2427,19 @@
     input.dataset.atHoldBound = "1";
   }
 
+  function getKioskRouteEstimateDefaultGroundspeed(legIndex, direction) {
+    const index = Number(legIndex);
+    if (!Number.isFinite(index) || index < 0 || index >= state.navlog.legs.length) return "";
+    const mode = direction === "inbound" ? "inbound" : "outbound";
+    const currentLeg = state.navlog.legs[index] || {};
+    if (mode === "inbound") {
+      const previousLeg = index > 0 ? (state.navlog.legs[index - 1] || {}) : null;
+      if (previousLeg && String(previousLeg.gs || "").trim() !== "") return String(previousLeg.gs).trim();
+      return String(currentLeg.gs || "").trim();
+    }
+    return String(currentLeg.gs || "").trim();
+  }
+
   function openKioskRouteEstimateModalForLeg(legIndex) {
     if (!Number.isFinite(legIndex) || legIndex < 0 || legIndex >= state.navlog.legs.length) return;
     const leg = state.navlog.legs[legIndex] || {};
@@ -2432,8 +2449,9 @@
       open: true,
       legIndex,
       routeLabel,
+      direction: "outbound",
       distance: "10",
-      groundspeed: String(leg.gs || "").trim(),
+      groundspeed: getKioskRouteEstimateDefaultGroundspeed(legIndex, "outbound"),
     };
     render();
   }
@@ -2448,7 +2466,7 @@
     let startedAt = 0;
     let started = false;
     let committed = false;
-    const holdMs = 2000;
+    const holdMs = 3000;
     const maxMovePx = 14;
 
     const setProgress = (value) => {
@@ -2572,7 +2590,13 @@
     document.querySelectorAll("[data-kiosk-direction]").forEach((button) => {
       button.addEventListener("click", () => {
         syncKioskRouteEstimateDraftFromDom();
-        state.meta.kioskRouteEstimate.direction = button.dataset.kioskDirection === "inbound" ? "inbound" : "outbound";
+        const nextDirection = button.dataset.kioskDirection === "inbound" ? "inbound" : "outbound";
+        state.meta.kioskRouteEstimate.direction = nextDirection;
+        state.meta.kioskRouteEstimate.groundspeed = getKioskRouteEstimateDefaultGroundspeed(state.meta.kioskRouteEstimate.legIndex, nextDirection);
+        state.meta.kioskRouteEstimate.error = "";
+        state.meta.kioskRouteEstimate.resultLabel = "";
+        state.meta.kioskRouteEstimate.resultHhmm = "";
+        state.meta.kioskRouteEstimate.resultMinuteOfDay = null;
         render();
       });
     });
@@ -2656,11 +2680,13 @@
   }
 
   function wireKioskEventTimerControls() {
-    const clearButton = document.getElementById("kiosk-event-timer-clear");
-    if (!clearButton) return;
-    clearButton.addEventListener("click", () => {
-      state.meta.kioskEventTimer = createEmptyKioskEventTimerState();
-      render();
+    document.querySelectorAll("[data-kiosk-timer-clear]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const timerId = String(button.dataset.kioskTimerClear || "");
+        const timers = Array.isArray(state.meta.kioskEventTimer) ? state.meta.kioskEventTimer : [];
+        state.meta.kioskEventTimer = timers.filter((timer) => String(timer.id) !== timerId);
+        render();
+      });
     });
   }
 
@@ -2668,7 +2694,9 @@
     const acknowledgeButton = document.getElementById("kiosk-timer-alert-ack");
     if (!acknowledgeButton) return;
     acknowledgeButton.addEventListener("click", () => {
-      state.meta.kioskTimerAlert = createEmptyKioskTimerAlertState();
+      const queue = Array.isArray(state.meta.kioskTimerAlerts) ? state.meta.kioskTimerAlerts.slice() : [];
+      queue.shift();
+      state.meta.kioskTimerAlerts = queue;
       render();
     });
   }
@@ -2728,13 +2756,14 @@
   function setKioskEventTimerFromEstimate(estimate) {
     if (!estimate || !Number.isFinite(estimate.minuteOfDay)) return;
     const dueUtcMs = computeNextUtcDueMs(estimate.minuteOfDay);
-    state.meta.kioskEventTimer = {
-      active: true,
+    const timers = Array.isArray(state.meta.kioskEventTimer) ? state.meta.kioskEventTimer.slice() : [];
+    timers.push({
+      id: `kt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
       label: String(estimate.label || "Position estimate"),
       targetHhmm: String(estimate.hhmm || ""),
       dueUtcMs,
-    };
-    state.meta.kioskTimerAlert = createEmptyKioskTimerAlertState();
+    });
+    state.meta.kioskEventTimer = timers;
   }
 
   function normalizeMinuteOfDay(minutesFloat) {
@@ -2765,31 +2794,64 @@
   }
 
   function syncKioskEventTimerDisplay() {
-    const timer = state.meta.kioskEventTimer;
-    if (!timer || !timer.active) return;
-    const countdownNode = document.getElementById("kiosk-event-timer-countdown");
-    const targetNode = document.getElementById("kiosk-event-timer-target");
-    if (!countdownNode || !targetNode) return;
-    const remainingMs = Number(timer.dueUtcMs || 0) - Date.now();
-    if (!(remainingMs > 0)) {
-      const label = timer.label || "Position estimate reached";
-      state.meta.kioskEventTimer = createEmptyKioskEventTimerState();
-      state.meta.kioskTimerAlert = {
-        open: true,
-        label,
-      };
-      render();
+    const timers = Array.isArray(state.meta.kioskEventTimer) ? state.meta.kioskEventTimer : [];
+    if (!timers.length) {
+      syncKioskTimerAlertDisplay();
       return;
     }
-    const remainingSeconds = Math.ceil(remainingMs / 1000);
-    const hours = Math.floor(remainingSeconds / 3600);
-    const minutes = Math.floor((remainingSeconds % 3600) / 60);
-    const seconds = remainingSeconds % 60;
-    countdownNode.textContent =
-      hours > 0
-        ? `T-${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
-        : `T-${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-    targetNode.textContent = `${timer.targetHhmm}Z`;
+    const nowMs = Date.now();
+    const completedTimerIds = [];
+    timers.forEach((timer) => {
+      const timerId = String(timer.id || "");
+      if (!timerId) return;
+      const countdownNode = document.querySelector(`[data-kiosk-timer-countdown="${timerId}"]`);
+      const targetNode = document.querySelector(`[data-kiosk-timer-target="${timerId}"]`);
+      const remainingMs = Number(timer.dueUtcMs || 0) - nowMs;
+      if (countdownNode) countdownNode.textContent = `T-${formatDurationClockFromMs(remainingMs, false)}`;
+      if (targetNode) targetNode.textContent = `${timer.targetHhmm}Z`;
+      if (remainingMs <= 0) completedTimerIds.push(timerId);
+    });
+
+    let didMutate = false;
+    if (completedTimerIds.length) {
+      const remainingTimers = timers.filter((timer) => !completedTimerIds.includes(String(timer.id || "")));
+      const completedTimers = timers.filter((timer) => completedTimerIds.includes(String(timer.id || "")));
+      const alertQueue = Array.isArray(state.meta.kioskTimerAlerts) ? state.meta.kioskTimerAlerts.slice() : [];
+      completedTimers.forEach((timer) => {
+        alertQueue.push({
+          id: String(timer.id || ""),
+          label: String(timer.label || "Position estimate reached"),
+          dueUtcMs: Number(timer.dueUtcMs || nowMs),
+          targetHhmm: String(timer.targetHhmm || ""),
+        });
+      });
+      state.meta.kioskEventTimer = remainingTimers;
+      state.meta.kioskTimerAlerts = alertQueue;
+      didMutate = true;
+    }
+
+    syncKioskTimerAlertDisplay();
+    if (didMutate) render();
+  }
+
+  function syncKioskTimerAlertDisplay() {
+    const alertQueue = Array.isArray(state.meta.kioskTimerAlerts) ? state.meta.kioskTimerAlerts : [];
+    const currentAlert = alertQueue[0];
+    const alertCountdownNode = document.getElementById("kiosk-alert-countdown");
+    if (!currentAlert || !alertCountdownNode) return;
+    const deltaMs = Date.now() - Number(currentAlert.dueUtcMs || Date.now());
+    alertCountdownNode.textContent = `-${formatDurationClockFromMs(deltaMs, true)}`;
+  }
+
+  function formatDurationClockFromMs(milliseconds, floorAtZero = false) {
+    const value = Number(milliseconds);
+    const positiveMs = floorAtZero ? Math.max(0, value) : value;
+    const totalSeconds = Math.max(0, Math.ceil(positiveMs / 1000));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+    return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
 
   function bindKioskDoubleTapGuard() {
