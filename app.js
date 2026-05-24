@@ -1028,7 +1028,7 @@
           <div class="sheet ipad-kiosk-sheet">
             <section class="sheet-header">
               ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
-              <div class="header-box dark static planning-box" id="kiosk-planner-toggle">PREFLIGHT PLANNER</div>
+              <div class="header-box dark static planning-box" id="kiosk-planner-toggle">SCRATCHPAD</div>
               ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
                ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
               ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
@@ -1099,7 +1099,7 @@
             <p>Interactive fields stay locked on normal tap to avoid accidental keyboard popups.</p>
             <p>Tap any interactive field 2 times quickly to unlock keyboard entry.</p>
             <p>Press and hold an AT field to auto-fill current UTC time (HHMM).</p>
-            <p>Triple-tap PREFLIGHT PLANNER to open the translucent scratch pad.</p>
+            <p>Triple-tap SCRATCHPAD to open the translucent scratch pad.</p>
             <p>Scratch pad stays saved, even if Activate page reloads.</p>
           </div>
           <div class="bug-report-actions">
@@ -2169,7 +2169,7 @@
     let rafId = 0;
     let startedAt = 0;
     let committed = false;
-    const holdMs = 3000;
+    const holdMs = 2000;
 
     const setProgress = (value) => {
       if (!cell) return;
