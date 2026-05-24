@@ -18,14 +18,12 @@
   const ADMIN_REMEMBER_KEY = "navlog_admin_remember";
   const ADMIN_EMAIL_KEY = "navlog_admin_email";
   const ADMIN_PASSWORD_KEY = "navlog_admin_password";
-  const ADMIN_GAME_HIGH_SCORE_KEY = "navlog_admin_game_high_score";
   const ANNOUNCEMENT_SEEN_KEY = "navlog_announcement_seen_signature";
   const NAVLOG_KIOSK_PAYLOAD_KEY = "navlog_kiosk_payload_v1";
   const NAVLOG_KIOSK_PAD_KEY = "navlog_kiosk_pad_v1";
   const NAVLOG_ACCESS_KEY_UNLOCK = "navlog_access_unlocked_v1";
   const NAVLOG_MONTHLY_VISITOR_KEY = "navlog_monthly_visitor_marker";
   const NAVLOG_MONTHLY_VISITOR_COUNT_KEY = "navlog_monthly_visitor_count";
-  const NAVLOG_ACCESS_PASSWORD = "874969";
   const ACTIVATE_MIN_LEGS = 8;
   const ACTIVATE_MIN_RADIOS = 5;
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
@@ -54,7 +52,6 @@
         maintenanceMode: false,
         maintenanceText: "under maintenance: service is undergoing maintenance. do not trust.",
         additionalInfoTable: [],
-        adminGameHighScore: 0,
       },
     },
     announcement: {
@@ -123,8 +120,6 @@
   let loadingPublicCatalog = false;
   let utcTimer = null;
   let manualMathRetryCount = 0;
-  let adminGameState = null;
-  let adminGameAnimation = null;
   let kioskPadState = null;
   let viewportFitResizeBound = false;
 
@@ -195,6 +190,7 @@
   }
 
   function ensureActivateMinimumRows() {
+    normalizeDestinationLegPlacement();
     while (state.navlog.legs.length < ACTIVATE_MIN_LEGS) {
       const insertIndex = Math.max(1, state.navlog.legs.length - 1);
       state.navlog.legs.splice(insertIndex, 0, createBlankLeg(""));
@@ -202,6 +198,34 @@
     while (state.navlog.radios.length < ACTIVATE_MIN_RADIOS) {
       state.navlog.radios.push(createBlankRadioRow());
     }
+  }
+
+  function normalizeDestinationLegPlacement() {
+    const legs = Array.isArray(state.navlog.legs) ? state.navlog.legs : [];
+    if (legs.length < 2) return;
+
+    const destinationCode = normalizeCode(state.navlog.setup.destination);
+    let destinationIndex = -1;
+
+    if (destinationCode) {
+      for (let index = 0; index < legs.length; index += 1) {
+        if (normalizeCode(legs[index] && legs[index].route) === destinationCode) destinationIndex = index;
+      }
+    }
+
+    if (destinationIndex < 0) {
+      for (let index = legs.length - 1; index >= 1; index -= 1) {
+        const routeText = String((legs[index] && legs[index].route) || "").trim();
+        if (routeText) {
+          destinationIndex = index;
+          break;
+        }
+      }
+    }
+
+    if (destinationIndex <= 0 || destinationIndex >= (legs.length - 1)) return;
+    const [destinationLeg] = legs.splice(destinationIndex, 1);
+    legs.push(destinationLeg);
   }
 
   function createEmptyPresetForm() {
@@ -364,7 +388,8 @@
     }
     evaluateAnnouncementsPrompt();
     computeRouteMath();
-    if (state.view === "setup") app.innerHTML = renderSetupScreen();
+    if (state.view === "access") app.innerHTML = renderAccessScreen();
+    else if (state.view === "setup") app.innerHTML = renderSetupScreen();
     else if (state.view === "manual") app.innerHTML = renderManualScreen();
     else if (state.view === "privacy") app.innerHTML = renderPrivacyScreen();
     else if (state.view === "additional-info") app.innerHTML = renderAdditionalInfoScreen();
@@ -373,7 +398,8 @@
     else if (state.view === "ipad-kiosk") app.innerHTML = renderIpadKioskScreen();
     else app.innerHTML = renderNavlogScreen();
     startUtcClock();
-    if (state.view === "setup") wireSetup();
+    if (state.view === "access") wireAccess();
+    else if (state.view === "setup") wireSetup();
     else if (state.view === "manual") wireManual();
     else if (state.view === "privacy") wirePrivacy();
     else if (state.view === "additional-info") wireAdditionalInfo();
@@ -407,7 +433,6 @@
   function renderSetupScreen() {
     const presetStatus = getPresetStatusMarkup();
     const showResume = shouldShowResumeButton();
-    const accessLocked = !state.meta.navlogUnlocked;
     const maintenanceBanner = state.catalog.content.maintenanceMode
       ? `<p class="maintenance-warning">${escapeHtml(state.catalog.content.maintenanceText || "under maintenance: service is undergoing maintenance. do not trust.")}</p>`
       : "";
@@ -435,20 +460,9 @@
             </label>
           </div>
           <div id="preset-status-slot">${presetStatus}</div>
-          <div class="admin-grid two-col">
-            <label class="setup-field">
-              <span>Access key</span>
-              <input id="navlog-access-key" type="password" placeholder="Enter access key" />
-            </label>
-            <div class="setup-field">
-              <span>Status</span>
-              <p class="preset-status ${accessLocked ? "missing" : "available"}">${accessLocked ? "locked" : "unlocked"}</p>
-            </div>
-          </div>
-          ${state.meta.accessError ? `<p class="admin-status error">${escapeHtml(state.meta.accessError)}</p>` : ""}
           <div class="entry-actions">
-            <button class="action primary" id="open-sheet"${accessLocked ? " disabled" : ""}>Open navlog</button>
-            ${showResume ? `<button class="action" id="resume-sheet"${accessLocked ? " disabled" : ""}>Resume current sheet</button>` : ""}
+            <button class="action primary" id="open-sheet">Open navlog</button>
+            ${showResume ? `<button class="action" id="resume-sheet">Resume current sheet</button>` : ""}
           </div>
         </section>
         ${renderFrontFooter()}
@@ -700,7 +714,7 @@
       getAdditionalInfoColumnCount(state.admin.additionalInfoDraft),
     );
     const panelButtons = [
-      { id: "dashboard", label: "Overview" },
+      { id: "dashboard", label: "Dashboard" },
       { id: "presets", label: "Presets" },
       { id: "airports", label: "Airport Info" },
       { id: "announcements", label: "Announcements" },
@@ -856,13 +870,13 @@
           </div>
           <div class="manual-section admin-maintenance-panel${panel === "announcements" ? "" : " hidden"}">
             <h3>Maintenance</h3>
-            <label class="admin-toggle-line admin-maintenance-toggle">
-              <input id="admin-maintenance-flag" type="checkbox" ${state.admin.maintenanceMode ? "checked" : ""} />
-              <span>Under maintenance</span>
-            </label>
             <label class="setup-field admin-title-gap">
               <span>Maintenance text</span>
               <input id="admin-maintenance-text" value="${escapeAttr(state.admin.maintenanceTextDraft || "")}" />
+            </label>
+            <label class="admin-toggle-line admin-maintenance-toggle">
+              <input id="admin-maintenance-flag" type="checkbox" ${state.admin.maintenanceMode ? "checked" : ""} />
+              <span>Under maintenance</span>
             </label>
             <div class="entry-actions">
               <button class="action primary" id="admin-maintenance-save" type="button">Save</button>
@@ -923,8 +937,7 @@
             </div>
           </div>
           <div class="manual-section${panel === "dashboard" ? "" : " hidden"}">
-            <h3>Overview</h3><br>
-            <p class="setup-caption">Select a section from the left menu to manage content.</p>
+            <h3>Dashboard</h3><br>
             <div class="admin-dashboard-grid">
               <article class="admin-dashboard-card">
                 <h4>Monthly visitors</h4>
@@ -1040,6 +1053,36 @@
     `;
   }
 
+  function renderAccessScreen() {
+    const maintenanceBanner = state.catalog.content.maintenanceMode
+      ? `<p class="maintenance-warning">${escapeHtml(state.catalog.content.maintenanceText || "under maintenance: service is undergoing maintenance. do not trust.")}</p>`
+      : "";
+    return `
+      <div class="ui-scale">
+      <main class="entry-page">
+        <section class="entry-hero entry-hero-centered">
+          <div class="top-center">
+            <h1>Navlog</h1>
+            <div class="utc-pill" id="utc-clock">UTC ${formatUtcNow()}</div>
+            <p class="setup-caption">Enter access key to continue.</p>
+            ${maintenanceBanner}
+          </div>
+        </section>
+        <section class="setup-card">
+          <label class="setup-field">
+            <span>Access key</span>
+            <input id="navlog-access-key" type="password" placeholder="Enter access key" autocomplete="off" />
+          </label>
+          ${state.meta.accessError ? `<p class="admin-status error">${escapeHtml(state.meta.accessError)}</p>` : ""}
+          <div class="entry-actions">
+            <button class="action primary" id="unlock-navlog">Unlock</button>
+          </div>
+        </section>
+      </main>
+      </div>
+    `;
+  }
+
   function renderActivateInfoModal() {
     if (!state.meta.activateInfoOpen) return "";
     return `
@@ -1051,8 +1094,9 @@
           </div>
           <div class="manual-section">
             <p>Activate opens a focused cockpit view.</p>
-            <p>Only AT fields are editable for quick updates.</p>
-            <p>Press and hold an AT field for 3 seconds to auto-fill current UTC (HHMM).</p>
+            <p>AT, LOCATION, and ATIS code fields are interactive.</p>
+            <p>Interactive fields stay locked on tap to avoid accidental keyboard popups.</p>
+            <p>Press and hold any interactive field for 4 seconds to unlock and type.</p>
             <p>Triple-tap PREFLIGHT PLANNER to open the translucent scratch pad.</p>
             <p>Scratch pad stays saved, even if Activate page reloads.</p>
           </div>
@@ -1130,8 +1174,8 @@
           <div class="head-cell tall route-head">ROUTE <button class="mini-plus inline" id="add-leg" type="button">+</button></div>
           <div class="head-cell group cruise-head">CRUISE</div>
           <div class="head-cell group wind-head">WIND</div>
-          <div class="head-cell tall tc-head">TC</div>
-          <div class="head-cell tall wca-head">WCA</div>
+          <div class="head-cell sub split-top tcw-top-head">TC</div>
+          <div class="head-cell sub tcw-bottom-head">WCA</div>
           <div class="head-cell tall ta-head">${withUnit("TA", speedUnitLabel)}</div>
           <div class="head-cell tall gs-head">${withUnit("GS", speedUnitLabel)}</div>
           <div class="head-cell tall dis-head">${withUnit("DIS", distanceUnitLabel)}</div>
@@ -1224,8 +1268,7 @@
         <div class="${legFieldClass(leg, "ch")}"><input data-leg-field="${index}:ch" value="${escapeAttr(legFieldValue(leg, "ch"))}" /></div>
       `
       : `
-        <div class="${legFieldClass(leg, "tc")}"><input data-leg-field="${index}:tc" value="${escapeAttr(legFieldValue(leg, "tc"))}" /></div>
-        <div class="${legFieldClass(leg, "wca")}"><input data-leg-field="${index}:wca" value="${escapeAttr(legFieldValue(leg, "wca"))}" /></div>
+        <div class="${legFieldClass(leg, "tc", "stack-field")}"><input data-leg-field="${index}:tc" value="${escapeAttr(legFieldValue(leg, "tc"))}" /><input data-leg-field="${index}:wca" value="${escapeAttr(legFieldValue(leg, "wca"))}" /></div>
       `;
     return `
       <div class="${rowClass}">
@@ -1370,25 +1413,15 @@
       <section class="toc-tod">
         <div class="toc-tod-card ${!t.tocEditing ? "resolved" : ""}">
           <button type="button" class="toc-tod-title" data-edit-toc="toc">TOC</button>
-          ${
-            t.tocEditing
-              ? `<input class="toc-entry" data-toc-entry="roc" value="${escapeAttr(t.roc)}" placeholder="Enter ROC" />`
-              : `
-                <input data-toc="tocDistance" value="${escapeAttr(t.tocDistance)}" placeholder="Distance" readonly />
-                <input data-toc="tocTime" value="${escapeAttr(t.tocTime)}" placeholder="Time" readonly />
-              `
-          }
+          <input class="toc-entry" data-toc-entry="roc" value="${escapeAttr(t.roc)}" placeholder="Enter ROC" />
+          <input data-toc="tocDistance" value="${escapeAttr(t.tocDistance)}" placeholder="Distance" ${t.tocEditing ? "" : "readonly"} />
+          <input data-toc="tocTime" value="${escapeAttr(t.tocTime)}" placeholder="Time" ${t.tocEditing ? "" : "readonly"} />
         </div>
         <div class="toc-tod-card ${!t.todEditing ? "resolved" : ""}">
           <button type="button" class="toc-tod-title" data-edit-toc="tod">TOD</button>
-          ${
-            t.todEditing
-              ? `<input class="toc-entry" data-toc-entry="rod" value="${escapeAttr(t.rod)}" placeholder="Enter ROD" />`
-              : `
-                <input data-toc="todDistance" value="${escapeAttr(t.todDistance)}" placeholder="Distance" readonly />
-                <input data-toc="todTime" value="${escapeAttr(t.todTime)}" placeholder="Time" readonly />
-              `
-          }
+          <input class="toc-entry" data-toc-entry="rod" value="${escapeAttr(t.rod)}" placeholder="Enter ROD" />
+          <input data-toc="todDistance" value="${escapeAttr(t.todDistance)}" placeholder="Distance" ${t.todEditing ? "" : "readonly"} />
+          <input data-toc="todTime" value="${escapeAttr(t.todTime)}" placeholder="Time" ${t.todEditing ? "" : "readonly"} />
         </div>
       </section>
     `;
@@ -1445,26 +1478,62 @@
     `;
   }
 
-  function wireSetup() {
-    const accessInput = document.getElementById("navlog-access-key");
-    const applyAccessInput = () => {
-      const entered = String(accessInput ? accessInput.value : "").trim();
-      const unlocked = entered === NAVLOG_ACCESS_PASSWORD;
-      state.meta.navlogUnlocked = unlocked;
-      state.meta.accessError = unlocked || !entered ? "" : "Invalid access key.";
-      writeStoredValue(NAVLOG_ACCESS_KEY_UNLOCK, unlocked ? "1" : "");
-      const openButton = document.getElementById("open-sheet");
-      if (openButton) openButton.disabled = !unlocked;
-    };
-    if (accessInput) {
-      accessInput.addEventListener("input", applyAccessInput);
-      accessInput.addEventListener("change", applyAccessInput);
-      if (state.meta.navlogUnlocked) {
-        accessInput.value = NAVLOG_ACCESS_PASSWORD;
-        applyAccessInput();
-      }
+  async function validateAccessKeyWithBackend(key) {
+    const value = String(key || "").trim();
+    if (!value) return false;
+    try {
+      const response = await fetch("/api/access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: value }),
+      });
+      if (!response.ok) return false;
+      const payload = await response.json();
+      return Boolean(payload && payload.ok);
+    } catch {
+      return false;
     }
+  }
 
+  function wireAccess() {
+    const input = document.getElementById("navlog-access-key");
+    const unlockButton = document.getElementById("unlock-navlog");
+    if (!input || !unlockButton) return;
+
+    const submit = async () => {
+      const entered = String(input.value || "").trim();
+      if (!entered) {
+        state.meta.accessError = "Enter access key.";
+        render();
+        return;
+      }
+      unlockButton.disabled = true;
+      unlockButton.textContent = "Checking...";
+      const ok = await validateAccessKeyWithBackend(entered);
+      if (!ok) {
+        state.meta.navlogUnlocked = false;
+        state.meta.accessError = "Invalid access key.";
+        writeStoredValue(NAVLOG_ACCESS_KEY_UNLOCK, "");
+        render();
+        return;
+      }
+      state.meta.navlogUnlocked = true;
+      state.meta.accessError = "";
+      writeStoredValue(NAVLOG_ACCESS_KEY_UNLOCK, "1");
+      state.view = "setup";
+      render();
+    };
+
+    unlockButton.addEventListener("click", submit);
+    input.addEventListener("keydown", async (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      await submit();
+    });
+    input.focus();
+  }
+
+  function wireSetup() {
     document.getElementById("setup-departure").addEventListener("input", (event) => {
       state.navlog.setup.departure = event.target.value;
       syncSetupPresetStatus();
@@ -1482,11 +1551,6 @@
       syncSetupPresetStatus();
     });
     document.getElementById("open-sheet").addEventListener("click", () => {
-      if (!state.meta.navlogUnlocked) {
-        state.meta.accessError = "Enter valid access key to open navlog.";
-        render();
-        return;
-      }
       seedLegs();
       state.settings = createDefaultSettings();
       state.meta.hasOpenedSheet = true;
@@ -1496,11 +1560,6 @@
     const resumeButton = document.getElementById("resume-sheet");
     if (resumeButton) {
       resumeButton.addEventListener("click", () => {
-        if (!state.meta.navlogUnlocked) {
-          state.meta.accessError = "Enter valid access key to open navlog.";
-          render();
-          return;
-        }
         state.settings.open = false;
         state.meta.hasOpenedSheet = true;
         state.view = "navlog";
@@ -1766,10 +1825,33 @@
       });
     });
 
+    document.querySelectorAll("[data-toc]").forEach((input) => {
+      input.addEventListener("input", (event) => {
+        const field = String(event.target.dataset.toc || "");
+        if (!field) return;
+        state.navlog.tocTod[field] = event.target.value;
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        const field = String(event.target.dataset.toc || "");
+        if (!field) return;
+        state.navlog.tocTod[field] = event.target.value;
+        computeRouteMath();
+        updateComputedCells();
+      });
+      input.addEventListener("blur", (event) => {
+        const field = String(event.target.dataset.toc || "");
+        if (!field) return;
+        state.navlog.tocTod[field] = event.target.value;
+      });
+    });
+
     document.querySelectorAll("[data-edit-toc]").forEach((button) => {
       button.addEventListener("click", () => {
-        if (button.dataset.editToc === "toc") state.navlog.tocTod.tocEditing = true;
-        if (button.dataset.editToc === "tod") state.navlog.tocTod.todEditing = true;
+        if (button.dataset.editToc === "toc") state.navlog.tocTod.tocEditing = !state.navlog.tocTod.tocEditing;
+        if (button.dataset.editToc === "tod") state.navlog.tocTod.todEditing = !state.navlog.tocTod.todEditing;
+        computeRouteMath();
         render();
       });
     });
@@ -1908,13 +1990,15 @@
         node.classList.add("kiosk-static-toc");
         node.style.pointerEvents = "none";
       }
-      if (node.tagName !== "BUTTON" && "readOnly" in node) node.readOnly = !keepInteractive;
+      if (node.tagName !== "BUTTON" && "readOnly" in node) node.readOnly = true;
       if (node.tagName !== "BUTTON" && "disabled" in node) node.disabled = false;
       if ("placeholder" in node) node.placeholder = "";
       if (allowAt) {
         const [rowText] = legField.split(":");
         const rowIndex = Number(rowText);
         node.placeholder = rowIndex === 0 ? "AB TIME" : "";
+        node.setAttribute("inputmode", "numeric");
+        node.setAttribute("pattern", "[0-9]*");
       }
       node.tabIndex = keepInteractive ? 0 : -1;
     });
@@ -1951,11 +2035,12 @@
           updateComputedCells({ index, field: "at" });
           persistKioskPayload();
         });
-        wireActivateAtLongPress(input);
+        wireKioskDelayedKeyboard(input);
       }
     });
 
     document.querySelectorAll("[data-radio-field$=':location']").forEach((input) => {
+      wireKioskDelayedKeyboard(input);
       input.addEventListener("input", (event) => {
         const [indexText] = event.target.dataset.radioField.split(":");
         const index = Number(indexText);
@@ -1983,6 +2068,7 @@
     });
 
     document.querySelectorAll('[data-footer="depAtisCode"], [data-footer="destinAtisCode"]').forEach((input) => {
+      wireKioskDelayedKeyboard(input);
       input.addEventListener("input", (event) => {
         const key = String(event.target.dataset.footer || "");
         state.navlog[key] = event.target.value;
@@ -1996,11 +2082,11 @@
     requestAnimationFrame(() => fitSheetToViewport(".ipad-kiosk-wrap"));
   }
 
-  function wireActivateAtLongPress(input) {
+  function wireKioskDelayedKeyboard(input) {
     if (!input || input.dataset.longPressBound === "1") return;
     let timer = null;
-    let fired = false;
-    const holdMs = 3000;
+    let unlocked = false;
+    const holdMs = 4000;
 
     const cancelHold = () => {
       if (timer) {
@@ -2010,37 +2096,34 @@
       input.classList.remove("at-hold-armed");
     };
 
-    const commitCurrentUtc = () => {
-      const [indexText] = String(input.dataset.legField || "").split(":");
-      const index = Number(indexText);
-      if (!Number.isFinite(index) || index < 0 || index >= state.navlog.legs.length) return;
-      const utcNow = formatUtcNowHhmm();
-      input.value = utcNow;
-      const leg = state.navlog.legs[index];
-      leg.at = utcNow;
-      leg._manual = leg._manual || {};
-      leg._manual.at = true;
-      computeRouteMath({ index, field: "at" });
-      updateComputedCells({ index, field: "at" });
-      persistKioskPayload();
+    const unlockKeyboard = () => {
+      unlocked = true;
+      input.readOnly = false;
       input.classList.remove("at-hold-armed");
       input.classList.add("at-hold-done");
       setTimeout(() => input.classList.remove("at-hold-done"), 520);
+      input.focus({ preventScroll: true });
+      try {
+        const length = String(input.value || "").length;
+        input.setSelectionRange(length, length);
+      } catch {
+        // ignore unsupported selection APIs
+      }
     };
 
     const startHold = () => {
+      if (!input.readOnly) return;
       cancelHold();
-      fired = false;
+      unlocked = false;
       input.classList.add("at-hold-armed");
       timer = setTimeout(() => {
-        fired = true;
         timer = null;
-        commitCurrentUtc();
+        unlockKeyboard();
       }, holdMs);
     };
 
     const endHold = () => {
-      if (!fired) cancelHold();
+      if (!unlocked) cancelHold();
     };
 
     if (window.PointerEvent) {
@@ -2056,6 +2139,16 @@
       input.addEventListener("mouseup", endHold);
       input.addEventListener("mouseleave", endHold);
     }
+    input.addEventListener("click", (event) => {
+      if (input.readOnly) event.preventDefault();
+    });
+    input.addEventListener("focus", () => {
+      if (input.readOnly) input.blur();
+    });
+    input.addEventListener("blur", () => {
+      input.readOnly = true;
+      unlocked = false;
+    });
     input.dataset.longPressBound = "1";
   }
 
@@ -2087,23 +2180,45 @@
     if (!page || page.dataset.pullToRefreshGuardBound === "1") return;
     let startY = 0;
     let tracking = false;
-
-    page.addEventListener("touchstart", (event) => {
+    let trackingId = null;
+    const onTouchStart = (event) => {
       if (state.view !== "ipad-kiosk") return;
       if (!event.touches || !event.touches.length) return;
-      startY = event.touches[0].clientY;
+      const first = event.touches[0];
+      startY = first.clientY;
+      trackingId = first.identifier;
       tracking = window.scrollY <= 0;
-    }, { passive: true });
+    };
 
-    page.addEventListener("touchmove", (event) => {
+    const onTouchMove = (event) => {
       if (state.view !== "ipad-kiosk") return;
       if (!tracking || !event.touches || !event.touches.length) return;
-      const currentY = event.touches[0].clientY;
+      let activeTouch = event.touches[0];
+      if (trackingId != null) {
+        for (let index = 0; index < event.touches.length; index += 1) {
+          if (event.touches[index].identifier === trackingId) {
+            activeTouch = event.touches[index];
+            break;
+          }
+        }
+      }
+      const currentY = activeTouch.clientY;
       const pullingDown = currentY > (startY + 8);
       if (pullingDown && window.scrollY <= 0) {
         event.preventDefault();
       }
-    }, { passive: false });
+    };
+
+    const onTouchEnd = () => {
+      tracking = false;
+      trackingId = null;
+    };
+
+    page.addEventListener("touchstart", onTouchStart, { passive: true });
+    page.addEventListener("touchmove", onTouchMove, { passive: false });
+    page.addEventListener("touchend", onTouchEnd, { passive: true });
+    page.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
     page.dataset.pullToRefreshGuardBound = "1";
   }
 
@@ -2218,6 +2333,7 @@
     };
 
     const pointer = { drawing: false, x: 0, y: 0 };
+    let lastPersistAt = 0;
     const getPoint = (event) => {
       const rect = canvas.getBoundingClientRect();
       const t = event.touches && event.touches[0];
@@ -2242,6 +2358,11 @@
       ctx.stroke();
       pointer.x = p.x;
       pointer.y = p.y;
+      const now = Date.now();
+      if ((now - lastPersistAt) > 1200) {
+        lastPersistAt = now;
+        writePadSnapshot();
+      }
     };
     const stop = () => {
       pointer.drawing = false;
@@ -2272,6 +2393,13 @@
         if (kioskPadState && typeof kioskPadState.resize === "function") kioskPadState.resize();
       });
       window.__kioskPadResizeBound = "1";
+    }
+    if (!window.__kioskPadUnloadBound) {
+      window.addEventListener("beforeunload", () => {
+        if (state.view !== "ipad-kiosk") return;
+        writePadSnapshot();
+      });
+      window.__kioskPadUnloadBound = "1";
     }
 
     resize();
@@ -3260,191 +3388,8 @@
     }
   }
 
-  function initAdminMiniGame() {
-    const canvas = document.getElementById("admin-mini-game");
-    const startButton = document.getElementById("admin-game-start");
-    const status = document.getElementById("admin-game-status");
-    const highScoreNode = document.getElementById("admin-game-highscore");
-    if (!canvas || !startButton || !status) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const readLocalHighScore = () => {
-      const raw = Number(readStoredValue(ADMIN_GAME_HIGH_SCORE_KEY));
-      return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
-    };
-    const readGlobalHighScore = () => Math.max(0, Math.floor(Number(state.catalog.content.adminGameHighScore || 0)));
-    const readHighScore = () => Math.max(readLocalHighScore(), readGlobalHighScore());
-    const writeHighScore = (score) => {
-      const normalized = Math.max(0, Math.floor(score));
-      writeStoredValue(ADMIN_GAME_HIGH_SCORE_KEY, String(normalized));
-      state.catalog.content.adminGameHighScore = Math.max(readGlobalHighScore(), normalized);
-      if (highScoreNode) highScoreNode.textContent = `High ${normalized}`;
-    };
-    const setHighScoreLabel = () => {
-      if (!highScoreNode) return;
-      highScoreNode.textContent = `High ${readHighScore()}`;
-    };
-
-    if (!adminGameState || adminGameState.canvas !== canvas) {
-      adminGameState = {
-        canvas,
-        ctx,
-        running: false,
-        score: 0,
-        speed: 3.2,
-        gravity: 0.42,
-        jump: -8.8,
-        player: { x: 56, y: 126, w: 16, h: 20, vy: 0, onGround: true },
-        obstacles: [],
-        spawnTick: 0,
-        highScore: readHighScore(),
-        lastFrameAt: 0,
-      };
-    }
-
-    const draw = () => {
-      const game = adminGameState;
-      if (!game || game.canvas !== canvas) return;
-      const { ctx: drawCtx } = game;
-      drawCtx.clearRect(0, 0, canvas.width, canvas.height);
-      drawCtx.fillStyle = "#f4ecdd";
-      drawCtx.fillRect(0, 0, canvas.width, canvas.height);
-      drawCtx.strokeStyle = "rgba(46, 41, 35, 0.24)";
-      drawCtx.beginPath();
-      drawCtx.moveTo(0, 146);
-      drawCtx.lineTo(canvas.width, 146);
-      drawCtx.stroke();
-
-      drawCtx.fillStyle = "#214c5a";
-      drawCtx.fillRect(game.player.x, game.player.y, game.player.w, game.player.h);
-
-      drawCtx.fillStyle = "#8e2e23";
-      game.obstacles.forEach((o) => drawCtx.fillRect(o.x, o.y, o.w, o.h));
-
-      drawCtx.fillStyle = "#181612";
-      drawCtx.font = "12px Trebuchet MS";
-      drawCtx.fillText(`Score: ${Math.floor(game.score)}`, 10, 16);
-    };
-
-    const step = (timestamp) => {
-      const game = adminGameState;
-      if (!game || !game.running || game.canvas !== canvas) return;
-      const now = Number(timestamp || performance.now());
-      if (!game.lastFrameAt) game.lastFrameAt = now;
-      const dtScale = Math.max(0.6, Math.min(3, (now - game.lastFrameAt) / 16.6667));
-      game.lastFrameAt = now;
-      game.score += 0.42 * dtScale;
-      game.speed = Math.min(15, 5.6 + game.score / 55);
-
-      game.player.vy += game.gravity * dtScale;
-      game.player.y += game.player.vy * dtScale;
-      if (game.player.y >= 126) {
-        game.player.y = 126;
-        game.player.vy = 0;
-        game.player.onGround = true;
-      } else game.player.onGround = false;
-
-      game.spawnTick -= dtScale;
-      if (game.spawnTick <= 0) {
-        const height = Math.random() > 0.62 ? 26 : 18;
-        game.obstacles.push({ x: canvas.width + 4, y: 146 - height, w: 14, h: height });
-        game.spawnTick = 34 + Math.floor(Math.random() * 22);
-      }
-
-      game.obstacles.forEach((o) => { o.x -= game.speed * dtScale; });
-      game.obstacles = game.obstacles.filter((o) => o.x + o.w > -8);
-
-      const hit = game.obstacles.some((o) => (
-        game.player.x < o.x + o.w
-        && game.player.x + game.player.w > o.x
-        && game.player.y < o.y + o.h
-        && game.player.y + game.player.h > o.y
-      ));
-      if (hit) {
-        game.running = false;
-        const scored = Math.floor(game.score);
-        if (scored > game.highScore) {
-          game.highScore = scored;
-          writeHighScore(scored);
-          persistAdminGameHighScore(scored);
-        } else setHighScoreLabel();
-        status.textContent = `Game over. Score ${scored}.`;
-        draw();
-        return;
-      }
-      draw();
-      adminGameAnimation = requestAnimationFrame(step);
-    };
-
-    const jump = () => {
-      const game = adminGameState;
-      if (!game) return;
-      if (!game.running) return;
-      if (!game.player.onGround) return;
-      game.player.vy = game.jump;
-      game.player.onGround = false;
-    };
-
-    if (!canvas.dataset.bound) {
-      const onKey = (event) => {
-        if (event.code !== "Space") return;
-        if (state.view !== "admin" || state.admin.panel !== "dashboard") return;
-        event.preventDefault();
-        jump();
-      };
-      document.addEventListener("keydown", onKey);
-      canvas.dataset.bound = "1";
-      canvas.dataset.keyHandler = "1";
-    }
-
-    startButton.onclick = () => {
-      const game = adminGameState;
-      if (!game) return;
-      game.highScore = readHighScore();
-      game.score = 0;
-      game.speed = 5.6;
-      game.player.y = 126;
-      game.player.vy = 0;
-      game.player.onGround = true;
-      game.obstacles = [];
-      game.spawnTick = 14;
-      game.lastFrameAt = 0;
-      game.running = true;
-      status.textContent = "Running...";
-      if (adminGameAnimation) cancelAnimationFrame(adminGameAnimation);
-      draw();
-      adminGameAnimation = requestAnimationFrame(step);
-    };
-
-    const onTap = (event) => {
-      if (state.view !== "admin" || state.admin.panel !== "dashboard") return;
-      event.preventDefault();
-      const game = adminGameState;
-      if (!game) return;
-      if (!game.running) {
-        startButton.click();
-        return;
-      }
-      jump();
-    };
-
-    if (!canvas.dataset.tapBound) {
-      if (window.PointerEvent) canvas.addEventListener("pointerdown", onTap, { passive: false });
-      else canvas.addEventListener("touchstart", onTap, { passive: false });
-      canvas.dataset.tapBound = "1";
-    }
-
-    setHighScoreLabel();
-    draw();
-    if (!status.textContent) status.textContent = "Press Start";
-  }
-
   function stopAdminMiniGame() {
-    if (adminGameAnimation) {
-      cancelAnimationFrame(adminGameAnimation);
-      adminGameAnimation = null;
-    }
-    if (adminGameState) adminGameState.running = false;
+    // Legacy no-op: mini game removed in favor of dashboard metrics.
   }
 
   async function connectSupabaseClient(forceRecreate) {
@@ -3592,7 +3537,6 @@
       state.catalog.content.maintenanceMode = parseMaintenanceModeContent(contentMap.maintenance_mode || "");
       state.catalog.content.maintenanceText = String(contentMap.maintenance_text || state.catalog.content.maintenanceText || "").trim() || "under maintenance: service is undergoing maintenance. do not trust.";
       state.catalog.content.additionalInfoTable = parseAdditionalInfoContent(contentMap.additional_info || "");
-      state.catalog.content.adminGameHighScore = parseAdminGameHighScoreContent(contentMap.admin_game_highscore || "");
       state.admin.manualHtmlDraft = contentHtmlToEditorText("manual", state.catalog.content.manualHtml);
       state.admin.privacyHtmlDraft = contentHtmlToEditorText("privacy", state.catalog.content.privacyHtml);
       state.admin.manualDraftBaselineHtml = state.catalog.content.manualHtml;
@@ -4146,21 +4090,18 @@
     }
   }
 
-  function parseAdminGameHighScoreContent(raw) {
-    const value = Number(String(raw || "").trim());
-    if (!Number.isFinite(value) || value <= 0) return 0;
-    return Math.floor(value);
-  }
-
   function isAnnouncementActive(item, nowMs) {
     if (!item) return false;
-    if (item.permanent) return true;
     const startAt = announcementPartsToUtcIso(item.startDate, item.startTimeUtc);
     const endAt = announcementPartsToUtcIso(item.endDate, item.endTimeUtc);
     const startMs = startAt ? new Date(startAt).getTime() : Number.NaN;
     const endMs = endAt ? new Date(endAt).getTime() : Number.NaN;
     const hasStart = Number.isFinite(startMs);
     const hasEnd = Number.isFinite(endMs);
+    if (item.permanent) {
+      if (hasStart && nowMs < startMs) return false;
+      return true;
+    }
     if (hasStart && nowMs < startMs) return false;
     if (hasEnd && nowMs > endMs) return false;
     return hasStart || hasEnd;
@@ -4642,23 +4583,6 @@
       state.admin.error = error && error.message ? error.message : "Could not save additional information.";
       state.admin.additionalInfoSaveStatus = "Save failed";
       render();
-    }
-  }
-
-  async function persistAdminGameHighScore(score) {
-    const normalized = Math.max(0, Math.floor(Number(score) || 0));
-    if (!normalized) return;
-    if (normalized <= Math.floor(Number(state.catalog.content.adminGameHighScore || 0))) return;
-    state.catalog.content.adminGameHighScore = normalized;
-    const ok = await connectSupabaseClient(false);
-    if (!ok) return;
-    try {
-      await supabaseClient.from("content_pages").upsert(
-        { key: "admin_game_highscore", body_html: String(normalized) },
-        { onConflict: "key" },
-      );
-    } catch {
-      // keep local update; cloud retry happens on next higher score
     }
   }
 
@@ -5586,7 +5510,6 @@
       state.catalog.content.maintenanceMode = parseMaintenanceModeContent(contentMap.maintenance_mode || "");
       state.catalog.content.maintenanceText = String(contentMap.maintenance_text || state.catalog.content.maintenanceText || "").trim() || "under maintenance: service is undergoing maintenance. do not trust.";
       state.catalog.content.additionalInfoTable = parseAdditionalInfoContent(contentMap.additional_info || "");
-      state.catalog.content.adminGameHighScore = parseAdminGameHighScoreContent(contentMap.admin_game_highscore || "");
     } finally {
       loadingPublicCatalog = false;
     }
@@ -5629,8 +5552,12 @@
       state.navlog.tocTod.todEditing = false;
       ensureActivateMinimumRows();
     } else if (kioskRequested && !state.meta.navlogUnlocked) {
-      state.view = "setup";
+      state.view = "access";
       state.meta.accessError = "Enter access key before opening Activate mode.";
+    } else if (!state.meta.navlogUnlocked) {
+      state.view = "access";
+    } else {
+      state.view = "setup";
     }
     touchMonthlyVisitorCounter();
     await loadPublicCatalogFromSupabase();
