@@ -21,6 +21,11 @@
   const ADMIN_GAME_HIGH_SCORE_KEY = "navlog_admin_game_high_score";
   const ANNOUNCEMENT_SEEN_KEY = "navlog_announcement_seen_signature";
   const NAVLOG_KIOSK_PAYLOAD_KEY = "navlog_kiosk_payload_v1";
+  const NAVLOG_KIOSK_PAD_KEY = "navlog_kiosk_pad_v1";
+  const NAVLOG_ACCESS_KEY_UNLOCK = "navlog_access_unlocked_v1";
+  const NAVLOG_MONTHLY_VISITOR_KEY = "navlog_monthly_visitor_marker";
+  const NAVLOG_MONTHLY_VISITOR_COUNT_KEY = "navlog_monthly_visitor_count";
+  const NAVLOG_ACCESS_PASSWORD = "874969";
   const ACTIVATE_MIN_LEGS = 8;
   const ACTIVATE_MIN_RADIOS = 5;
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
@@ -47,6 +52,7 @@
         privacyHtml: "",
         announcements: [],
         maintenanceMode: false,
+        maintenanceText: "under maintenance: service is undergoing maintenance. do not trust.",
         additionalInfoTable: [],
         adminGameHighScore: 0,
       },
@@ -87,6 +93,7 @@
       announcementDrafts: [createEmptyAnnouncementDraft()],
       announcementSaveStatus: "",
       maintenanceMode: false,
+      maintenanceTextDraft: "under maintenance: service is undergoing maintenance. do not trust.",
       maintenanceSaveStatus: "",
       panel: "dashboard",
       additionalInfoPanel: "",
@@ -99,6 +106,10 @@
       lastNonDocView: "setup",
       docBackView: "",
       additionalInfoPanel: "",
+      navlogUnlocked: readStoredValue(NAVLOG_ACCESS_KEY_UNLOCK) === "1",
+      accessError: "",
+      activateInfoOpen: false,
+      monthlyVisitors: 0,
     },
   };
   const TRIG_TOLERANCE = 1e-6;
@@ -131,6 +142,7 @@
       var: "",
       mh: "",
       dev: "",
+      ch: "",
       ta: "",
       gs: "",
       distance: "",
@@ -395,8 +407,9 @@
   function renderSetupScreen() {
     const presetStatus = getPresetStatusMarkup();
     const showResume = shouldShowResumeButton();
+    const accessLocked = !state.meta.navlogUnlocked;
     const maintenanceBanner = state.catalog.content.maintenanceMode
-      ? '<p class="maintenance-warning">Under maintenance: service is undergoing maintenance. Do not trust.</p>'
+      ? `<p class="maintenance-warning">${escapeHtml(state.catalog.content.maintenanceText || "under maintenance: service is undergoing maintenance. do not trust.")}</p>`
       : "";
     return `
       <div class="ui-scale">
@@ -422,9 +435,20 @@
             </label>
           </div>
           <div id="preset-status-slot">${presetStatus}</div>
+          <div class="admin-grid two-col">
+            <label class="setup-field">
+              <span>Access key</span>
+              <input id="navlog-access-key" type="password" placeholder="Enter access key" />
+            </label>
+            <div class="setup-field">
+              <span>Status</span>
+              <p class="preset-status ${accessLocked ? "missing" : "available"}">${accessLocked ? "locked" : "unlocked"}</p>
+            </div>
+          </div>
+          ${state.meta.accessError ? `<p class="admin-status error">${escapeHtml(state.meta.accessError)}</p>` : ""}
           <div class="entry-actions">
-            <button class="action primary" id="open-sheet">Open navlog</button>
-            ${showResume ? `<button class="action" id="resume-sheet">Resume current sheet</button>` : ""}
+            <button class="action primary" id="open-sheet"${accessLocked ? " disabled" : ""}>Open navlog</button>
+            ${showResume ? `<button class="action" id="resume-sheet"${accessLocked ? " disabled" : ""}>Resume current sheet</button>` : ""}
           </div>
         </section>
         ${renderFrontFooter()}
@@ -805,8 +829,8 @@
                     <label class="setup-field admin-announcement-datetime admin-title-gap">
                       <span>Start (Y/M/D) / UTC</span>
                       <div class="admin-inline-inputs">
-                        <input data-admin-announcement-field="${index}:startDate" value="${escapeAttr(formatAnnouncementDateInput(draft.startDate))}" placeholder="yyyy/mm/dd" ${draft.permanent ? "disabled" : ""} />
-                        <input data-admin-announcement-field="${index}:startTimeUtc" value="${escapeAttr(formatAnnouncementTimeInput(draft.startTimeUtc))}" placeholder="hh:mm" ${draft.permanent ? "disabled" : ""} />
+                        <input data-admin-announcement-field="${index}:startDate" value="${escapeAttr(formatAnnouncementDateInput(draft.startDate))}" placeholder="yyyy/mm/dd" />
+                        <input data-admin-announcement-field="${index}:startTimeUtc" value="${escapeAttr(formatAnnouncementTimeInput(draft.startTimeUtc))}" placeholder="hh:mm" />
                       </div>
                     </label>
                     <label class="setup-field admin-announcement-datetime admin-title-gap">
@@ -836,6 +860,13 @@
               <input id="admin-maintenance-flag" type="checkbox" ${state.admin.maintenanceMode ? "checked" : ""} />
               <span>Under maintenance</span>
             </label>
+            <label class="setup-field admin-title-gap">
+              <span>Maintenance text</span>
+              <input id="admin-maintenance-text" value="${escapeAttr(state.admin.maintenanceTextDraft || "")}" />
+            </label>
+            <div class="entry-actions">
+              <button class="action primary" id="admin-maintenance-save" type="button">Save</button>
+            </div>
             <span class="admin-subtle-status">${escapeHtml(state.admin.maintenanceSaveStatus)}</span>
           </div>
           <div class="manual-section${panel === "manual" ? "" : " hidden"}">
@@ -894,15 +925,19 @@
           <div class="manual-section${panel === "dashboard" ? "" : " hidden"}">
             <h3>Overview</h3><br>
             <p class="setup-caption">Select a section from the left menu to manage content.</p>
-            <div class="admin-game-card">
-              <div class="admin-game-stage">
-                <canvas id="admin-mini-game" width="980" height="180" aria-label="Mini runner game"></canvas>
-                <span class="admin-subtle-status admin-game-highscore" id="admin-game-highscore"></span>
-              </div>
-              <div class="entry-actions">
-                <button class="action primary" id="admin-game-start" type="button">Start</button>
-                <span class="admin-subtle-status" id="admin-game-status"></span>
-              </div>
+            <div class="admin-dashboard-grid">
+              <article class="admin-dashboard-card">
+                <h4>Monthly visitors</h4>
+                <p>${escapeHtml(String(state.meta.monthlyVisitors || 0))}</p>
+              </article>
+              <article class="admin-dashboard-card">
+                <h4>Route presets</h4>
+                <p>${escapeHtml(String((state.admin.presets || []).length))}</p>
+              </article>
+              <article class="admin-dashboard-card">
+                <h4>Airports loaded</h4>
+                <p>${escapeHtml(String((state.admin.airports || []).length))}</p>
+              </article>
             </div>
           </div>
           </div>
@@ -961,6 +996,7 @@
           <button class="activate-button" id="activate-ipad-mode" type="button" title="Activate is for cockpit use.">ACTIVATE</button>
           ${activateError ? `<p class="activate-error">${escapeHtml(activateError)}</p>` : ""}
         </section>
+        ${renderActivateInfoModal()}
         ${renderFrontFooter()}
         ${renderBugReportModal()}
         ${renderAnnouncementModal()}
@@ -1001,6 +1037,30 @@
           </div>
         </section>
       </main>
+    `;
+  }
+
+  function renderActivateInfoModal() {
+    if (!state.meta.activateInfoOpen) return "";
+    return `
+      <div class="bug-report-overlay" id="activate-info-overlay">
+        <section class="bug-report-modal" role="dialog" aria-modal="true" aria-label="Activate mode information">
+          <div class="bug-report-head">
+            <h3>Activate Mode Info</h3>
+            <button class="action bug-report-close" id="activate-info-close" type="button">Close</button>
+          </div>
+          <div class="manual-section">
+            <p>Activate opens a focused cockpit view.</p>
+            <p>Only AT fields are editable for quick updates.</p>
+            <p>Press and hold an AT field for 3 seconds to auto-fill current UTC (HHMM).</p>
+            <p>Triple-tap PREFLIGHT PLANNER to open the translucent scratch pad.</p>
+            <p>Scratch pad stays saved, even if Activate page reloads.</p>
+          </div>
+          <div class="bug-report-actions">
+            <button class="action primary" id="activate-info-continue" type="button">Continue</button>
+          </div>
+        </section>
+      </div>
     `;
   }
 
@@ -1048,6 +1108,7 @@
           <div class="head-cell sub split-top tcv-head">TC</div>
           <div class="head-cell sub split-top thv-head">TH</div>
           <div class="head-cell sub split-top mhv-head">MH</div>
+          <div class="head-cell tall chv-head">CH</div>
           <div class="head-cell tall ta-head-vd">${withUnit("TA", speedUnitLabel)}</div>
           <div class="head-cell tall gs-head-vd">${withUnit("GS", speedUnitLabel)}</div>
           <div class="head-cell tall dis-head-vd">${withUnit("DIS", distanceUnitLabel)}</div>
@@ -1160,6 +1221,7 @@
           <input data-leg-field="${index}:mh" value="${escapeAttr(legFieldValue(leg, "mh"))}" />
           <input data-leg-field="${index}:dev" value="${escapeAttr(legFieldValue(leg, "dev"))}" />
         </div>
+        <div class="${legFieldClass(leg, "ch")}"><input data-leg-field="${index}:ch" value="${escapeAttr(legFieldValue(leg, "ch"))}" /></div>
       `
       : `
         <div class="${legFieldClass(leg, "tc")}"><input data-leg-field="${index}:tc" value="${escapeAttr(legFieldValue(leg, "tc"))}" /></div>
@@ -1199,7 +1261,7 @@
         <div class="${legFieldClass(leg, "distance")}"><input data-leg-field="${index}:distance" value="${escapeAttr(legFieldValue(leg, "distance"))}" /></div>
         <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(legFieldValue(leg, "ee"))}" /></div>
         <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(legFieldValue(leg, "et"))}" /></div>
-        <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" ${(index === 0 && state.view !== "ipad-kiosk") ? 'placeholder="AB TIME"' : ""} ${state.view === "ipad-kiosk" ? 'inputmode="numeric" pattern="[0-9]*"' : ""} /></div>
+        <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" ${index === 0 ? 'placeholder="AB TIME"' : ""} ${state.view === "ipad-kiosk" ? 'inputmode="numeric" pattern="[0-9]*"' : ""} /></div>
       </div>
     `;
   }
@@ -1384,6 +1446,25 @@
   }
 
   function wireSetup() {
+    const accessInput = document.getElementById("navlog-access-key");
+    const applyAccessInput = () => {
+      const entered = String(accessInput ? accessInput.value : "").trim();
+      const unlocked = entered === NAVLOG_ACCESS_PASSWORD;
+      state.meta.navlogUnlocked = unlocked;
+      state.meta.accessError = unlocked || !entered ? "" : "Invalid access key.";
+      writeStoredValue(NAVLOG_ACCESS_KEY_UNLOCK, unlocked ? "1" : "");
+      const openButton = document.getElementById("open-sheet");
+      if (openButton) openButton.disabled = !unlocked;
+    };
+    if (accessInput) {
+      accessInput.addEventListener("input", applyAccessInput);
+      accessInput.addEventListener("change", applyAccessInput);
+      if (state.meta.navlogUnlocked) {
+        accessInput.value = NAVLOG_ACCESS_PASSWORD;
+        applyAccessInput();
+      }
+    }
+
     document.getElementById("setup-departure").addEventListener("input", (event) => {
       state.navlog.setup.departure = event.target.value;
       syncSetupPresetStatus();
@@ -1401,6 +1482,11 @@
       syncSetupPresetStatus();
     });
     document.getElementById("open-sheet").addEventListener("click", () => {
+      if (!state.meta.navlogUnlocked) {
+        state.meta.accessError = "Enter valid access key to open navlog.";
+        render();
+        return;
+      }
       seedLegs();
       state.settings = createDefaultSettings();
       state.meta.hasOpenedSheet = true;
@@ -1410,6 +1496,11 @@
     const resumeButton = document.getElementById("resume-sheet");
     if (resumeButton) {
       resumeButton.addEventListener("click", () => {
+        if (!state.meta.navlogUnlocked) {
+          state.meta.accessError = "Enter valid access key to open navlog.";
+          render();
+          return;
+        }
         state.settings.open = false;
         state.meta.hasOpenedSheet = true;
         state.view = "navlog";
@@ -1452,7 +1543,32 @@
           return;
         }
         state.meta.activateError = "";
+        state.meta.activateInfoOpen = true;
+        render();
+      });
+    }
+    const activateInfoClose = document.getElementById("activate-info-close");
+    if (activateInfoClose) {
+      activateInfoClose.addEventListener("click", () => {
+        state.meta.activateInfoOpen = false;
+        render();
+      });
+    }
+    const activateInfoOverlay = document.getElementById("activate-info-overlay");
+    if (activateInfoOverlay) {
+      activateInfoOverlay.addEventListener("click", (event) => {
+        if (event.target !== activateInfoOverlay) return;
+        state.meta.activateInfoOpen = false;
+        render();
+      });
+    }
+    const activateInfoContinue = document.getElementById("activate-info-continue");
+    if (activateInfoContinue) {
+      activateInfoContinue.addEventListener("click", () => {
+        state.meta.activateInfoOpen = false;
         ensureActivateMinimumRows();
+        state.navlog.tocTod.tocEditing = false;
+        state.navlog.tocTod.todEditing = false;
         persistKioskPayload();
         const url = new URL(window.location.href);
         url.searchParams.set("kiosk", "1");
@@ -1795,7 +1911,11 @@
       if (node.tagName !== "BUTTON" && "readOnly" in node) node.readOnly = !keepInteractive;
       if (node.tagName !== "BUTTON" && "disabled" in node) node.disabled = false;
       if ("placeholder" in node) node.placeholder = "";
-      if (allowAt) node.placeholder = "";
+      if (allowAt) {
+        const [rowText] = legField.split(":");
+        const rowIndex = Number(rowText);
+        node.placeholder = rowIndex === 0 ? "AB TIME" : "";
+      }
       node.tabIndex = keepInteractive ? 0 : -1;
     });
     const legInputs = document.querySelectorAll("[data-leg-field]");
@@ -1871,6 +1991,7 @@
 
     wireKioskScratchPadToggle();
     bindKioskDoubleTapGuard();
+    bindKioskPullToRefreshGuard();
     setupKioskScratchPad();
     requestAnimationFrame(() => fitSheetToViewport(".ipad-kiosk-wrap"));
   }
@@ -1879,7 +2000,7 @@
     if (!input || input.dataset.longPressBound === "1") return;
     let timer = null;
     let fired = false;
-    const holdMs = 650;
+    const holdMs = 3000;
 
     const cancelHold = () => {
       if (timer) {
@@ -1961,6 +2082,31 @@
     page.dataset.doubleTapGuardBound = "1";
   }
 
+  function bindKioskPullToRefreshGuard() {
+    const page = document.querySelector(".ipad-kiosk-page");
+    if (!page || page.dataset.pullToRefreshGuardBound === "1") return;
+    let startY = 0;
+    let tracking = false;
+
+    page.addEventListener("touchstart", (event) => {
+      if (state.view !== "ipad-kiosk") return;
+      if (!event.touches || !event.touches.length) return;
+      startY = event.touches[0].clientY;
+      tracking = window.scrollY <= 0;
+    }, { passive: true });
+
+    page.addEventListener("touchmove", (event) => {
+      if (state.view !== "ipad-kiosk") return;
+      if (!tracking || !event.touches || !event.touches.length) return;
+      const currentY = event.touches[0].clientY;
+      const pullingDown = currentY > (startY + 8);
+      if (pullingDown && window.scrollY <= 0) {
+        event.preventDefault();
+      }
+    }, { passive: false });
+    page.dataset.pullToRefreshGuardBound = "1";
+  }
+
   function wireKioskScratchPadToggle() {
     const plannerCell = document.getElementById("kiosk-planner-toggle");
     const overlay = document.getElementById("kiosk-pad-overlay");
@@ -2014,6 +2160,29 @@
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const readPadSnapshot = () => {
+      try {
+        return String(window.localStorage.getItem(NAVLOG_KIOSK_PAD_KEY) || "");
+      } catch {
+        return "";
+      }
+    };
+    const writePadSnapshot = () => {
+      try {
+        window.localStorage.setItem(NAVLOG_KIOSK_PAD_KEY, canvas.toDataURL("image/png"));
+      } catch {
+        // ignore storage quota / private mode errors
+      }
+    };
+    const clearPadSnapshot = () => {
+      try {
+        window.localStorage.removeItem(NAVLOG_KIOSK_PAD_KEY);
+      } catch {
+        // ignore
+      }
+    };
+    let restoredFromStorage = false;
+
     const resize = () => {
       let snapshot = null;
       if (canvas.width > 0 && canvas.height > 0) {
@@ -2034,6 +2203,17 @@
       ctx.strokeStyle = "rgba(24, 22, 18, 0.92)";
       if (snapshot) {
         ctx.drawImage(snapshot, 0, 0, snapshot.width, snapshot.height, 0, 0, rect.width, rect.height);
+      } else if (!restoredFromStorage) {
+        const encoded = readPadSnapshot();
+        if (encoded) {
+          const image = new Image();
+          image.onload = () => {
+            const drawRect = canvas.getBoundingClientRect();
+            ctx.drawImage(image, 0, 0, image.width, image.height, 0, 0, drawRect.width, drawRect.height);
+          };
+          image.src = encoded;
+        }
+        restoredFromStorage = true;
       }
     };
 
@@ -2065,6 +2245,7 @@
     };
     const stop = () => {
       pointer.drawing = false;
+      writePadSnapshot();
     };
 
     if (!canvas.dataset.bound) {
@@ -2081,6 +2262,7 @@
       clearButton.addEventListener("click", () => {
         if (!window.confirm("Clear scratch pad?")) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        clearPadSnapshot();
       });
       clearButton.dataset.bound = "1";
     }
@@ -2347,6 +2529,7 @@
       var: manual.var ? num(leg.var) : null,
       mh: manual.mh ? num(leg.mh) : null,
       dev: manual.dev ? num(leg.dev) : null,
+      ch: manual.ch ? num(leg.ch) : null,
       ta: manual.ta ? parseSpeedInput(leg.ta) : null,
       gs: manual.gs ? parseSpeedInput(leg.gs) : null,
       distance: manual.distance ? parseDistanceInput(leg.distance) : null,
@@ -2446,6 +2629,10 @@
       if (values.mh != null && values.th != null) assignDerived("var", normalizeSignedAngle(values.mh - values.th));
       if (values.mh != null && values.var != null) assignDerived("th", normalizeAngle(values.mh - values.var));
 
+      if (values.mh != null && values.dev != null) assignDerived("ch", normalizeAngle(values.mh + values.dev));
+      if (values.ch != null && values.dev != null) assignDerived("mh", normalizeAngle(values.ch - values.dev));
+      if (values.ch != null && values.mh != null) assignDerived("dev", normalizeSignedAngle(values.ch - values.mh));
+
     }
 
     if (errors.wca && canDerive("wca")) {
@@ -2473,6 +2660,7 @@
       var: resolveDisplayField(leg, manual, lockedField, "var", values.var, maybeSignedDegrees),
       mh: resolveDisplayField(leg, manual, lockedField, "mh", values.mh, maybeHeadingDegrees),
       dev: resolveDisplayField(leg, manual, lockedField, "dev", values.dev, maybeSignedDegrees),
+      ch: resolveDisplayField(leg, manual, lockedField, "ch", values.ch, maybeHeadingDegrees),
       ta: resolveDisplayField(leg, manual, lockedField, "ta", values.ta, formatSpeedDisplay),
       gs: resolveDisplayField(leg, manual, lockedField, "gs", values.gs, formatSpeedDisplay),
       distance: resolveDisplayField(leg, manual, lockedField, "distance", values.distance, formatDistanceDisplay),
@@ -2793,8 +2981,7 @@
         render();
       });
     });
-    if (state.admin.panel === "dashboard") initAdminMiniGame();
-    else stopAdminMiniGame();
+    stopAdminMiniGame();
 
     ["admin-preset-departure", "admin-preset-destination"].forEach((id) => {
       const field = document.getElementById(id);
@@ -2979,12 +3166,28 @@
       });
     });
     const maintenanceToggle = document.getElementById("admin-maintenance-flag");
+    const maintenanceTextInput = document.getElementById("admin-maintenance-text");
+    if (maintenanceTextInput) {
+      maintenanceTextInput.addEventListener("input", () => {
+        state.admin.maintenanceTextDraft = String(maintenanceTextInput.value || "");
+        state.admin.maintenanceSaveStatus = "";
+      });
+    }
     if (maintenanceToggle) {
       maintenanceToggle.addEventListener("change", async () => {
         const enabled = Boolean(maintenanceToggle.checked);
         state.admin.maintenanceMode = enabled;
         state.catalog.content.maintenanceMode = enabled;
-        await saveMaintenanceModeFromAdmin(enabled);
+        await saveMaintenanceModeFromAdmin(enabled, state.admin.maintenanceTextDraft);
+      });
+    }
+    const maintenanceSaveButton = document.getElementById("admin-maintenance-save");
+    if (maintenanceSaveButton) {
+      maintenanceSaveButton.addEventListener("click", async () => {
+        const enabled = Boolean(maintenanceToggle && maintenanceToggle.checked);
+        const text = String(maintenanceTextInput ? maintenanceTextInput.value : state.admin.maintenanceTextDraft);
+        state.admin.maintenanceTextDraft = text;
+        await saveMaintenanceModeFromAdmin(enabled, text);
       });
     }
     const additionalPanelButtons = Array.from(document.querySelectorAll("[data-admin-additional-panel]"));
@@ -3387,6 +3590,7 @@
       state.catalog.content.privacyHtml = contentMap.privacy || "";
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
       state.catalog.content.maintenanceMode = parseMaintenanceModeContent(contentMap.maintenance_mode || "");
+      state.catalog.content.maintenanceText = String(contentMap.maintenance_text || state.catalog.content.maintenanceText || "").trim() || "under maintenance: service is undergoing maintenance. do not trust.";
       state.catalog.content.additionalInfoTable = parseAdditionalInfoContent(contentMap.additional_info || "");
       state.catalog.content.adminGameHighScore = parseAdminGameHighScoreContent(contentMap.admin_game_highscore || "");
       state.admin.manualHtmlDraft = contentHtmlToEditorText("manual", state.catalog.content.manualHtml);
@@ -3397,6 +3601,7 @@
       state.admin.privacyDraftBaselineText = state.admin.privacyHtmlDraft;
       state.admin.announcementDrafts = normalizeAnnouncementDrafts(state.catalog.content.announcements, false);
       state.admin.maintenanceMode = Boolean(state.catalog.content.maintenanceMode);
+      state.admin.maintenanceTextDraft = String(state.catalog.content.maintenanceText || "");
       state.admin.maintenanceSaveStatus = "";
       state.admin.additionalInfoDraft = normalizeAdditionalInfoTable(state.catalog.content.additionalInfoTable);
       evaluateAnnouncementsPrompt();
@@ -4382,7 +4587,7 @@
     await persistAnnouncementsToDatabase(normalizedAll, "Saved");
   }
 
-  async function saveMaintenanceModeFromAdmin(enabled) {
+  async function saveMaintenanceModeFromAdmin(enabled, textValue) {
     const ok = await connectSupabaseClient(false);
     if (!ok) {
       render();
@@ -4390,14 +4595,20 @@
     }
     state.admin.error = "";
     state.admin.notice = "";
+    const text = String(textValue || "").trim() || "under maintenance: service is undergoing maintenance. do not trust.";
     try {
       const { error } = await supabaseClient.from("content_pages").upsert(
-        { key: "maintenance_mode", body_html: enabled ? "1" : "0" },
+        [
+          { key: "maintenance_mode", body_html: enabled ? "1" : "0" },
+          { key: "maintenance_text", body_html: text },
+        ],
         { onConflict: "key" },
       );
       if (error) throw error;
       state.catalog.content.maintenanceMode = Boolean(enabled);
+      state.catalog.content.maintenanceText = text;
       state.admin.maintenanceMode = Boolean(enabled);
+      state.admin.maintenanceTextDraft = text;
       state.admin.maintenanceSaveStatus = `Saved ${formatAdminSaveTime()}`;
       evaluateAnnouncementsPrompt();
       render();
@@ -4549,6 +4760,7 @@
       syncLegField(index, "var", leg.var, activeEdit, leg);
       syncLegField(index, "mh", leg.mh, activeEdit, leg);
       syncLegField(index, "dev", leg.dev, activeEdit, leg);
+      syncLegField(index, "ch", leg.ch, activeEdit, leg);
       syncLegField(index, "ta", leg.ta, activeEdit, leg);
       syncLegField(index, "gs", leg.gs, activeEdit, leg);
       syncLegField(index, "distance", leg.distance, activeEdit, leg);
@@ -4567,6 +4779,7 @@
       syncLegDerived(index, "var", Boolean(leg._derived && leg._derived.var));
       syncLegDerived(index, "mh", Boolean(leg._derived && leg._derived.mh));
       syncLegDerived(index, "dev", Boolean(leg._derived && leg._derived.dev));
+      syncLegDerived(index, "ch", Boolean(leg._derived && leg._derived.ch));
       syncLegDerived(index, "ta", Boolean(leg._derived && leg._derived.ta));
       syncLegDerived(index, "gs", Boolean(leg._derived && leg._derived.gs));
       syncLegDerived(index, "distance", Boolean(leg._derived && leg._derived.distance));
@@ -4885,7 +5098,7 @@
   function hasMeaningfulSheetData() {
     const header = state.navlog.header;
     const headerValues = [header.aircraft, header.rpCNo, header.gphPph, header.date, header.timeUtc];
-    const legValues = state.navlog.legs.flatMap((leg) => [leg.route, leg.cas, leg.alt, leg.temp, leg.windDir, leg.windSpd, leg.tc, leg.wca, leg.ta, leg.gs, leg.distance, leg.ee, leg.et, leg.at]);
+    const legValues = state.navlog.legs.flatMap((leg) => [leg.route, leg.cas, leg.alt, leg.temp, leg.windDir, leg.windSpd, leg.tc, leg.wca, leg.th, leg.var, leg.mh, leg.dev, leg.ch, leg.ta, leg.gs, leg.distance, leg.ee, leg.et, leg.at]);
     const radioValues = state.navlog.radios.flatMap((row) => [row.location, row.cptAtis, row.depAap, row.twr, row.gnd, row.fss, row.remarks]);
     const tocTodValues = [state.navlog.tocTod.roc, state.navlog.tocTod.rod, state.navlog.tocTod.tocDistance, state.navlog.tocTod.tocTime, state.navlog.tocTod.todDistance, state.navlog.tocTod.todTime];
     const footerValues = [state.navlog.depAtisCode, state.navlog.destinAtisCode];
@@ -4940,7 +5153,7 @@
   }
 
   function isDegreeField(field) {
-    return field === "tc" || field === "wca" || field === "windDir" || field === "th" || field === "var" || field === "mh" || field === "dev";
+    return field === "tc" || field === "wca" || field === "windDir" || field === "th" || field === "var" || field === "mh" || field === "dev" || field === "ch";
   }
 
   function maybeDegrees(value) {
@@ -5238,8 +5451,8 @@
       if (pdfLayout === "printable") {
         pdf = new jsPDF("p", "mm", "a4");
         const pageHeight = 297;
-        const marginLeft = 8;
-        const marginTop = 8;
+        const marginLeft = 4;
+        const marginTop = 4;
         const bottomPadding = 10;
         const exportWidth = 108;
         const usableWidth = exportWidth;
@@ -5371,6 +5584,7 @@
       if (typeof contentMap.privacy === "string") state.catalog.content.privacyHtml = contentMap.privacy;
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
       state.catalog.content.maintenanceMode = parseMaintenanceModeContent(contentMap.maintenance_mode || "");
+      state.catalog.content.maintenanceText = String(contentMap.maintenance_text || state.catalog.content.maintenanceText || "").trim() || "under maintenance: service is undergoing maintenance. do not trust.";
       state.catalog.content.additionalInfoTable = parseAdditionalInfoContent(contentMap.additional_info || "");
       state.catalog.content.adminGameHighScore = parseAdminGameHighScoreContent(contentMap.admin_game_highscore || "");
     } finally {
@@ -5378,14 +5592,47 @@
     }
   }
 
+  function touchMonthlyVisitorCounter() {
+    const now = new Date();
+    const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+    let marker = "";
+    let count = 0;
+    try {
+      marker = String(window.localStorage.getItem(NAVLOG_MONTHLY_VISITOR_KEY) || "");
+      count = Number(window.localStorage.getItem(NAVLOG_MONTHLY_VISITOR_COUNT_KEY) || 0);
+    } catch {
+      marker = "";
+      count = 0;
+    }
+    if (!Number.isFinite(count) || count < 0) count = 0;
+    if (marker !== monthKey) {
+      marker = monthKey;
+      count = 0;
+    }
+    count = Math.max(0, Math.floor(count)) + 1;
+    try {
+      window.localStorage.setItem(NAVLOG_MONTHLY_VISITOR_KEY, marker);
+      window.localStorage.setItem(NAVLOG_MONTHLY_VISITOR_COUNT_KEY, String(count));
+    } catch {
+      // ignore storage errors
+    }
+    state.meta.monthlyVisitors = count;
+  }
+
   async function initializeApp() {
     const params = new URLSearchParams(window.location.search);
     const kioskRequested = params.get("kiosk") === "1";
-    if (kioskRequested) {
+    if (kioskRequested && state.meta.navlogUnlocked) {
       state.view = "ipad-kiosk";
       restoreKioskPayload();
+      state.navlog.tocTod.tocEditing = false;
+      state.navlog.tocTod.todEditing = false;
       ensureActivateMinimumRows();
+    } else if (kioskRequested && !state.meta.navlogUnlocked) {
+      state.view = "setup";
+      state.meta.accessError = "Enter access key before opening Activate mode.";
     }
+    touchMonthlyVisitorCounter();
     await loadPublicCatalogFromSupabase();
     evaluateAnnouncementsPrompt();
     render();
