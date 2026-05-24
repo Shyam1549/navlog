@@ -1200,15 +1200,16 @@
           <div class="bug-report-head">
             <h3>Cockpit Mode</h3>
           </div>
-          <div class="manual-section cockpit-info-copy">
-            <p>You are about to enter Cockpit Mode.</p>
-            <p>Recommended: Turn on guided Access, Turn on DND.</p>
-            <p>Tap "SCRATCHPAD" (on the top right) 3 times to use the scratch pad.</p>
-            <p>Press and hold Actual Time (AT) for 3 seconds to auto-enter current ZULU time.</p>
-            <p>To use keyboard entry for any of the interactive fields (AT, ATIS, and LOCATION): tap the respective table cell 3 times.</p>
-            <p>For inbound/outbound Time estimate, press and hold the route for 3 seconds.</p>
+          <div class="cockpit-info-copy">
+            <p class="cockpit-info-intro">You are about to enter Cockpit Mode.</p>
+            <p class="cockpit-info-recommend">Recommended: Turn on Guided Access and DND.</p>
+            <ul class="cockpit-info-list">
+              <li>Tap "SCRATCHPAD" (top right) 3 times to open the scratch pad.</li>
+              <li>Press and hold Actual Time (AT) for 3 seconds to auto-enter current ZULU time.</li>
+              <li>To use keyboard entry for interactive fields (AT, ATIS, LOCATION), tap the respective table cell 2 times.</li>
+              <li>For inbound/outbound time estimate, press and hold the route for 3 seconds.</li>
+            </ul>
           </div>
-          <br />
           <div class="bug-report-actions">
             <button class="action primary" id="activate-info-continue" type="button">Continue</button>
           </div>
@@ -4023,11 +4024,10 @@
       });
     }
     if (maintenanceToggle) {
-      maintenanceToggle.addEventListener("change", async () => {
+      maintenanceToggle.addEventListener("change", () => {
         const enabled = Boolean(maintenanceToggle.checked);
         state.admin.maintenanceMode = enabled;
-        state.catalog.content.maintenanceMode = enabled;
-        await saveMaintenanceModeFromAdmin(enabled, state.admin.maintenanceTextDraft);
+        state.admin.maintenanceSaveStatus = "";
       });
     }
     const maintenanceSaveButton = document.getElementById("admin-maintenance-save");
@@ -6037,6 +6037,37 @@
         windowWidth: pdfViewportWidth,
         windowHeight: pdfViewportHeight,
         onclone: (doc) => {
+          const clearInputs = (container) => {
+            if (!container) return;
+            container.querySelectorAll("input").forEach((input) => {
+              input.value = "";
+              input.setAttribute("value", "");
+              input.placeholder = "";
+            });
+          };
+          const stripRouteHintClasses = (rowNode) => {
+            if (!rowNode) return;
+            rowNode.querySelectorAll(".route-cell").forEach((routeCell) => {
+              routeCell.classList.remove("first-route-hint");
+              routeCell.classList.remove("last-route-hint");
+              routeCell.classList.remove("show-route-hint");
+            });
+          };
+          const ensureMinimumRows = (bodyNode, rowSelector, minimumRows) => {
+            if (!bodyNode) return;
+            const currentRows = () => Array.from(bodyNode.children).filter((child) => child.matches(rowSelector));
+            let rows = currentRows();
+            if (!rows.length) return;
+            const template = rows[rows.length - 1];
+            while (rows.length < minimumRows) {
+              const clone = template.cloneNode(true);
+              clearInputs(clone);
+              stripRouteHintClasses(clone);
+              bodyNode.appendChild(clone);
+              rows = currentRows();
+            }
+          };
+
           doc.body.classList.add("pdf-export");
           doc.body.classList.add(pdfLayout === "printable" ? "pdf-export-printable" : "pdf-export-default");
 
@@ -6046,6 +6077,10 @@
           doc.querySelectorAll("input").forEach((input) => {
             input.placeholder = "";
           });
+
+          // PDF-only row floor: keep route and airport tables expanded to printable minimums.
+          ensureMinimumRows(doc.querySelector(".table-body"), ".leg-row", 8);
+          ensureMinimumRows(doc.querySelector(".radio-body"), ".radio-row", 5);
         },
       });
       const image = canvas.toDataURL("image/png");

@@ -676,7 +676,12 @@ body.kiosk-mode .time-head {
   font-weight: 700;
 }
 
-.sheet-wrap { overflow: visible; margin-bottom: 16px; }
+.sheet-wrap {
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  margin-bottom: 16px;
+}
 .sheet {
   width: 100%;
   min-width: 0;
@@ -896,21 +901,50 @@ body.kiosk-mode .time-head {
 }
 
 .cockpit-info-modal {
-  width: min(720px, 100%);
+  width: min(760px, 100%);
 }
 
 .cockpit-info-copy {
-  margin-top: 8px;
+  margin-top: 10px;
+  border: 1px solid rgba(33, 76, 90, 0.2);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 13px 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.cockpit-info-intro {
+  margin: 0;
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.cockpit-info-recommend {
+  margin: 0;
+  color: #35505b;
+  font-size: 0.9rem;
+}
+
+.cockpit-info-list {
+  margin: 0;
+  padding-left: 20px;
   display: grid;
   gap: 8px;
 }
 
-.cockpit-info-copy p {
+.cockpit-info-copy p,
+.cockpit-info-copy li {
   margin: 0;
+  line-height: 1.35;
+}
+
+.cockpit-info-copy li {
+  color: #1b2e36;
 }
 
 .cockpit-info-modal .bug-report-actions {
-  margin-top: 8px;
+  margin-top: 14px;
 }
 
 #kiosk-route-estimate-overlay,
@@ -1873,7 +1907,6 @@ body.kiosk-mode .field input.at-hold-done {
 .admin-maintenance-toggle {
   margin-top: 12px;
   padding-top: 8px;
-  border-top: 1px dashed rgba(46, 41, 35, 0.2);
 }
 
 .hidden {
@@ -2398,8 +2431,9 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   }
 
   .sheet-wrap {
-    overflow-x: hidden;
+    overflow-x: auto;
     overflow-y: visible;
+    overscroll-behavior-x: contain;
     padding-bottom: 4px;
   }
 
@@ -2435,22 +2469,63 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   .topbar.centered {
     grid-template-columns: 1fr;
     gap: 12px;
+    padding: 12px;
+  }
+
+  .topbar.centered:not(.navlog-topbar) .top-side,
+  .topbar.centered:not(.navlog-topbar) .top-side.right {
+    justify-content: center;
   }
 
   .navlog-topbar {
-    grid-template-columns: auto 1fr auto;
-    gap: 8px;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "title"
+      "clock"
+      "back"
+      "actions";
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .navlog-topbar .navlog-back {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    justify-self: center;
+  }
+
+  .navlog-topbar .navlog-clock,
+  .navlog-topbar .navlog-actions {
+    justify-self: center;
+  }
+
+  .navlog-topbar .navlog-actions {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .entry-page .setup-card .setup-grid .swap-button {
+    justify-self: center;
+  }
+
+  .entry-page .setup-card .entry-actions {
+    justify-content: center;
   }
 
   .top-side { justify-content: flex-start; }
   .top-side.right { justify-content: flex-end; }
+  .navlog-topbar .top-side.navlog-back,
+  .navlog-topbar .top-side.right.navlog-actions {
+    justify-content: center;
+  }
 
   .swap-button {
     width: 42px;
     min-width: 42px;
   }
 
-  .sheet { min-width: 920px; }
+  .sheet { min-width: 1000px; }
   .kiosk-event-timer {
     grid-template-columns: 1fr auto;
     grid-template-areas:
@@ -2465,38 +2540,6 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   .kiosk-event-countdown { grid-area: countdown; }
   .kiosk-event-target { grid-area: target; justify-self: end; }
   .kiosk-estimate-grid { grid-template-columns: 1fr; }
-  .header-box.static.navlog-box { font-size: 1.4rem; }
-  .head-cell.group { font-size: 0.84rem; }
-  .head-cell.sub,
-  .head-cell.tall { font-size: 0.84rem; }
-
-  .leg-row { min-height: 76px; }
-  .field input {
-    min-height: 76px;
-    height: 76px;
-    font-size: 0.86rem;
-  }
-  .route-main .remove-chip,
-  .route-main .blank-chip {
-    min-height: 76px;
-    height: 76px;
-  }
-  .route-main input {
-    padding-bottom: 20px;
-  }
-  .route-inline-hint {
-    right: 28px;
-    font-size: 0.8rem;
-    line-height: 1.05;
-    padding: 0 2px;
-  }
-
-  .radio-row { min-height: 74px; }
-  .radio-row input {
-    min-height: 72px;
-    font-size: 0.82rem;
-  }
-
   .admin-preset-table,
   .admin-airport-table {
     overflow-x: auto;
@@ -2565,8 +2608,29 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   .entry-hero,
   .topbar { border-radius: 14px; }
 
+  .topbar h1 {
+    margin-top: 4px;
+    font-size: clamp(1.35rem, 7vw, 1.72rem);
+  }
+
+  .action,
+  .back-link {
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 0.84rem;
+  }
+
+  .navlog-topbar .navlog-actions {
+    gap: 7px;
+  }
+
+  .navlog-topbar .navlog-actions .action,
+  .navlog-topbar .navlog-back .back-link {
+    min-width: 0;
+  }
+
   .sheet {
-    min-width: 860px;
+    min-width: 1000px;
     padding: 10px;
   }
 
@@ -2637,17 +2701,6 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
   .manual-row {
     gap: 5px;
-  }
-
-  .route-inline-hint {
-    right: 24px;
-    font-size: 0.76rem;
-    line-height: 1.03;
-  }
-
-  .route-main,
-  .location-cell {
-    grid-template-columns: minmax(0, 1fr) 24px;
   }
 
   .additional-info-table {
