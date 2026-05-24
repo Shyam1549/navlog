@@ -2297,7 +2297,7 @@
       if ((now - lastTapAt) > tapWindowMs) tapCount = 0;
       tapCount += 1;
       lastTapAt = now;
-      if (tapCount >= 3) {
+      if (tapCount >= 2) {
         tapCount = 0;
         unlockKeyboard();
       }
