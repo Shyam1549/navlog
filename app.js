@@ -871,8 +871,7 @@
           <div class="manual-section admin-maintenance-panel${panel === "announcements" ? "" : " hidden"}">
             <h3>Maintenance</h3>
             <label class="setup-field admin-title-gap">
-              <span>Maintenance text</span>
-              <input id="admin-maintenance-text" value="${escapeAttr(state.admin.maintenanceTextDraft || "")}" />
+              <input id="admin-maintenance-text" value="${escapeAttr(state.admin.maintenanceTextDraft || "")}" placeholder="Maintenance message" />
             </label>
             <label class="admin-toggle-line admin-maintenance-toggle">
               <input id="admin-maintenance-flag" type="checkbox" ${state.admin.maintenanceMode ? "checked" : ""} />
@@ -1095,8 +1094,8 @@
           <div class="manual-section">
             <p>Activate opens a focused cockpit view.</p>
             <p>AT, LOCATION, and ATIS code fields are interactive.</p>
-            <p>Interactive fields stay locked on tap to avoid accidental keyboard popups.</p>
-            <p>Press and hold any interactive field for 4 seconds to unlock and type.</p>
+            <p>Interactive fields stay locked on normal tap to avoid accidental keyboard popups.</p>
+            <p>Tap any interactive field 3 times quickly to unlock keyboard entry.</p>
             <p>Triple-tap PREFLIGHT PLANNER to open the translucent scratch pad.</p>
             <p>Scratch pad stays saved, even if Activate page reloads.</p>
           </div>
@@ -1413,15 +1412,25 @@
       <section class="toc-tod">
         <div class="toc-tod-card ${!t.tocEditing ? "resolved" : ""}">
           <button type="button" class="toc-tod-title" data-edit-toc="toc">TOC</button>
-          <input class="toc-entry" data-toc-entry="roc" value="${escapeAttr(t.roc)}" placeholder="Enter ROC" />
-          <input data-toc="tocDistance" value="${escapeAttr(t.tocDistance)}" placeholder="Distance" ${t.tocEditing ? "" : "readonly"} />
-          <input data-toc="tocTime" value="${escapeAttr(t.tocTime)}" placeholder="Time" ${t.tocEditing ? "" : "readonly"} />
+          ${
+            t.tocEditing
+              ? `<input class="toc-entry" data-toc-entry="roc" value="${escapeAttr(t.roc)}" placeholder="Enter ROC" />`
+              : `
+                <input data-toc="tocDistance" value="${escapeAttr(t.tocDistance)}" placeholder="Distance" readonly />
+                <input data-toc="tocTime" value="${escapeAttr(t.tocTime)}" placeholder="Time" readonly />
+              `
+          }
         </div>
         <div class="toc-tod-card ${!t.todEditing ? "resolved" : ""}">
           <button type="button" class="toc-tod-title" data-edit-toc="tod">TOD</button>
-          <input class="toc-entry" data-toc-entry="rod" value="${escapeAttr(t.rod)}" placeholder="Enter ROD" />
-          <input data-toc="todDistance" value="${escapeAttr(t.todDistance)}" placeholder="Distance" ${t.todEditing ? "" : "readonly"} />
-          <input data-toc="todTime" value="${escapeAttr(t.todTime)}" placeholder="Time" ${t.todEditing ? "" : "readonly"} />
+          ${
+            t.todEditing
+              ? `<input class="toc-entry" data-toc-entry="rod" value="${escapeAttr(t.rod)}" placeholder="Enter ROD" />`
+              : `
+                <input data-toc="todDistance" value="${escapeAttr(t.todDistance)}" placeholder="Distance" readonly />
+                <input data-toc="todTime" value="${escapeAttr(t.todTime)}" placeholder="Time" readonly />
+              `
+          }
         </div>
       </section>
     `;
@@ -1825,33 +1834,10 @@
       });
     });
 
-    document.querySelectorAll("[data-toc]").forEach((input) => {
-      input.addEventListener("input", (event) => {
-        const field = String(event.target.dataset.toc || "");
-        if (!field) return;
-        state.navlog.tocTod[field] = event.target.value;
-      });
-      input.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        const field = String(event.target.dataset.toc || "");
-        if (!field) return;
-        state.navlog.tocTod[field] = event.target.value;
-        computeRouteMath();
-        updateComputedCells();
-      });
-      input.addEventListener("blur", (event) => {
-        const field = String(event.target.dataset.toc || "");
-        if (!field) return;
-        state.navlog.tocTod[field] = event.target.value;
-      });
-    });
-
     document.querySelectorAll("[data-edit-toc]").forEach((button) => {
       button.addEventListener("click", () => {
-        if (button.dataset.editToc === "toc") state.navlog.tocTod.tocEditing = !state.navlog.tocTod.tocEditing;
-        if (button.dataset.editToc === "tod") state.navlog.tocTod.todEditing = !state.navlog.tocTod.todEditing;
-        computeRouteMath();
+        if (button.dataset.editToc === "toc") state.navlog.tocTod.tocEditing = true;
+        if (button.dataset.editToc === "tod") state.navlog.tocTod.todEditing = true;
         render();
       });
     });
@@ -2084,17 +2070,10 @@
 
   function wireKioskDelayedKeyboard(input) {
     if (!input || input.dataset.longPressBound === "1") return;
-    let timer = null;
     let unlocked = false;
-    const holdMs = 4000;
-
-    const cancelHold = () => {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      input.classList.remove("at-hold-armed");
-    };
+    let tapCount = 0;
+    let lastTapAt = 0;
+    const tapWindowMs = 900;
 
     const unlockKeyboard = () => {
       unlocked = true;
@@ -2111,33 +2090,22 @@
       }
     };
 
-    const startHold = () => {
+    const registerTap = () => {
       if (!input.readOnly) return;
-      cancelHold();
-      unlocked = false;
-      input.classList.add("at-hold-armed");
-      timer = setTimeout(() => {
-        timer = null;
+      const now = Date.now();
+      if ((now - lastTapAt) > tapWindowMs) tapCount = 0;
+      tapCount += 1;
+      lastTapAt = now;
+      if (tapCount >= 3) {
+        tapCount = 0;
         unlockKeyboard();
-      }, holdMs);
+      }
     };
 
-    const endHold = () => {
-      if (!unlocked) cancelHold();
-    };
-
-    if (window.PointerEvent) {
-      input.addEventListener("pointerdown", startHold);
-      input.addEventListener("pointerup", endHold);
-      input.addEventListener("pointerleave", endHold);
-      input.addEventListener("pointercancel", endHold);
-    } else {
-      input.addEventListener("touchstart", startHold, { passive: true });
-      input.addEventListener("touchend", endHold);
-      input.addEventListener("touchcancel", endHold);
-      input.addEventListener("mousedown", startHold);
-      input.addEventListener("mouseup", endHold);
-      input.addEventListener("mouseleave", endHold);
+    if (window.PointerEvent) input.addEventListener("pointerup", registerTap);
+    else {
+      input.addEventListener("touchend", registerTap, { passive: true });
+      input.addEventListener("mouseup", registerTap);
     }
     input.addEventListener("click", (event) => {
       if (input.readOnly) event.preventDefault();
@@ -2148,6 +2116,7 @@
     input.addEventListener("blur", () => {
       input.readOnly = true;
       unlocked = false;
+      tapCount = 0;
     });
     input.dataset.longPressBound = "1";
   }
