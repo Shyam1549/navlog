@@ -5624,7 +5624,6 @@
     if (!routeCells.length) {
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
-      delete marker.dataset.routeProgressX;
       return;
     }
 
@@ -5632,13 +5631,12 @@
     if (!progressState) {
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
-      delete marker.dataset.routeProgressX;
       return;
     }
 
+    const firstRouteCell = routeCells[0];
+    const dividerX = (firstRouteCell.offsetLeft + firstRouteCell.offsetWidth) - 1;
     const tableBodyRect = tableBody.getBoundingClientRect();
-    const firstRouteCellRect = routeCells[0].getBoundingClientRect();
-    const dividerX = (firstRouteCellRect.right - tableBodyRect.left) - 1;
     const waypointYPositions = routeCells.map((cell) => {
       const cellRect = cell.getBoundingClientRect();
       return ((cellRect.top + cellRect.bottom) / 2) - tableBodyRect.top;
@@ -5646,7 +5644,6 @@
     if (!waypointYPositions.length) {
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
-      delete marker.dataset.routeProgressX;
       return;
     }
 
@@ -5668,12 +5665,7 @@
       markerY = waypointYPositions[waypointIndex];
     }
 
-    const roundedDividerX = Math.round(dividerX);
-    const lockedX = Number(marker.dataset.routeProgressX);
-    if (!Number.isFinite(lockedX) || Math.abs(lockedX - roundedDividerX) > 1 || !marker.style.left) {
-      marker.dataset.routeProgressX = String(roundedDividerX);
-      marker.style.left = `${roundedDividerX}px`;
-    }
+    marker.style.left = `${Math.round(dividerX)}px`;
     marker.style.top = `${Math.round(markerY)}px`;
     marker.classList.add("visible");
     marker.classList.toggle("overdue", Boolean(progressState.overdue));
