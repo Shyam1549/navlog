@@ -803,6 +803,7 @@ body.kiosk-mode .time-head {
   margin: 8px 0 10px;
   color: var(--muted);
   font-weight: 700;
+  min-height: 1.2em;
 }
 
 .kiosk-direction-toggle {
@@ -874,17 +875,6 @@ body.kiosk-mode .time-head {
   margin: 12px 0 0;
   color: #203640;
   font-weight: 700;
-}
-
-.kiosk-estimate-live {
-  margin: 11px 0 0;
-  color: #254a59;
-  font-weight: 700;
-  font-family: "JetBrains Mono", "Cascadia Code", monospace;
-}
-
-.kiosk-estimate-live.empty {
-  display: none;
 }
 
 .kiosk-estimate-error {
@@ -1266,6 +1256,39 @@ body.kiosk-mode .field input.at-hold-done {
   -webkit-text-fill-color: transparent;
 }
 
+body.kiosk-mode .header-box .date-input-wrap input[data-header="date"] {
+  display: none !important;
+}
+
+body.kiosk-mode .date-picker-proxy {
+  position: static;
+  inset: auto;
+  width: 100%;
+  height: auto;
+  min-height: 56px !important;
+  opacity: 1;
+  pointer-events: none;
+  border: 0;
+  padding: 8px 14px 14px;
+  cursor: default;
+  z-index: 1;
+  color: #111;
+  -webkit-text-fill-color: #111;
+  caret-color: auto;
+  background: transparent;
+  clip-path: none;
+}
+
+body.kiosk-mode .date-picker-proxy::-webkit-datetime-edit,
+body.kiosk-mode .date-picker-proxy::-webkit-datetime-edit-fields-wrapper,
+body.kiosk-mode .date-picker-proxy::-webkit-datetime-edit-text,
+body.kiosk-mode .date-picker-proxy::-webkit-datetime-edit-month-field,
+body.kiosk-mode .date-picker-proxy::-webkit-datetime-edit-day-field,
+body.kiosk-mode .date-picker-proxy::-webkit-datetime-edit-year-field {
+  color: #111;
+  -webkit-text-fill-color: #111;
+}
+
 @media (pointer: fine) {
   .date-picker-proxy {
     width: 0;
@@ -1404,27 +1427,27 @@ body.kiosk-mode .field input.at-hold-done {
   top: 0;
   transform: translate(-50%, -50%);
   display: block;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 999px;
   background: #1f9d4c;
-  box-shadow: 0 0 0 1px rgba(8, 38, 18, 0.35);
+  box-shadow: 0 0 0 1px rgba(8, 38, 18, 0.8);
 }
 
 .route-progress-marker.overdue .route-progress-dot {
   background: #b32525;
-  box-shadow: 0 0 0 1px rgba(71, 11, 11, 0.35);
+  box-shadow: 0 0 0 1px rgba(71, 11, 11, 0.8);
 }
 
 .route-waypoint-marker {
   position: absolute;
-  right: -1px;
+  left: calc(100% - 1px);
   top: 50%;
-  transform: translate(50%, -50%);
-  width: 5px;
-  height: 5px;
+  transform: translate(-50%, -50%);
+  width: 7px;
+  height: 7px;
   border-radius: 999px;
-  background: rgba(33, 76, 90, 0.38);
+  background: #315360;
   pointer-events: none;
   z-index: 2;
 }

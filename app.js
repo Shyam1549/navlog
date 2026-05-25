@@ -1105,6 +1105,8 @@
     const model = state.meta.kioskRouteEstimate;
     if (!model || !model.open) return "";
     const liveDistanceText = computeKioskRouteLiveDistanceText(model);
+    const routeLabel = String(model.routeLabel || "Waypoint");
+    const routeContext = liveDistanceText ? `${routeLabel} (${liveDistanceText})` : routeLabel;
     return `
       <div class="bug-report-overlay" id="kiosk-route-estimate-overlay">
         <section class="bug-report-modal kiosk-estimate-modal" role="dialog" aria-modal="true" aria-label="Route estimate calculator">
@@ -1112,7 +1114,7 @@
             <h3>Route Estimate</h3>
             <button class="action bug-report-close" id="kiosk-route-estimate-close" type="button">Close</button>
           </div>
-          <p class="kiosk-estimate-context">${escapeHtml(model.routeLabel || "Waypoint")}</p>
+          <p class="kiosk-estimate-context" id="kiosk-estimate-context">${escapeHtml(routeContext)}</p>
           <div class="kiosk-direction-toggle" id="kiosk-route-estimate-direction">
             <button type="button" class="kiosk-direction-btn ${model.direction === "inbound" ? "active" : ""}" data-kiosk-direction="inbound">Inbound</button>
             <button type="button" class="kiosk-direction-btn ${model.direction === "outbound" ? "active" : ""}" data-kiosk-direction="outbound">Outbound</button>
@@ -1132,7 +1134,6 @@
               <input id="kiosk-route-estimate-gs" value="${escapeAttr(model.groundspeed)}" inputmode="decimal" />
             </label>
           </div>
-          <p class="kiosk-estimate-live${liveDistanceText ? "" : " empty"}" id="kiosk-route-live-distance">${escapeHtml(liveDistanceText)}</p>
           ${model.resultHhmm ? `<p class="kiosk-estimate-result">Estimate: <strong>${escapeHtml(model.resultHhmm)}Z</strong></p>` : ""}
           ${model.error ? `<p class="kiosk-estimate-error">${escapeHtml(model.error)}</p>` : ""}
           <div class="kiosk-estimate-actions">
@@ -1306,9 +1307,11 @@
         ${tableHead}
         <div class="table-body">
           ${state.navlog.legs.map((leg, index) => renderLegRow(leg, index, variationDeviationEnabled)).join("")}
-          <div class="route-progress-marker" id="route-progress-marker" aria-hidden="true">
-            <span class="route-progress-dot"></span>
-          </div>
+          ${state.view === "ipad-kiosk" ? `
+            <div class="route-progress-marker" id="route-progress-marker" aria-hidden="true">
+              <span class="route-progress-dot"></span>
+            </div>
+          ` : ""}
         </div>
       </section>
     `;
@@ -1399,7 +1402,7 @@
                   : ""
             }
           </div>
-          <span class="route-waypoint-marker" aria-hidden="true"></span>
+          ${state.view === "ipad-kiosk" ? '<span class="route-waypoint-marker" aria-hidden="true"></span>' : ""}
           ${state.settings.showDistanceToGo ? `<span class="route-dtg">${distanceToGo ? `(${escapeAttr(distanceToGo)})` : ""}</span>` : ""}
         </div>
         <div class="${legFieldClass(leg, "cas")}"><input data-leg-field="${index}:cas" value="${escapeAttr(legFieldValue(leg, "cas"))}" /></div>
@@ -2543,16 +2546,16 @@
     if (!live) return "";
     const unitLabel = getKioskDistanceUnitLabel();
     const distanceText = formatDistanceDisplayWithRounding(live.distanceNm, false);
-    return `Distance ${live.direction}: ${distanceText} ${unitLabel}`;
+    return `${distanceText} ${unitLabel} ${live.direction}`;
   }
 
   function syncKioskRouteEstimateLiveDistanceDisplay() {
-    const node = document.getElementById("kiosk-route-live-distance");
+    const node = document.getElementById("kiosk-estimate-context");
     if (!node) return;
     const model = state.meta.kioskRouteEstimate;
-    const text = computeKioskRouteLiveDistanceText(model);
-    node.textContent = text;
-    node.classList.toggle("empty", !text);
+    const routeLabel = String(model?.routeLabel || "Waypoint");
+    const liveDistanceText = computeKioskRouteLiveDistanceText(model);
+    node.textContent = liveDistanceText ? `${routeLabel} (${liveDistanceText})` : routeLabel;
   }
 
   function openKioskRouteEstimateModalForLeg(legIndex) {
@@ -5595,6 +5598,7 @@
     if (!legs.length) return null;
     const timeline = buildLegAbsoluteTimeTimeline();
     const lastWaypointIndex = legs.length - 1;
+    const lastEtMs = Number(timeline[lastWaypointIndex]?.etUtcMs);
 
     let latestAtIndex = -1;
     timeline.forEach((entry, index) => {
@@ -5605,7 +5609,8 @@
       return { type: "waypoint", waypointIndex: 0, overdue: false };
     }
     if (latestAtIndex >= lastWaypointIndex) {
-      return { type: "waypoint", waypointIndex: lastWaypointIndex, overdue: false };
+      const lastOverdue = Number.isFinite(lastEtMs) ? nowMs >= lastEtMs : false;
+      return { type: "waypoint", waypointIndex: lastWaypointIndex, overdue: lastOverdue };
     }
 
     const fromIndex = latestAtIndex;
