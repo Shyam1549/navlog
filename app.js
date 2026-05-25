@@ -1104,6 +1104,7 @@
   function renderKioskRouteEstimateModal() {
     const model = state.meta.kioskRouteEstimate;
     if (!model || !model.open) return "";
+    const liveDistanceText = computeKioskRouteLiveDistanceText(model);
     return `
       <div class="bug-report-overlay" id="kiosk-route-estimate-overlay">
         <section class="bug-report-modal kiosk-estimate-modal" role="dialog" aria-modal="true" aria-label="Route estimate calculator">
@@ -1131,6 +1132,7 @@
               <input id="kiosk-route-estimate-gs" value="${escapeAttr(model.groundspeed)}" inputmode="decimal" />
             </label>
           </div>
+          <p class="kiosk-estimate-live${liveDistanceText ? "" : " empty"}" id="kiosk-route-live-distance">${escapeHtml(liveDistanceText)}</p>
           ${model.resultHhmm ? `<p class="kiosk-estimate-result">Estimate: <strong>${escapeHtml(model.resultHhmm)}Z</strong></p>` : ""}
           ${model.error ? `<p class="kiosk-estimate-error">${escapeHtml(model.error)}</p>` : ""}
           <div class="kiosk-estimate-actions">
@@ -2441,11 +2443,110 @@
     const mode = direction === "inbound" ? "inbound" : "outbound";
     const currentLeg = state.navlog.legs[index] || {};
     if (mode === "inbound") {
-      const previousLeg = index > 0 ? (state.navlog.legs[index - 1] || {}) : null;
-      if (previousLeg && String(previousLeg.gs || "").trim() !== "") return String(previousLeg.gs).trim();
-      return String(currentLeg.gs || "").trim();
+      if (index <= 0) return "";
+      const previousLeg = state.navlog.legs[index - 1] || {};
+      return String(previousLeg.gs || "").trim();
     }
     return String(currentLeg.gs || "").trim();
+  }
+
+  function getKioskDistanceUnitLabel() {
+    return state.settings.distanceUnit === "km" ? "KM" : state.settings.distanceUnit === "sm" ? "SM" : "NM";
+  }
+
+  function resolveNavlogUtcMidnightMs() {
+    const isoDate = normalizeDateInputValue(state.navlog?.header?.date);
+    if (isoDate) {
+      const [yearText, monthText, dayText] = isoDate.split("-");
+      const year = Number(yearText);
+      const month = Number(monthText);
+      const day = Number(dayText);
+      if (Number.isFinite(year) && Number.isFinite(month) && Number.isFinite(day)) {
+        return Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+      }
+    }
+    const now = new Date();
+    return Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0);
+  }
+
+  function buildLegAbsoluteTimeTimeline() {
+    const timeline = [];
+    const legs = Array.isArray(state.navlog?.legs) ? state.navlog.legs : [];
+    const dayMs = 24 * 60 * 60 * 1000;
+    const halfDayMs = 12 * 60 * 60 * 1000;
+    const baseMidnightMs = resolveNavlogUtcMidnightMs();
+    let dayOffset = 0;
+    let lastReferenceUtcMs = Number.NaN;
+    const mapMinuteToUtcMs = (minuteOfDay, dayShift = dayOffset) => {
+      return baseMidnightMs + (dayShift * dayMs) + Math.round(minuteOfDay * 60000);
+    };
+    const alignNearReference = (candidateUtcMs, referenceUtcMs) => {
+      if (!Number.isFinite(candidateUtcMs) || !Number.isFinite(referenceUtcMs)) return candidateUtcMs;
+      let aligned = candidateUtcMs;
+      while (aligned < (referenceUtcMs - halfDayMs)) aligned += dayMs;
+      while (aligned > (referenceUtcMs + halfDayMs)) aligned -= dayMs;
+      return aligned;
+    };
+    legs.forEach((leg) => {
+      const etMinutes = parseAtInput(leg?.et);
+      const atMinutes = parseAtInput(leg?.at);
+      const referenceMinutes = Number.isFinite(atMinutes) ? atMinutes : (Number.isFinite(etMinutes) ? etMinutes : Number.NaN);
+      let referenceUtcMs = Number.NaN;
+      if (Number.isFinite(referenceMinutes)) {
+        referenceUtcMs = mapMinuteToUtcMs(referenceMinutes, dayOffset);
+        while (Number.isFinite(lastReferenceUtcMs) && referenceUtcMs < (lastReferenceUtcMs - 30000)) {
+          dayOffset += 1;
+          referenceUtcMs = mapMinuteToUtcMs(referenceMinutes, dayOffset);
+        }
+        lastReferenceUtcMs = referenceUtcMs;
+      }
+      const etUtcMs = Number.isFinite(etMinutes)
+        ? alignNearReference(mapMinuteToUtcMs(etMinutes, dayOffset), referenceUtcMs)
+        : Number.NaN;
+      const atUtcMs = Number.isFinite(atMinutes)
+        ? alignNearReference(mapMinuteToUtcMs(atMinutes, dayOffset), referenceUtcMs)
+        : Number.NaN;
+      timeline.push({ etUtcMs, atUtcMs, referenceUtcMs });
+    });
+    return timeline;
+  }
+
+  function computeKioskRouteLiveDistanceInfo(legIndex, nowMs = Date.now()) {
+    const index = Number(legIndex);
+    if (!Number.isFinite(index) || index < 0 || index >= state.navlog.legs.length) return null;
+    const timeline = buildLegAbsoluteTimeTimeline();
+    const referenceUtcMs = Number(timeline[index]?.referenceUtcMs);
+    if (!Number.isFinite(referenceUtcMs)) return null;
+
+    const isInbound = nowMs < referenceUtcMs;
+    const direction = isInbound ? "inbound" : "outbound";
+    const speedLegIndex = isInbound ? index - 1 : index;
+    if (speedLegIndex < 0 || speedLegIndex >= state.navlog.legs.length) return null;
+
+    const speedKnots = parseSpeedInput(state.navlog.legs[speedLegIndex]?.gs);
+    if (!Number.isFinite(speedKnots) || speedKnots <= 0) return null;
+
+    const deltaHours = Math.abs(referenceUtcMs - nowMs) / (60 * 60 * 1000);
+    const distanceNm = deltaHours * speedKnots;
+    return { direction, distanceNm };
+  }
+
+  function computeKioskRouteLiveDistanceText(model, nowMs = Date.now()) {
+    if (!model || !model.open) return "";
+    const live = computeKioskRouteLiveDistanceInfo(model.legIndex, nowMs);
+    if (!live) return "";
+    const unitLabel = getKioskDistanceUnitLabel();
+    const distanceText = formatDistanceDisplayWithRounding(live.distanceNm, false);
+    return `Distance ${live.direction}: ${distanceText} ${unitLabel}`;
+  }
+
+  function syncKioskRouteEstimateLiveDistanceDisplay() {
+    const node = document.getElementById("kiosk-route-live-distance");
+    if (!node) return;
+    const model = state.meta.kioskRouteEstimate;
+    const text = computeKioskRouteLiveDistanceText(model);
+    node.textContent = text;
+    node.classList.toggle("empty", !text);
   }
 
   function openKioskRouteEstimateModalForLeg(legIndex) {
@@ -2733,38 +2834,34 @@
       return { error: "Distance/groundspeed invalid. cannot compute." };
     }
 
-    const offsetMinutes = (distanceNm / groundspeedKnots) * 60;
+    const offsetMs = (distanceNm / groundspeedKnots) * 60 * 60000;
     const direction = model.direction === "inbound" ? "inbound" : "outbound";
-    let baseMinutes = null;
+    const timeline = buildLegAbsoluteTimeTimeline();
+    const legTime = timeline[legIndex] || {};
+    let baseUtcMs = Number.NaN;
     if (direction === "outbound") {
-      const atMinutes = parseAtInput(leg.at);
-      const etMinutes = parseAtInput(leg.et);
-      baseMinutes = Number.isFinite(atMinutes) ? atMinutes : etMinutes;
+      baseUtcMs = Number.isFinite(legTime.atUtcMs) ? legTime.atUtcMs : legTime.etUtcMs;
     } else {
-      baseMinutes = parseAtInput(leg.et);
+      baseUtcMs = legTime.etUtcMs;
     }
-    if (!Number.isFinite(baseMinutes)) {
+    if (!Number.isFinite(baseUtcMs)) {
       return { error: "ET/AT unavailable. cannot compute." };
     }
 
-    const resultMinutes = direction === "outbound" ? (baseMinutes + offsetMinutes) : (baseMinutes - offsetMinutes);
-    const minuteOfDay = normalizeMinuteOfDay(resultMinutes);
-    const hhmm = formatMinutesAsHhmmWrapped(resultMinutes);
+    const dueUtcMs = direction === "outbound" ? (baseUtcMs + offsetMs) : (baseUtcMs - offsetMs);
+    const dueDate = new Date(dueUtcMs);
+    const minuteOfDay = (dueDate.getUTCHours() * 60) + dueDate.getUTCMinutes();
+    const hhmm = `${String(dueDate.getUTCHours()).padStart(2, "0")}${String(dueDate.getUTCMinutes()).padStart(2, "0")}`;
     const distanceLabel = formatDistanceDisplay(distanceNm);
-    const distanceUnitLabel =
-      state.settings.distanceUnit === "km"
-        ? "KM"
-        : state.settings.distanceUnit === "sm"
-          ? "SM"
-          : "NM";
+    const distanceUnitLabel = getKioskDistanceUnitLabel();
     const routeLabel = String(leg.route || "").trim() || `Waypoint ${legIndex + 1}`;
     const label = `${distanceLabel} ${distanceUnitLabel} ${direction} from ${routeLabel}`;
-    return { minuteOfDay, hhmm, label };
+    return { minuteOfDay, hhmm, label, dueUtcMs };
   }
 
   function setKioskEventTimerFromEstimate(estimate) {
     if (!estimate || !Number.isFinite(estimate.minuteOfDay)) return;
-    const dueUtcMs = computeNextUtcDueMs(estimate.minuteOfDay);
+    const dueUtcMs = Number.isFinite(estimate.dueUtcMs) ? estimate.dueUtcMs : computeNextUtcDueMs(estimate.minuteOfDay);
     const timers = Array.isArray(state.meta.kioskEventTimer) ? state.meta.kioskEventTimer.slice() : [];
     timers.push({
       id: `kt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
@@ -5964,7 +6061,7 @@
       }
       if (Number.isFinite(activeAnchorAt)) {
         cumulativeEeFromAnchor += safeEe;
-        leg.et = formatMinutesAsHhmm(activeAnchorAt + cumulativeEeFromAnchor);
+        leg.et = formatMinutesAsHhmmWrapped(activeAnchorAt + cumulativeEeFromAnchor);
         leg._derived.et = true;
       } else {
         leg.et = "";
@@ -6024,7 +6121,10 @@
     document.querySelectorAll("#utc-clock").forEach((node) => {
       node.textContent = `UTC ${now}`;
     });
-    if (state.view === "ipad-kiosk") syncKioskEventTimerDisplay();
+    if (state.view === "ipad-kiosk") {
+      syncKioskEventTimerDisplay();
+      syncKioskRouteEstimateLiveDistanceDisplay();
+    }
   }
 
   async function downloadPdf() {

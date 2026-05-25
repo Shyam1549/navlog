@@ -876,6 +876,17 @@ body.kiosk-mode .time-head {
   font-weight: 700;
 }
 
+.kiosk-estimate-live {
+  margin: 11px 0 0;
+  color: #254a59;
+  font-weight: 700;
+  font-family: "JetBrains Mono", "Cascadia Code", monospace;
+}
+
+.kiosk-estimate-live.empty {
+  display: none;
+}
+
 .kiosk-estimate-error {
   margin: 10px 0 0;
   color: #b33a2b;
