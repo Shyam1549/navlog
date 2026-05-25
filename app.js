@@ -1307,7 +1307,7 @@
         <div class="table-body">
           ${state.navlog.legs.map((leg, index) => renderLegRow(leg, index, variationDeviationEnabled)).join("")}
           <div class="route-progress-marker" id="route-progress-marker" aria-hidden="true">
-            <span class="route-progress-plane">✈</span>
+            <span class="route-progress-dot"></span>
           </div>
         </div>
       </section>
@@ -5639,7 +5639,7 @@
     const dividerX = firstRouteCellRect.right - tableBodyRect.left;
     const waypointYPositions = routeCells.map((cell) => {
       const cellRect = cell.getBoundingClientRect();
-      return cellRect.bottom - tableBodyRect.top;
+      return ((cellRect.top + cellRect.bottom) / 2) - tableBodyRect.top;
     });
     if (!waypointYPositions.length) {
       marker.classList.remove("visible");

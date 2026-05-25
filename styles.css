@@ -1385,31 +1385,31 @@ body.kiosk-mode .field input.at-hold-done {
   position: absolute;
   left: 0;
   top: 0;
-  transform: translate(-50%, 50%);
+  transform: translate(-50%, -50%);
   width: 0;
   height: 0;
   z-index: 4;
   pointer-events: none;
   opacity: 0;
-  transition: top 0.9s linear, left 0.9s linear, opacity 0.18s ease;
+  transition: top 0.9s linear, opacity 0.18s ease;
 }
 
 .route-progress-marker.visible {
   opacity: 1;
 }
 
-.route-progress-plane {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.94rem;
-  line-height: 1;
-  color: #1f9d4c;
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+.route-progress-dot {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #1f9d4c;
+  box-shadow: 0 0 0 1px rgba(8, 38, 18, 0.35);
 }
 
-.route-progress-marker.overdue .route-progress-plane {
-  color: #b32525;
+.route-progress-marker.overdue .route-progress-dot {
+  background: #b32525;
+  box-shadow: 0 0 0 1px rgba(71, 11, 11, 0.35);
 }
 
 .nav-head-grid {
