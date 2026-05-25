@@ -1306,6 +1306,9 @@
         ${tableHead}
         <div class="table-body">
           ${state.navlog.legs.map((leg, index) => renderLegRow(leg, index, variationDeviationEnabled)).join("")}
+          <div class="route-progress-marker" id="route-progress-marker" aria-hidden="true">
+            <span class="route-progress-plane">✈</span>
+          </div>
         </div>
       </section>
     `;
@@ -5563,6 +5566,7 @@
     if (tocTime) tocTime.value = state.navlog.tocTod.tocTime;
     if (todDistance) todDistance.value = state.navlog.tocTod.todDistance;
     if (todTime) todTime.value = state.navlog.tocTod.todTime;
+    syncRouteProgressMarkerDisplay();
   }
 
   function syncDistanceToGo() {
@@ -5575,6 +5579,96 @@
       const distanceToGo = getDistanceToGoDisplay(index);
       distanceNode.textContent = distanceToGo ? `(${distanceToGo})` : "";
     });
+  }
+
+  function computeRouteProgressState(nowMs = Date.now()) {
+    const legs = Array.isArray(state.navlog?.legs) ? state.navlog.legs : [];
+    if (!legs.length) return null;
+    const timeline = buildLegAbsoluteTimeTimeline();
+    const lastWaypointIndex = legs.length - 1;
+
+    let latestAtIndex = -1;
+    timeline.forEach((entry, index) => {
+      if (Number.isFinite(Number(entry?.atUtcMs))) latestAtIndex = index;
+    });
+
+    if (latestAtIndex < 0) {
+      return { type: "waypoint", waypointIndex: 0, overdue: false };
+    }
+    if (latestAtIndex >= lastWaypointIndex) {
+      return { type: "waypoint", waypointIndex: lastWaypointIndex, overdue: false };
+    }
+
+    const fromIndex = latestAtIndex;
+    const toIndex = latestAtIndex + 1;
+    const fromAtMs = Number(timeline[fromIndex]?.atUtcMs);
+    const toEtMs = Number(timeline[toIndex]?.etUtcMs);
+    if (!Number.isFinite(fromAtMs) || !Number.isFinite(toEtMs) || toEtMs <= fromAtMs) {
+      return { type: "waypoint", waypointIndex: fromIndex, overdue: false };
+    }
+
+    if (nowMs >= toEtMs) {
+      return { type: "waypoint", waypointIndex: toIndex, overdue: true };
+    }
+
+    const progress = clamp((nowMs - fromAtMs) / (toEtMs - fromAtMs), 0, 1);
+    return { type: "segment", fromIndex, toIndex, progress, overdue: false };
+  }
+
+  function syncRouteProgressMarkerDisplay() {
+    const marker = document.getElementById("route-progress-marker");
+    if (!marker) return;
+    const tableBody = marker.closest(".table-body");
+    if (!tableBody) return;
+    const routeCells = Array.from(tableBody.querySelectorAll(".leg-row .route-cell"));
+    if (!routeCells.length) {
+      marker.classList.remove("visible");
+      marker.classList.remove("overdue");
+      return;
+    }
+
+    const progressState = computeRouteProgressState(Date.now());
+    if (!progressState) {
+      marker.classList.remove("visible");
+      marker.classList.remove("overdue");
+      return;
+    }
+
+    const tableBodyRect = tableBody.getBoundingClientRect();
+    const firstRouteCellRect = routeCells[0].getBoundingClientRect();
+    const dividerX = firstRouteCellRect.right - tableBodyRect.left;
+    const waypointYPositions = routeCells.map((cell) => {
+      const cellRect = cell.getBoundingClientRect();
+      return cellRect.bottom - tableBodyRect.top;
+    });
+    if (!waypointYPositions.length) {
+      marker.classList.remove("visible");
+      marker.classList.remove("overdue");
+      return;
+    }
+
+    const clampWaypointIndex = (index) => {
+      const parsed = Number(index);
+      if (!Number.isFinite(parsed)) return 0;
+      return Math.max(0, Math.min(waypointYPositions.length - 1, Math.floor(parsed)));
+    };
+
+    let markerY = waypointYPositions[0];
+    if (progressState.type === "segment") {
+      const fromIndex = clampWaypointIndex(progressState.fromIndex);
+      const toIndex = clampWaypointIndex(progressState.toIndex);
+      const fromY = waypointYPositions[fromIndex];
+      const toY = waypointYPositions[toIndex];
+      markerY = fromY + ((toY - fromY) * clamp(progressState.progress, 0, 1));
+    } else {
+      const waypointIndex = clampWaypointIndex(progressState.waypointIndex);
+      markerY = waypointYPositions[waypointIndex];
+    }
+
+    marker.style.left = `${Math.round(dividerX)}px`;
+    marker.style.top = `${Math.round(markerY)}px`;
+    marker.classList.add("visible");
+    marker.classList.toggle("overdue", Boolean(progressState.overdue));
   }
 
   function syncLegField(index, field, value, activeEdit, leg) {
@@ -6131,6 +6225,7 @@
       syncKioskEventTimerDisplay();
       syncKioskRouteEstimateLiveDistanceDisplay();
     }
+    syncRouteProgressMarkerDisplay();
   }
 
   async function downloadPdf() {

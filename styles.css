@@ -1377,6 +1377,41 @@ body.kiosk-mode .field input.at-hold-done {
 .leg-row > div { border-right: 2px solid var(--line); }
 .leg-row > div:last-child { border-right: 0; }
 
+.table-body {
+  position: relative;
+}
+
+.route-progress-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, 50%);
+  width: 0;
+  height: 0;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0;
+  transition: top 0.9s linear, left 0.9s linear, opacity 0.18s ease;
+}
+
+.route-progress-marker.visible {
+  opacity: 1;
+}
+
+.route-progress-plane {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.94rem;
+  line-height: 1;
+  color: #1f9d4c;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+
+.route-progress-marker.overdue .route-progress-plane {
+  color: #b32525;
+}
+
 .nav-head-grid {
   grid-template-rows: 62px 54px;
   border-bottom: 2px solid var(--line);
