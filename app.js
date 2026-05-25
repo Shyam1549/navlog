@@ -1399,6 +1399,7 @@
                   : ""
             }
           </div>
+          <span class="route-waypoint-marker" aria-hidden="true"></span>
           ${state.settings.showDistanceToGo ? `<span class="route-dtg">${distanceToGo ? `(${escapeAttr(distanceToGo)})` : ""}</span>` : ""}
         </div>
         <div class="${legFieldClass(leg, "cas")}"><input data-leg-field="${index}:cas" value="${escapeAttr(legFieldValue(leg, "cas"))}" /></div>
@@ -3306,6 +3307,14 @@
       window.addEventListener("resize", () => {
         if (state.view === "navlog") fitSheetToViewport(".sheet-wrap");
         if (state.view === "ipad-kiosk") fitSheetToViewport(".ipad-kiosk-wrap");
+        requestAnimationFrame(() => syncRouteProgressMarkerDisplay());
+      });
+      window.addEventListener("orientationchange", () => {
+        setTimeout(() => {
+          if (state.view === "navlog") fitSheetToViewport(".sheet-wrap");
+          if (state.view === "ipad-kiosk") fitSheetToViewport(".ipad-kiosk-wrap");
+          syncRouteProgressMarkerDisplay();
+        }, 80);
       });
     }
   }
@@ -5635,11 +5644,10 @@
     }
 
     const firstRouteCell = routeCells[0];
-    const dividerX = (firstRouteCell.offsetLeft + firstRouteCell.offsetWidth) - 1;
-    const tableBodyRect = tableBody.getBoundingClientRect();
+    const borderRightWidth = parseFloat(window.getComputedStyle(firstRouteCell).borderRightWidth || "2") || 2;
+    const dividerX = firstRouteCell.offsetLeft + firstRouteCell.offsetWidth - (borderRightWidth / 2);
     const waypointYPositions = routeCells.map((cell) => {
-      const cellRect = cell.getBoundingClientRect();
-      return ((cellRect.top + cellRect.bottom) / 2) - tableBodyRect.top;
+      return cell.offsetTop + (cell.offsetHeight / 2);
     });
     if (!waypointYPositions.length) {
       marker.classList.remove("visible");
