@@ -1236,17 +1236,43 @@ body.kiosk-mode .field input.at-hold-done {
 
 .date-picker-proxy {
   position: absolute;
-  inset: auto;
-  width: 1px;
-  height: 1px;
-  min-height: 0 !important;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 100% !important;
   opacity: 0;
-  pointer-events: none;
+  pointer-events: auto;
   border: 0;
   padding: 0;
   cursor: pointer;
-  clip-path: inset(50%);
-  z-index: -1;
+  z-index: 2;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: transparent;
+  background: transparent;
+}
+
+.date-picker-proxy::-webkit-calendar-picker-indicator {
+  opacity: 0;
+}
+
+.date-picker-proxy::-webkit-datetime-edit,
+.date-picker-proxy::-webkit-datetime-edit-fields-wrapper,
+.date-picker-proxy::-webkit-datetime-edit-text,
+.date-picker-proxy::-webkit-datetime-edit-month-field,
+.date-picker-proxy::-webkit-datetime-edit-day-field,
+.date-picker-proxy::-webkit-datetime-edit-year-field {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+@media (pointer: fine) {
+  .date-picker-proxy {
+    width: 0;
+    height: 0;
+    min-height: 0 !important;
+    pointer-events: none;
+  }
 }
 
 .header-box.static {

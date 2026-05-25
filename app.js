@@ -2511,7 +2511,7 @@
     return timeline;
   }
 
-  function computeKioskRouteLiveDistanceInfo(legIndex, nowMs = Date.now()) {
+  function computeKioskRouteLiveDistanceInfo(legIndex, preferredGroundspeedRaw = "", nowMs = Date.now()) {
     const index = Number(legIndex);
     if (!Number.isFinite(index) || index < 0 || index >= state.navlog.legs.length) return null;
     const timeline = buildLegAbsoluteTimeTimeline();
@@ -2523,7 +2523,9 @@
     const speedLegIndex = isInbound ? index - 1 : index;
     if (speedLegIndex < 0 || speedLegIndex >= state.navlog.legs.length) return null;
 
-    const speedKnots = parseSpeedInput(state.navlog.legs[speedLegIndex]?.gs);
+    const speedFromLegKnots = parseSpeedInput(state.navlog.legs[speedLegIndex]?.gs);
+    const speedFromModalKnots = parseSpeedInput(preferredGroundspeedRaw);
+    const speedKnots = Number.isFinite(speedFromLegKnots) && speedFromLegKnots > 0 ? speedFromLegKnots : speedFromModalKnots;
     if (!Number.isFinite(speedKnots) || speedKnots <= 0) return null;
 
     const deltaHours = Math.abs(referenceUtcMs - nowMs) / (60 * 60 * 1000);
@@ -2533,7 +2535,7 @@
 
   function computeKioskRouteLiveDistanceText(model, nowMs = Date.now()) {
     if (!model || !model.open) return "";
-    const live = computeKioskRouteLiveDistanceInfo(model.legIndex, nowMs);
+    const live = computeKioskRouteLiveDistanceInfo(model.legIndex, model.groundspeed, nowMs);
     if (!live) return "";
     const unitLabel = getKioskDistanceUnitLabel();
     const distanceText = formatDistanceDisplayWithRounding(live.distanceNm, false);
@@ -2691,9 +2693,11 @@
     draftInputs.forEach((input) => {
       input.addEventListener("input", () => {
         syncKioskRouteEstimateDraftFromDom();
+        syncKioskRouteEstimateLiveDistanceDisplay();
       });
       input.addEventListener("change", () => {
         syncKioskRouteEstimateDraftFromDom();
+        syncKioskRouteEstimateLiveDistanceDisplay();
       });
     });
     document.querySelectorAll("[data-kiosk-direction]").forEach((button) => {
@@ -2707,6 +2711,7 @@
         state.meta.kioskRouteEstimate.resultHhmm = "";
         state.meta.kioskRouteEstimate.resultMinuteOfDay = null;
         render();
+        syncKioskRouteEstimateLiveDistanceDisplay();
       });
     });
     document.querySelectorAll("[data-kiosk-distance-preset]").forEach((button) => {
@@ -2715,6 +2720,7 @@
         const inputNode = document.getElementById("kiosk-route-estimate-distance");
         if (inputNode) inputNode.value = value;
         state.meta.kioskRouteEstimate.distance = value;
+        syncKioskRouteEstimateLiveDistanceDisplay();
       });
     });
 
