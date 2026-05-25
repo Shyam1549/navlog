@@ -1528,14 +1528,18 @@
 
   function renderTocTod() {
     const t = state.navlog.tocTod;
-    const distanceUnitLabel =
-      state.settings.distanceUnit === "km"
-        ? "KM"
-        : state.settings.distanceUnit === "sm"
-          ? "SM"
-          : "NM";
-    const timeUnitLabel = state.settings.roundTimeValues ? "mins" : "min+sec";
-    const showTocUnits = state.view !== "ipad-kiosk";
+    const isKiosk = state.view === "ipad-kiosk";
+    const distanceUnitLabel = isKiosk
+      ? "NM"
+      : (
+        state.settings.distanceUnit === "km"
+          ? "KM"
+          : state.settings.distanceUnit === "sm"
+            ? "SM"
+            : "NM"
+      );
+    const timeUnitLabel = isKiosk ? "mins" : (state.settings.roundTimeValues ? "mins" : "min+sec");
+    const showTocUnits = true;
     const tocDistancePlaceholder = showTocUnits ? `Distance (${distanceUnitLabel})` : "Distance";
     const tocTimePlaceholder = showTocUnits ? `Time (${timeUnitLabel})` : "Time";
     const renderTocValueCell = (field, value, placeholder, unitText, isLast = false) => `
@@ -5598,28 +5602,22 @@
     if (!legs.length) return null;
     const timeline = buildLegAbsoluteTimeTimeline();
     const lastWaypointIndex = legs.length - 1;
-    const lastEtMs = Number(timeline[lastWaypointIndex]?.etUtcMs);
 
     let latestAtIndex = -1;
     timeline.forEach((entry, index) => {
       if (Number.isFinite(Number(entry?.atUtcMs))) latestAtIndex = index;
     });
 
-    if (latestAtIndex < 0) {
-      return { type: "waypoint", waypointIndex: 0, overdue: false };
-    }
+    if (latestAtIndex < 0) return { type: "waypoint", waypointIndex: 0, overdue: true };
     if (latestAtIndex >= lastWaypointIndex) {
-      const lastOverdue = Number.isFinite(lastEtMs) ? nowMs >= lastEtMs : false;
-      return { type: "waypoint", waypointIndex: lastWaypointIndex, overdue: lastOverdue };
+      return { type: "waypoint", waypointIndex: lastWaypointIndex, overdue: true };
     }
 
     const fromIndex = latestAtIndex;
     const toIndex = latestAtIndex + 1;
     const fromAtMs = Number(timeline[fromIndex]?.atUtcMs);
     const toEtMs = Number(timeline[toIndex]?.etUtcMs);
-    if (!Number.isFinite(fromAtMs) || !Number.isFinite(toEtMs) || toEtMs <= fromAtMs) {
-      return { type: "waypoint", waypointIndex: fromIndex, overdue: false };
-    }
+    if (!Number.isFinite(fromAtMs) || !Number.isFinite(toEtMs) || toEtMs <= fromAtMs) return { type: "waypoint", waypointIndex: fromIndex, overdue: true };
 
     if (nowMs >= toEtMs) {
       return { type: "waypoint", waypointIndex: toIndex, overdue: true };

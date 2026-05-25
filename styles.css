@@ -1277,6 +1277,8 @@ body.kiosk-mode .date-picker-proxy {
   caret-color: auto;
   background: transparent;
   clip-path: none;
+  text-align: left;
+  text-align: -webkit-left;
 }
 
 body.kiosk-mode .date-picker-proxy::-webkit-datetime-edit,
@@ -1287,6 +1289,10 @@ body.kiosk-mode .date-picker-proxy::-webkit-datetime-edit-day-field,
 body.kiosk-mode .date-picker-proxy::-webkit-datetime-edit-year-field {
   color: #111;
   -webkit-text-fill-color: #111;
+}
+
+body.kiosk-mode .date-picker-proxy::-webkit-date-and-time-value {
+  text-align: left;
 }
 
 @media (pointer: fine) {
@@ -1427,8 +1433,8 @@ body.kiosk-mode .date-picker-proxy::-webkit-datetime-edit-year-field {
   top: 0;
   transform: translate(-50%, -50%);
   display: block;
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   border-radius: 999px;
   background: #1f9d4c;
   box-shadow: 0 0 0 1px rgba(8, 38, 18, 0.8);
@@ -1441,13 +1447,13 @@ body.kiosk-mode .date-picker-proxy::-webkit-datetime-edit-year-field {
 
 .route-waypoint-marker {
   position: absolute;
-  left: calc(100% - 1px);
+  left: calc(100% + 1px);
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
-  background: #315360;
+  background: #000;
   pointer-events: none;
   z-index: 2;
 }
