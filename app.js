@@ -5617,13 +5617,16 @@
     const toIndex = latestAtIndex + 1;
     const fromAtMs = Number(timeline[fromIndex]?.atUtcMs);
     const toEtMs = Number(timeline[toIndex]?.etUtcMs);
-    if (!Number.isFinite(fromAtMs) || !Number.isFinite(toEtMs) || toEtMs <= fromAtMs) return { type: "waypoint", waypointIndex: fromIndex, overdue: true };
+    if (!Number.isFinite(fromAtMs) || !Number.isFinite(toEtMs)) return { type: "waypoint", waypointIndex: fromIndex, overdue: true };
+
+    const movementStartMs = Math.min(fromAtMs, nowMs);
+    if (toEtMs <= movementStartMs) return { type: "waypoint", waypointIndex: fromIndex, overdue: true };
 
     if (nowMs >= toEtMs) {
       return { type: "waypoint", waypointIndex: toIndex, overdue: true };
     }
 
-    const progress = clamp((nowMs - fromAtMs) / (toEtMs - fromAtMs), 0, 1);
+    const progress = clamp((nowMs - movementStartMs) / (toEtMs - movementStartMs), 0, 1);
     return { type: "segment", fromIndex, toIndex, progress, overdue: false };
   }
 
@@ -5676,8 +5679,8 @@
       markerY = waypointYPositions[waypointIndex];
     }
 
-    marker.style.left = `${Math.round(dividerX)}px`;
-    marker.style.top = `${Math.round(markerY)}px`;
+    marker.style.left = `${dividerX.toFixed(3)}px`;
+    marker.style.top = `${markerY.toFixed(3)}px`;
     marker.classList.add("visible");
     marker.classList.toggle("overdue", Boolean(progressState.overdue));
   }
