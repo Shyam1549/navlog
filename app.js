@@ -2690,6 +2690,7 @@
   function wireKioskEventTimerControls() {
     document.querySelectorAll("[data-kiosk-timer-clear]").forEach((button) => {
       button.addEventListener("click", () => {
+        if (!window.confirm("Clear timer?")) return;
         const timerId = String(button.dataset.kioskTimerClear || "");
         const timers = Array.isArray(state.meta.kioskEventTimer) ? state.meta.kioskEventTimer : [];
         state.meta.kioskEventTimer = timers.filter((timer) => String(timer.id) !== timerId);
@@ -2793,11 +2794,10 @@
     const now = new Date();
     const normalizedTarget = normalizeMinuteOfDay(targetMinuteOfDay);
     const nowWholeMinutes = (now.getUTCHours() * 60) + now.getUTCMinutes();
-    let deltaMinutes = (normalizedTarget - nowWholeMinutes + 1440) % 1440;
-    if (deltaMinutes === 0) {
-      const secondsIntoMinute = now.getUTCSeconds() + (now.getUTCMilliseconds() / 1000);
-      deltaMinutes = Math.max(0, (60 - secondsIntoMinute) / 60);
-    }
+    const secondsIntoMinute = now.getUTCSeconds() + (now.getUTCMilliseconds() / 1000);
+    const minuteFraction = secondsIntoMinute / 60;
+    const baseDeltaMinutes = (normalizedTarget - nowWholeMinutes + 1440) % 1440;
+    const deltaMinutes = Math.max(0, baseDeltaMinutes - minuteFraction);
     return Date.now() + Math.round(deltaMinutes * 60000);
   }
 
