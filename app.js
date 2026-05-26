@@ -2229,6 +2229,7 @@
           leg.at = normalized;
           leg._manual = leg._manual || {};
           leg._manual.at = true;
+          clearFollowingAtFields(index);
           computeRouteMath({ index, field: "at" });
           updateComputedCells({ index, field: "at" });
           persistKioskPayload();
@@ -2282,7 +2283,11 @@
     bindKioskDoubleTapGuard();
     bindKioskPullToRefreshGuard();
     setupKioskScratchPad();
-    requestAnimationFrame(() => fitSheetToViewport(".ipad-kiosk-wrap"));
+    syncRouteProgressMarkerDisplay();
+    requestAnimationFrame(() => {
+      fitSheetToViewport(".ipad-kiosk-wrap");
+      requestAnimationFrame(() => syncRouteProgressMarkerDisplay());
+    });
   }
 
   function wireKioskDelayedKeyboard(input) {
@@ -2403,14 +2408,7 @@
       leg._manual = leg._manual || {};
       leg._manual.at = true;
 
-      // Auto-entering AT on an earlier waypoint invalidates later AT entries.
-      for (let nextIndex = index + 1; nextIndex < state.navlog.legs.length; nextIndex += 1) {
-        const nextLeg = state.navlog.legs[nextIndex];
-        if (!nextLeg) continue;
-        nextLeg.at = "";
-        nextLeg._manual = nextLeg._manual || {};
-        nextLeg._manual.at = false;
-      }
+      clearFollowingAtFields(index);
 
       computeRouteMath({ index, field: "at" });
       updateComputedCells({ index, field: "at" });
@@ -2469,6 +2467,18 @@
       return String(previousLeg.gs || "").trim();
     }
     return String(currentLeg.gs || "").trim();
+  }
+
+  function clearFollowingAtFields(anchorIndex) {
+    const index = Number(anchorIndex);
+    if (!Number.isFinite(index)) return;
+    for (let nextIndex = index + 1; nextIndex < state.navlog.legs.length; nextIndex += 1) {
+      const nextLeg = state.navlog.legs[nextIndex];
+      if (!nextLeg) continue;
+      nextLeg.at = "";
+      nextLeg._manual = nextLeg._manual || {};
+      nextLeg._manual.at = false;
+    }
   }
 
   function getKioskDistanceUnitLabel() {
