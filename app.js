@@ -2402,6 +2402,16 @@
       leg.at = utcNow;
       leg._manual = leg._manual || {};
       leg._manual.at = true;
+
+      // Auto-entering AT on an earlier waypoint invalidates later AT entries.
+      for (let nextIndex = index + 1; nextIndex < state.navlog.legs.length; nextIndex += 1) {
+        const nextLeg = state.navlog.legs[nextIndex];
+        if (!nextLeg) continue;
+        nextLeg.at = "";
+        nextLeg._manual = nextLeg._manual || {};
+        nextLeg._manual.at = false;
+      }
+
       computeRouteMath({ index, field: "at" });
       updateComputedCells({ index, field: "at" });
       persistKioskPayload();
@@ -5639,6 +5649,7 @@
     if (!routeCells.length) {
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
+      delete marker.dataset.positioned;
       return;
     }
 
@@ -5646,6 +5657,7 @@
     if (!progressState) {
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
+      delete marker.dataset.positioned;
       return;
     }
 
@@ -5658,6 +5670,7 @@
     if (!waypointYPositions.length) {
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
+      delete marker.dataset.positioned;
       return;
     }
 
@@ -5679,8 +5692,23 @@
       markerY = waypointYPositions[waypointIndex];
     }
 
-    marker.style.left = `${dividerX.toFixed(3)}px`;
-    marker.style.top = `${markerY.toFixed(3)}px`;
+    const nextLeft = `${dividerX.toFixed(3)}px`;
+    const nextTop = `${markerY.toFixed(3)}px`;
+    const isFirstPosition = marker.dataset.positioned !== "1";
+    if (isFirstPosition) {
+      marker.style.transition = "none";
+      marker.style.left = nextLeft;
+      marker.style.top = nextTop;
+      marker.classList.add("visible");
+      marker.classList.toggle("overdue", Boolean(progressState.overdue));
+      marker.dataset.positioned = "1";
+      marker.getBoundingClientRect();
+      marker.style.transition = "";
+      return;
+    }
+
+    marker.style.left = nextLeft;
+    marker.style.top = nextTop;
     marker.classList.add("visible");
     marker.classList.toggle("overdue", Boolean(progressState.overdue));
   }
