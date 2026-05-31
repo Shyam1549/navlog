@@ -21,6 +21,7 @@
   const ANNOUNCEMENT_SEEN_KEY = "navlog_announcement_seen_signature";
   const NAVLOG_KIOSK_PAYLOAD_KEY = "navlog_kiosk_payload_v1";
   const NAVLOG_KIOSK_PAD_KEY = "navlog_kiosk_pad_v1";
+  const NAVLOG_PUBLIC_CATALOG_CACHE_KEY = "navlog_public_catalog_cache_v1";
   const NAVLOG_ACCESS_KEY_UNLOCK = "navlog_access_unlocked_v1";
   const NAVLOG_MONTHLY_VISITOR_KEY = "navlog_monthly_visitor_marker";
   const NAVLOG_MONTHLY_VISITOR_COUNT_KEY = "navlog_monthly_visitor_count";
@@ -412,10 +413,12 @@
 
   function render() {
     if (state.view !== "ipad-kiosk") document.body.classList.remove("kiosk-mode");
+    document.body.classList.remove("kiosk-phone-mode");
     document.body.classList.remove("ipad-desktop-scale");
     if (isIpadDevice() && (state.view === "navlog" || state.view === "ipad-kiosk")) {
       document.body.classList.add("ipad-desktop-scale");
     }
+    if (isPhoneActivateMode()) document.body.classList.add("kiosk-phone-mode");
     evaluateAnnouncementsPrompt();
     computeRouteMath();
     if (state.view === "access") app.innerHTML = renderAccessScreen();
@@ -1049,25 +1052,30 @@
 
   function renderIpadKioskScreen() {
     const h = state.navlog.header;
+    const phoneMode = isPhoneActivateMode();
+    const headerSection = `
+      <section class="sheet-header">
+        ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
+        <div class="header-box dark static planning-box" id="kiosk-planner-toggle">SCRATCHPAD</div>
+        ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
+         ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
+        ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
+        <div class="header-box static navlog-box">NAVIGATION LOG</div>
+        ${renderHeaderInputBox("UTC TIME", `<input data-header="timeUtc" value="${escapeAttr(h.timeUtc)}" />`, "utc-box")}
+      </section>
+    `;
     return `
-      <main class="ipad-kiosk-page">
+      <main class="ipad-kiosk-page${phoneMode ? " kiosk-phone-activate-page" : ""}">
         <div class="kiosk-utc" id="utc-clock">UTC ${formatUtcNow()}</div>
+        ${phoneMode ? '<p class="kiosk-phone-orientation-hint">Activate iPhone view is designed for portrait mode.</p>' : ""}
         ${renderKioskEventTimerStrip()}
         <section class="sheet-wrap ipad-kiosk-wrap">
-          <div class="sheet ipad-kiosk-sheet">
-            <section class="sheet-header">
-              ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
-              <div class="header-box dark static planning-box" id="kiosk-planner-toggle">SCRATCHPAD</div>
-              ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
-               ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
-              ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
-              <div class="header-box static navlog-box">NAVIGATION LOG</div>
-              ${renderHeaderInputBox("UTC TIME", `<input data-header="timeUtc" value="${escapeAttr(h.timeUtc)}" />`, "utc-box")}
-            </section>
-            ${renderRouteTable()}
+          <div class="sheet ipad-kiosk-sheet${phoneMode ? " kiosk-phone-sheet" : ""}">
+            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-header-scroll">${headerSection}</section>` : headerSection}
+            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-route-scroll">${renderRouteTable()}</section>` : renderRouteTable()}
             ${renderTocTod()}
-            ${renderLocationTable()}
-            ${renderAtisSection()}
+            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-airport-scroll">${renderLocationTable()}</section>` : renderLocationTable()}
+            ${phoneMode ? "" : renderAtisSection()}
           </div>
         </section>
         <section class="kiosk-pad-overlay" id="kiosk-pad-overlay" aria-hidden="true">
@@ -1232,6 +1240,7 @@
 
   function renderRouteTable() {
     const variationDeviationEnabled = Boolean(state.settings.variationDeviationEnabled);
+    const isPhoneKiosk = isPhoneActivateMode();
     const speedUnitLabel =
       state.settings.speedUnit === "mph"
         ? "MPH"
@@ -1255,53 +1264,74 @@
           : "C";
     const eeUnitLabel = state.settings.roundTimeValues ? "mins" : "min+sec";
     const withUnit = (label, unitText) => `<span class="time-head"><span>${label}</span><span class="head-format-note">(${unitText})</span></span>`;
-    const headClass = variationDeviationEnabled ? "nav-head-grid nav-head-grid-vd" : "nav-head-grid";
-    const tableHead = variationDeviationEnabled
-      ? `
-        <div class="${headClass}">
+    let tableHead = "";
+    if (isPhoneKiosk) {
+      const headingLabel = variationDeviationEnabled ? "CH" : "TC";
+      const phoneHeadClass = variationDeviationEnabled
+        ? "nav-head-grid nav-head-grid-phone nav-head-grid-phone-vd"
+        : "nav-head-grid nav-head-grid-phone";
+      tableHead = `
+        <div class="${phoneHeadClass}">
           <div class="head-cell tall route-head">ROUTE <button class="mini-plus inline" id="add-leg" type="button">+</button></div>
-          <div class="head-cell group cruise-head">CRUISE</div>
-          <div class="head-cell group wind-head">WIND</div>
-          <div class="head-cell sub split-top tcv-head">TC</div>
-          <div class="head-cell sub split-top thv-head">TH</div>
-          <div class="head-cell sub split-top mhv-head">MH</div>
-          <div class="head-cell tall chv-head">CH</div>
-          <div class="head-cell tall ta-head-vd">${withUnit("TA", speedUnitLabel)}</div>
-          <div class="head-cell tall gs-head-vd">${withUnit("GS", speedUnitLabel)}</div>
-          <div class="head-cell tall dis-head-vd">${withUnit("DIS", distanceUnitLabel)}</div>
-          <div class="head-cell tall ee-head-vd">${withUnit("EE", eeUnitLabel)}</div>
-          <div class="head-cell tall et-head-vd"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
-          <div class="head-cell tall at-head-vd"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
-          <div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>
-          <div class="head-cell sub alt-head">${withUnit("ALT", altUnitLabel)}</div>
-          <div class="head-cell sub temp-head">${withUnit("TEMP", tempUnitLabel)}</div>
-          <div class="head-cell sub dir-head">DIR</div>
-          <div class="head-cell sub spd-head">${withUnit("SPD", speedUnitLabel)}</div>
-          <div class="head-cell sub wcav-head">WCA</div>
-          <div class="head-cell sub varv-head">VAR</div>
-          <div class="head-cell sub devv-head">DEV</div>
-        </div>
-      `
-      : `
-        <div class="${headClass}">
-          <div class="head-cell tall route-head">ROUTE <button class="mini-plus inline" id="add-leg" type="button">+</button></div>
-          <div class="head-cell group cruise-head">CRUISE</div>
-          <div class="head-cell group wind-head">WIND</div>
-          <div class="head-cell sub split-top tcw-top-head">TC</div>
-          <div class="head-cell sub tcw-bottom-head">WCA</div>
+          <div class="head-cell tall alt-head">${withUnit("ALT", altUnitLabel)}</div>
+          <div class="head-cell tall">${headingLabel}</div>
           <div class="head-cell tall ta-head">${withUnit("TA", speedUnitLabel)}</div>
           <div class="head-cell tall gs-head">${withUnit("GS", speedUnitLabel)}</div>
           <div class="head-cell tall dis-head">${withUnit("DIS", distanceUnitLabel)}</div>
           <div class="head-cell tall ee-head">${withUnit("EE", eeUnitLabel)}</div>
           <div class="head-cell tall et-head"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
           <div class="head-cell tall at-head"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
-          <div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>
-          <div class="head-cell sub alt-head">${withUnit("ALT", altUnitLabel)}</div>
-          <div class="head-cell sub temp-head">${withUnit("TEMP", tempUnitLabel)}</div>
-          <div class="head-cell sub dir-head">DIR</div>
-          <div class="head-cell sub spd-head">${withUnit("SPD", speedUnitLabel)}</div>
         </div>
       `;
+    } else {
+      const headClass = variationDeviationEnabled ? "nav-head-grid nav-head-grid-vd" : "nav-head-grid";
+      tableHead = variationDeviationEnabled
+        ? `
+          <div class="${headClass}">
+            <div class="head-cell tall route-head">ROUTE <button class="mini-plus inline" id="add-leg" type="button">+</button></div>
+            <div class="head-cell group cruise-head">CRUISE</div>
+            <div class="head-cell group wind-head">WIND</div>
+            <div class="head-cell sub split-top tcv-head">TC</div>
+            <div class="head-cell sub split-top thv-head">TH</div>
+            <div class="head-cell sub split-top mhv-head">MH</div>
+            <div class="head-cell tall chv-head">CH</div>
+            <div class="head-cell tall ta-head-vd">${withUnit("TA", speedUnitLabel)}</div>
+            <div class="head-cell tall gs-head-vd">${withUnit("GS", speedUnitLabel)}</div>
+            <div class="head-cell tall dis-head-vd">${withUnit("DIS", distanceUnitLabel)}</div>
+            <div class="head-cell tall ee-head-vd">${withUnit("EE", eeUnitLabel)}</div>
+            <div class="head-cell tall et-head-vd"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
+            <div class="head-cell tall at-head-vd"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
+            <div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>
+            <div class="head-cell sub alt-head">${withUnit("ALT", altUnitLabel)}</div>
+            <div class="head-cell sub temp-head">${withUnit("TEMP", tempUnitLabel)}</div>
+            <div class="head-cell sub dir-head">DIR</div>
+            <div class="head-cell sub spd-head">${withUnit("SPD", speedUnitLabel)}</div>
+            <div class="head-cell sub wcav-head">WCA</div>
+            <div class="head-cell sub varv-head">VAR</div>
+            <div class="head-cell sub devv-head">DEV</div>
+          </div>
+        `
+        : `
+          <div class="${headClass}">
+            <div class="head-cell tall route-head">ROUTE <button class="mini-plus inline" id="add-leg" type="button">+</button></div>
+            <div class="head-cell group cruise-head">CRUISE</div>
+            <div class="head-cell group wind-head">WIND</div>
+            <div class="head-cell sub split-top tcw-top-head">TC</div>
+            <div class="head-cell sub tcw-bottom-head">WCA</div>
+            <div class="head-cell tall ta-head">${withUnit("TA", speedUnitLabel)}</div>
+            <div class="head-cell tall gs-head">${withUnit("GS", speedUnitLabel)}</div>
+            <div class="head-cell tall dis-head">${withUnit("DIS", distanceUnitLabel)}</div>
+            <div class="head-cell tall ee-head">${withUnit("EE", eeUnitLabel)}</div>
+            <div class="head-cell tall et-head"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
+            <div class="head-cell tall at-head"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
+            <div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>
+            <div class="head-cell sub alt-head">${withUnit("ALT", altUnitLabel)}</div>
+            <div class="head-cell sub temp-head">${withUnit("TEMP", tempUnitLabel)}</div>
+            <div class="head-cell sub dir-head">DIR</div>
+            <div class="head-cell sub spd-head">${withUnit("SPD", speedUnitLabel)}</div>
+          </div>
+        `;
+    }
     return `
       <section class="nav-table">
         ${tableHead}
@@ -1362,13 +1392,49 @@
   }
 
   function renderLegRow(leg, index, variationDeviationEnabled = false) {
+    const isPhoneKiosk = isPhoneActivateMode();
     const removable = index > 0 && index < state.navlog.legs.length - 1;
     const altExtra = index === 0 ? "first-alt" : "";
     const distanceToGo = getDistanceToGoDisplay(index);
     const isFirstRoute = index === 0;
     const isLastRoute = index === state.navlog.legs.length - 1;
     const routeCellExtra = isFirstRoute ? "first-route-hint" : (isLastRoute ? "last-route-hint" : "");
-    const rowClass = variationDeviationEnabled ? "leg-row leg-row-vd" : "leg-row";
+    const rowClass = isPhoneKiosk
+      ? `leg-row leg-row-phone${variationDeviationEnabled ? " leg-row-phone-vd" : ""}`
+      : (variationDeviationEnabled ? "leg-row leg-row-vd" : "leg-row");
+    const routeCellMarkup = `
+      <div class="${legFieldClass(leg, "route", `route route-cell ${routeCellExtra}`.trim())}">
+        <div class="route-main">
+          <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" />
+          ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
+          ${
+            isFirstRoute
+              ? '<span class="route-inline-hint route-inline-hint-dep" aria-hidden="true">Departure<br>Airport</span>'
+              : isLastRoute
+                ? '<span class="route-inline-hint route-inline-hint-dest" aria-hidden="true">Destination<br>Airport</span>'
+                : ""
+          }
+        </div>
+        ${state.view === "ipad-kiosk" ? '<span class="route-waypoint-marker" aria-hidden="true"></span>' : ""}
+        ${state.settings.showDistanceToGo ? `<span class="route-dtg">${distanceToGo ? `(${escapeAttr(distanceToGo)})` : ""}</span>` : ""}
+      </div>
+    `;
+    if (isPhoneKiosk) {
+      const headingField = variationDeviationEnabled ? "ch" : "tc";
+      return `
+        <div class="${rowClass}">
+          ${routeCellMarkup}
+          <div class="${legFieldClass(leg, "alt", altExtra)}"><input data-leg-field="${index}:alt" value="${escapeAttr(legFieldValue(leg, "alt"))}" /></div>
+          <div class="${legFieldClass(leg, headingField)}"><input data-leg-field="${index}:${headingField}" value="${escapeAttr(legFieldValue(leg, headingField))}" /></div>
+          <div class="${legFieldClass(leg, "ta")}"><input data-leg-field="${index}:ta" value="${escapeAttr(legFieldValue(leg, "ta"))}" /></div>
+          <div class="${legFieldClass(leg, "gs")}"><input data-leg-field="${index}:gs" value="${escapeAttr(legFieldValue(leg, "gs"))}" /></div>
+          <div class="${legFieldClass(leg, "distance")}"><input data-leg-field="${index}:distance" value="${escapeAttr(legFieldValue(leg, "distance"))}" /></div>
+          <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(legFieldValue(leg, "ee"))}" /></div>
+          <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(legFieldValue(leg, "et"))}" /></div>
+          <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" ${index === 0 ? 'placeholder="AB TIME"' : ""} ${state.view === "ipad-kiosk" ? 'inputmode="numeric" pattern="[0-9]*"' : ""} /></div>
+        </div>
+      `;
+    }
     const lateralCells = variationDeviationEnabled
       ? `
         <div class="${legFieldClass(leg, "tc", "stack-field")}">
@@ -1390,21 +1456,7 @@
       `;
     return `
       <div class="${rowClass}">
-        <div class="${legFieldClass(leg, "route", `route route-cell ${routeCellExtra}`.trim())}">
-          <div class="route-main">
-            <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" />
-            ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
-            ${
-              isFirstRoute
-                ? '<span class="route-inline-hint route-inline-hint-dep" aria-hidden="true">Departure<br>Airport</span>'
-                : isLastRoute
-                  ? '<span class="route-inline-hint route-inline-hint-dest" aria-hidden="true">Destination<br>Airport</span>'
-                  : ""
-            }
-          </div>
-          ${state.view === "ipad-kiosk" ? '<span class="route-waypoint-marker" aria-hidden="true"></span>' : ""}
-          ${state.settings.showDistanceToGo ? `<span class="route-dtg">${distanceToGo ? `(${escapeAttr(distanceToGo)})` : ""}</span>` : ""}
-        </div>
+        ${routeCellMarkup}
         <div class="${legFieldClass(leg, "cas")}"><input data-leg-field="${index}:cas" value="${escapeAttr(legFieldValue(leg, "cas"))}" /></div>
         <div class="${legFieldClass(leg, "alt", altExtra)}">
           <input data-leg-field="${index}:alt" value="${escapeAttr(legFieldValue(leg, "alt"))}" />
@@ -1745,8 +1797,8 @@
     const activateButton = document.getElementById("activate-ipad-mode");
     if (activateButton) {
       activateButton.addEventListener("click", () => {
-        if (!isIpadDevice()) {
-          state.meta.activateError = "Activate is only available on iPad.";
+        if (!isActivateSupportedDevice()) {
+          state.meta.activateError = "Activate is only avbl on iPhone and ipad.";
           render();
           return;
         }
@@ -1778,8 +1830,21 @@
         state.navlog.tocTod.tocEditing = false;
         state.navlog.tocTod.todEditing = false;
         persistKioskPayload({ navlog: kioskNavlog });
+        if (navigator.onLine === false) {
+          state.navlog = kioskNavlog;
+          state.navlog.tocTod.tocEditing = false;
+          state.navlog.tocTod.todEditing = false;
+          state.view = "ipad-kiosk";
+          normalizeActivateRows(false);
+          render();
+          return;
+        }
         const url = new URL(window.location.href);
         url.searchParams.set("kiosk", "1");
+        if (isIphoneDevice()) {
+          window.location.href = url.toString();
+          return;
+        }
         window.open(url.toString(), "_blank", "noopener");
       });
     }
@@ -1937,22 +2002,26 @@
     const datePickerInput = document.querySelector("[data-date-picker]");
     if (datePickerInput) {
       const dateDisplayInput = document.querySelector('[data-header="date"]');
+      const openDatePicker = () => {
+        if (typeof datePickerInput.showPicker === "function") {
+          datePickerInput.showPicker();
+          return;
+        }
+        datePickerInput.focus();
+        datePickerInput.click();
+      };
       datePickerInput.addEventListener("change", (event) => {
         const picked = formatDateToDisplay(event.target.value);
         state.navlog.header.date = picked;
         const dateInput = document.querySelector('[data-header="date"]');
         if (dateInput) dateInput.value = picked;
       });
+      datePickerInput.addEventListener("click", (event) => {
+        if (state.view === "ipad-kiosk") event.preventDefault();
+      });
       if (dateDisplayInput) {
         dateDisplayInput.setAttribute("readonly", "readonly");
-        dateDisplayInput.addEventListener("click", () => {
-          if (typeof datePickerInput.showPicker === "function") {
-            datePickerInput.showPicker();
-            return;
-          }
-          datePickerInput.focus();
-          datePickerInput.click();
-        });
+        dateDisplayInput.addEventListener("click", openDatePicker);
       }
     }
 
@@ -2151,12 +2220,13 @@
   }
 
   function wireIpadKiosk() {
+    const phoneMode = isPhoneActivateMode();
     normalizeActivateRows(false);
     document.querySelectorAll(".mini-plus, .remove-chip, .blank-chip").forEach((node) => {
       node.style.display = "none";
     });
     document.body.classList.add("kiosk-mode");
-    fitSheetToViewport(".ipad-kiosk-wrap");
+    if (!phoneMode) fitSheetToViewport(".ipad-kiosk-wrap");
     document.querySelectorAll("input, select, textarea, button").forEach((node) => {
       if (node.id === "kiosk-pad-clear") return;
       if (node.id === "kiosk-pad-close") return;
@@ -2283,9 +2353,13 @@
     bindKioskDoubleTapGuard();
     bindKioskPullToRefreshGuard();
     setupKioskScratchPad();
-    syncRouteProgressMarkerDisplay();
+    const marker = document.getElementById("route-progress-marker");
+    if (marker) {
+      marker.classList.remove("visible");
+      delete marker.dataset.positioned;
+    }
     requestAnimationFrame(() => {
-      fitSheetToViewport(".ipad-kiosk-wrap");
+      if (!phoneMode) fitSheetToViewport(".ipad-kiosk-wrap");
       requestAnimationFrame(() => syncRouteProgressMarkerDisplay());
     });
   }
@@ -3276,6 +3350,20 @@
     const classicIpad = /iPad/i.test(ua) || /iPad/i.test(platform);
     const modernIpad = /Macintosh/i.test(ua) && touchPoints > 1;
     return classicIpad || modernIpad;
+  }
+
+  function isIphoneDevice() {
+    const ua = String(navigator.userAgent || "");
+    const platform = String(navigator.platform || "");
+    return /iPhone|iPod/i.test(ua) || /iPhone|iPod/i.test(platform);
+  }
+
+  function isActivateSupportedDevice() {
+    return isIpadDevice() || isIphoneDevice();
+  }
+
+  function isPhoneActivateMode() {
+    return state.view === "ipad-kiosk" && isIphoneDevice();
   }
 
   function persistKioskPayload(overrides = {}) {
@@ -5655,8 +5743,20 @@
     if (!marker) return;
     const tableBody = marker.closest(".table-body");
     if (!tableBody) return;
+    if (state.view === "ipad-kiosk" && isIpadDevice()) {
+      const sheet = document.querySelector(".ipad-kiosk-wrap .sheet");
+      const sheetTransform = String(sheet && sheet.style ? sheet.style.transform || "" : "");
+      if (!/scale\(/i.test(sheetTransform)) return;
+    }
     const routeCells = Array.from(tableBody.querySelectorAll(".leg-row .route-cell"));
     if (!routeCells.length) {
+      marker.classList.remove("visible");
+      marker.classList.remove("overdue");
+      delete marker.dataset.positioned;
+      return;
+    }
+    const hasUnlaidOutRow = routeCells.some((cell) => cell.offsetHeight < 4 || cell.offsetWidth < 4);
+    if (hasUnlaidOutRow || tableBody.offsetHeight < 12) {
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
       delete marker.dataset.positioned;
@@ -5677,7 +5777,7 @@
     const waypointYPositions = routeCells.map((cell) => {
       return cell.offsetTop + (cell.offsetHeight / 2);
     });
-    if (!waypointYPositions.length) {
+    if (!waypointYPositions.length || !Number.isFinite(dividerX) || dividerX <= 0) {
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
       delete marker.dataset.positioned;
@@ -6282,8 +6382,21 @@
 
   async function downloadPdf() {
     const sheet = document.querySelector(".sheet");
-    if (!sheet || !window.html2canvas || !window.jspdf) return;
     const saveButton = document.getElementById("save-sheet");
+    if (!sheet) return;
+    if (!window.html2canvas || !window.jspdf) {
+      if (saveButton) saveButton.textContent = "Print...";
+      try {
+        window.print();
+      } finally {
+        if (saveButton) {
+          setTimeout(() => {
+            saveButton.textContent = "Save";
+          }, 180);
+        }
+      }
+      return;
+    }
     if (saveButton) saveButton.textContent = "Saving...";
     const pdfViewportWidth = 1366;
     const pdfViewportHeight = 1024;
@@ -6439,6 +6552,59 @@
     `;
   }
 
+  function persistPublicCatalogCache() {
+    try {
+      const payload = {
+        routePresets: (state.catalog.routePresets || []).map((preset) => clonePreset(preset)),
+        airports: (state.catalog.airports || []).map((airport) => ({ ...airport })),
+        content: {
+          manualHtml: String(state.catalog.content.manualHtml || ""),
+          privacyHtml: String(state.catalog.content.privacyHtml || ""),
+          announcements: Array.isArray(state.catalog.content.announcements) ? state.catalog.content.announcements.map((item) => ({ ...item })) : [],
+          maintenanceMode: Boolean(state.catalog.content.maintenanceMode),
+          maintenanceText: String(state.catalog.content.maintenanceText || ""),
+          additionalInfoTable: Array.isArray(state.catalog.content.additionalInfoTable)
+            ? state.catalog.content.additionalInfoTable.map((row) => Array.isArray(row) ? row.slice() : [])
+            : [],
+        },
+        savedAt: Date.now(),
+      };
+      window.localStorage.setItem(NAVLOG_PUBLIC_CATALOG_CACHE_KEY, JSON.stringify(payload));
+    } catch {
+      // ignore storage failures
+    }
+  }
+
+  function restorePublicCatalogCache() {
+    try {
+      const raw = window.localStorage.getItem(NAVLOG_PUBLIC_CATALOG_CACHE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return;
+      if (Array.isArray(parsed.routePresets) && parsed.routePresets.length) {
+        state.catalog.routePresets = parsed.routePresets.map((preset) => clonePreset(preset));
+      }
+      if (Array.isArray(parsed.airports) && parsed.airports.length) {
+        state.catalog.airports = parsed.airports.map((airport) => normalizeAirportRecord(airport));
+      }
+      if (parsed.content && typeof parsed.content === "object") {
+        const content = parsed.content;
+        if (typeof content.manualHtml === "string") state.catalog.content.manualHtml = content.manualHtml;
+        if (typeof content.privacyHtml === "string") state.catalog.content.privacyHtml = content.privacyHtml;
+        if (Array.isArray(content.announcements)) state.catalog.content.announcements = content.announcements.map((item) => ({ ...item }));
+        if (typeof content.maintenanceMode === "boolean") state.catalog.content.maintenanceMode = content.maintenanceMode;
+        if (typeof content.maintenanceText === "string" && content.maintenanceText.trim()) state.catalog.content.maintenanceText = content.maintenanceText.trim();
+        if (Array.isArray(content.additionalInfoTable)) {
+          state.catalog.content.additionalInfoTable = content.additionalInfoTable
+            .map((row) => Array.isArray(row) ? row.map((cell) => String(cell || "")) : [])
+            .filter((row) => row.length > 0);
+        }
+      }
+    } catch {
+      // ignore malformed cache
+    }
+  }
+
   async function loadPublicCatalogFromSupabase() {
     if (loadingPublicCatalog) return;
     if (!state.admin.supabaseUrl || !state.admin.supabaseAnonKey) return;
@@ -6483,6 +6649,7 @@
       state.catalog.content.maintenanceMode = parseMaintenanceModeContent(contentMap.maintenance_mode || "");
       state.catalog.content.maintenanceText = String(contentMap.maintenance_text || state.catalog.content.maintenanceText || "").trim() || "under maintenance: service is undergoing maintenance. do not trust.";
       state.catalog.content.additionalInfoTable = parseAdditionalInfoContent(contentMap.additional_info || "");
+      persistPublicCatalogCache();
     } finally {
       loadingPublicCatalog = false;
     }
@@ -6518,12 +6685,15 @@
   async function initializeApp() {
     const params = new URLSearchParams(window.location.search);
     const kioskRequested = params.get("kiosk") === "1";
-    if (kioskRequested && state.meta.navlogUnlocked) {
+    if (kioskRequested && state.meta.navlogUnlocked && isActivateSupportedDevice()) {
       state.view = "ipad-kiosk";
       restoreKioskPayload();
       state.navlog.tocTod.tocEditing = false;
       state.navlog.tocTod.todEditing = false;
       normalizeActivateRows(false);
+    } else if (kioskRequested && state.meta.navlogUnlocked && !isActivateSupportedDevice()) {
+      state.view = "navlog";
+      state.meta.activateError = "Activate is only avbl on iPhone and ipad.";
     } else if (kioskRequested && !state.meta.navlogUnlocked) {
       state.view = "access";
       state.meta.accessError = "Enter access key before opening Activate mode.";
@@ -6532,10 +6702,20 @@
     } else {
       state.view = "setup";
     }
+    restorePublicCatalogCache();
     touchMonthlyVisitorCounter();
     await loadPublicCatalogFromSupabase();
     evaluateAnnouncementsPrompt();
     render();
+  }
+
+  function registerOfflineServiceWorker() {
+    if (!("serviceWorker" in navigator)) return;
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch(() => {
+        // ignore registration failures
+      });
+    });
   }
 
   window.addEventListener("beforeunload", (event) => {
@@ -6543,6 +6723,7 @@
     event.returnValue = "";
   });
 
+  registerOfflineServiceWorker();
   initializeApp();
 })();
 

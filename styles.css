@@ -962,6 +962,74 @@ body.kiosk-mode .time-head {
   padding: 8px;
 }
 
+.kiosk-phone-sheet {
+  display: grid;
+  gap: 8px;
+}
+
+.kiosk-phone-part {
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.kiosk-phone-header-scroll .sheet-header {
+  min-width: 860px;
+}
+
+.kiosk-phone-route-scroll .nav-table {
+  min-width: 980px;
+}
+
+.kiosk-phone-airport-scroll .radio-block {
+  min-width: 1080px;
+}
+
+body.kiosk-phone-mode {
+  overflow-x: hidden;
+}
+
+body.kiosk-phone-mode .sheet-wrap {
+  overflow-x: hidden !important;
+}
+
+body.kiosk-phone-mode .sheet {
+  min-width: 0 !important;
+  width: 100% !important;
+  padding: 8px;
+}
+
+body.kiosk-phone-mode .toc-tod {
+  margin-top: 0;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+body.kiosk-phone-mode .toc-tod-card {
+  min-height: 96px;
+  padding: 6px 8px;
+}
+
+body.kiosk-phone-mode .toc-value-wrap input {
+  min-height: 38px;
+  height: 38px;
+  font-size: 0.82rem;
+  padding-right: 36px;
+}
+
+.kiosk-phone-orientation-hint {
+  display: none;
+  margin: 0 auto 8px;
+  width: fit-content;
+  max-width: 94vw;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(31, 53, 64, 0.1);
+  color: #1f3540;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .ipad-kiosk-page .route-inline-hint,
 .ipad-kiosk-page .alt-departure-hint,
 .ipad-kiosk-page .alt-info-wrap {
@@ -1402,6 +1470,16 @@ body.kiosk-mode .date-picker-proxy::-webkit-date-and-time-value {
   grid-template-columns: 1.35fr repeat(15, 1fr);
 }
 
+.nav-head-grid.nav-head-grid-phone,
+.leg-row.leg-row-phone {
+  grid-template-columns: 1.45fr repeat(8, minmax(74px, 1fr));
+}
+
+.nav-head-grid.nav-head-grid-phone.nav-head-grid-phone-vd,
+.leg-row.leg-row-phone.leg-row-phone-vd {
+  grid-template-columns: 1.45fr repeat(8, minmax(74px, 1fr));
+}
+
 .nav-head-grid > div,
 .leg-row > div { border-right: 2px solid var(--line); }
 .leg-row > div:last-child { border-right: 0; }
@@ -1433,8 +1511,8 @@ body.kiosk-mode .date-picker-proxy::-webkit-date-and-time-value {
   top: 0;
   transform: translate(-50%, -50%);
   display: block;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 999px;
   background: #1f9d4c;
   box-shadow: 0 0 0 1px rgba(8, 38, 18, 0.8);
@@ -1450,8 +1528,8 @@ body.kiosk-mode .date-picker-proxy::-webkit-date-and-time-value {
   left: calc(100% + 1px);
   top: 50%;
   transform: translate(-50%, -50%);
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 999px;
   background: #000;
   pointer-events: none;
@@ -1537,9 +1615,39 @@ body.kiosk-mode .date-picker-proxy::-webkit-date-and-time-value {
 .et-head-vd { grid-column: 15; }
 .at-head-vd { grid-column: 16; border-right: 0 !important; }
 
+.nav-head-grid.nav-head-grid-phone .route-head { grid-column: 1; grid-row: 1 / 3; }
+.nav-head-grid.nav-head-grid-phone .alt-head { grid-column: 2; grid-row: 1 / 3; }
+.nav-head-grid.nav-head-grid-phone .ta-head { grid-column: 4; grid-row: 1 / 3; }
+.nav-head-grid.nav-head-grid-phone .gs-head { grid-column: 5; grid-row: 1 / 3; }
+.nav-head-grid.nav-head-grid-phone .dis-head { grid-column: 6; grid-row: 1 / 3; }
+.nav-head-grid.nav-head-grid-phone .ee-head { grid-column: 7; grid-row: 1 / 3; }
+.nav-head-grid.nav-head-grid-phone .et-head { grid-column: 8; grid-row: 1 / 3; }
+.nav-head-grid.nav-head-grid-phone .at-head { grid-column: 9; grid-row: 1 / 3; }
+
 .leg-row {
   min-height: 86px;
   border-bottom: 1.5px solid var(--line);
+}
+
+.leg-row.leg-row-phone {
+  min-height: 72px;
+}
+
+.leg-row.leg-row-phone .field input {
+  min-height: 72px;
+  height: 72px;
+  padding: 10px 8px;
+  font-size: 0.86rem;
+}
+
+.leg-row.leg-row-phone .route-main .remove-chip,
+.leg-row.leg-row-phone .route-main .blank-chip {
+  min-height: 72px;
+  height: 72px;
+}
+
+.leg-row.leg-row-phone .route-main input {
+  padding-bottom: 18px;
 }
 
 .leg-row:last-child { border-bottom: 0; }
@@ -2912,6 +3020,12 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     width: calc(var(--admin-row-height) + 2px) !important;
     min-width: calc(var(--admin-row-height) + 2px) !important;
     max-width: calc(var(--admin-row-height) + 2px) !important;
+  }
+}
+
+@media (max-width: 926px) and (orientation: landscape) {
+  body.kiosk-phone-mode .kiosk-phone-orientation-hint {
+    display: block;
   }
 }
 
