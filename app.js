@@ -231,6 +231,7 @@
       latitude: null,
       longitude: null,
       accuracyMeters: null,
+      speedCellMode: "gs",
       speedCellModeByLeg: {},
       whereAmI: {
         open: false,
@@ -1030,7 +1031,7 @@
                       <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" />
                       <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" />
                       <input data-admin-preset-row="${index}:distance" value="${escapeAttr(row.distance)}" />
-                      <input data-admin-preset-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="lat,lon or N/S E/W" />
+                      <input data-admin-preset-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
                       <button class="action admin-mini-btn${rowHasContent ? " active" : ""}" data-admin-preset-remove="${index}" type="button" aria-label="Remove preset row" ${rowHasContent ? "" : "disabled"}>-</button>
                     </div>
                   `;
@@ -1279,6 +1280,7 @@
     const h = state.navlog.header;
     const phoneMode = isPhoneActivateMode();
     const gpsSpeedLabel = getKioskGpsSpeedDisplayText();
+    const whereAmIButtonState = getKioskWhereAmIButtonState();
     const topStrip = `
       <section class="kiosk-top-strip${phoneMode ? " is-phone" : ""}">
         <div class="kiosk-utc" id="utc-clock">UTC ${formatUtcNow()}</div>
@@ -1307,14 +1309,14 @@
         <section class="sheet-wrap ipad-kiosk-wrap">
           <div class="sheet ipad-kiosk-sheet${phoneMode ? " kiosk-phone-sheet" : ""}">
             ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-static-part kiosk-phone-header-panel"><p class="kiosk-part-label">Header</p>${headerSection}</section>` : headerSection}
-            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-scroll-part kiosk-phone-route-scroll"><p class="kiosk-part-label">Route (scroll)</p>${renderRouteTable()}</section>` : renderRouteTable()}
+            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-scroll-part kiosk-phone-route-scroll"><p class="kiosk-part-label">Route</p>${renderRouteTable()}</section>` : renderRouteTable()}
             ${renderTocTod()}
-            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-scroll-part kiosk-phone-airport-scroll"><p class="kiosk-part-label">Airport Info (scroll)</p>${renderLocationTable()}</section>` : renderLocationTable()}
+            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-scroll-part kiosk-phone-airport-scroll"><p class="kiosk-part-label">Airport Info</p>${renderLocationTable()}</section>` : renderLocationTable()}
             ${phoneMode ? "" : renderAtisSection()}
           </div>
         </section>
         <section class="kiosk-whereami-wrap">
-          <button class="activate-button kiosk-whereami-btn" id="kiosk-whereami-open" type="button">Where am I</button>
+          <button class="activate-button kiosk-whereami-btn${whereAmIButtonState.unavailable ? " is-error" : ""}" id="kiosk-whereami-open" type="button">${escapeHtml(whereAmIButtonState.label)}</button>
         </section>
         <section class="kiosk-pad-overlay" id="kiosk-pad-overlay" aria-hidden="true">
           <div class="kiosk-pad-card">
@@ -1429,10 +1431,23 @@
     return `GPS ${formatSpeedDisplayForUnit(gps.speedKts, "kts")} kts`;
   }
 
+  function getKioskWhereAmIButtonState() {
+    const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : createEmptyKioskGpsState();
+    const unavailable = Boolean(String(gps.error || "").trim());
+    return {
+      unavailable,
+      label: unavailable ? "GPS unavailable" : "Where am I",
+    };
+  }
+
   function renderKioskWhereAmIModal() {
     const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : createEmptyKioskGpsState();
     const model = gps.whereAmI || { open: false, query: "", result: null, error: "" };
     if (!model.open) return "";
+    const depCode = getKioskDepartureRouteCode();
+    const destCode = getKioskDestinationRouteCode();
+    const depLabel = depCode || "DEP";
+    const destLabel = destCode || "DEST";
     const routeOptions = getWaypointCodesForSuggestions()
       .map((code) => `<option value="${escapeAttr(code)}"></option>`)
       .join("");
@@ -1447,15 +1462,15 @@
             <h3>Where am I</h3>
             <button class="action bug-report-close" id="kiosk-whereami-close" type="button">Close</button>
           </div>
-          <p class="kiosk-whereami-subtitle">Select a waypoint to compute distance, quadrant, and true heading to it.</p>
+          <p class="kiosk-whereami-subtitle">Compute distance, quadrant and TH</p>
           <label class="setup-field kiosk-whereami-input">
             <span>Waypoint</span>
             <input id="kiosk-whereami-query" list="kiosk-whereami-waypoint-list" value="${escapeAttr(model.query || "")}" placeholder="Type waypoint" />
             <datalist id="kiosk-whereami-waypoint-list">${routeOptions}</datalist>
           </label>
-          <div class="kiosk-whereami-quick">
-            <button class="action" id="kiosk-whereami-use-departure" type="button">Departure</button>
-            <button class="action" id="kiosk-whereami-use-destination" type="button">Destination</button>
+          <div class="kiosk-distance-presets kiosk-whereami-quick">
+            <button class="kiosk-preset-btn kiosk-whereami-preset" id="kiosk-whereami-use-departure" type="button">${escapeHtml(depLabel)}</button>
+            <button class="kiosk-preset-btn kiosk-whereami-preset" id="kiosk-whereami-use-destination" type="button">${escapeHtml(destLabel)}</button>
           </div>
           ${model.error ? `<p class="kiosk-estimate-error">${escapeHtml(model.error)}</p>` : ""}
           <div class="kiosk-whereami-results">
@@ -1598,6 +1613,7 @@
     let tableHead = "";
     if (isPhoneKiosk) {
       const headingLabel = variationDeviationEnabled ? "CH" : "TC";
+      const phoneSpeedMode = getKioskPhoneSpeedCellMode();
       const phoneHeadClass = variationDeviationEnabled
         ? "nav-head-grid nav-head-grid-phone nav-head-grid-phone-vd"
         : "nav-head-grid nav-head-grid-phone";
@@ -1606,7 +1622,13 @@
           <div class="head-cell tall route-head">ROUTE <button class="mini-plus inline" id="add-leg" type="button">+</button></div>
           <div class="head-cell tall alt-head">${withUnit("ALT", altUnitLabel)}</div>
           <div class="head-cell tall">${headingLabel}</div>
-          <div class="head-cell tall speed-head">${withUnit("SPD", speedUnitLabel)}</div>
+          <div class="head-cell tall speed-head speed-mode-head">
+            <span class="speed-mode-title">${withUnit("SPD", speedUnitLabel)}</span>
+            <span class="kiosk-global-speed-toggle">
+              <button type="button" class="kiosk-speed-btn ${phoneSpeedMode === "gs" ? "active" : ""}" data-kiosk-speed-mode="gs">GS</button>
+              <button type="button" class="kiosk-speed-btn ${phoneSpeedMode === "ta" ? "active" : ""}" data-kiosk-speed-mode="ta">TAS</button>
+            </span>
+          </div>
           <div class="head-cell tall dis-head">${withUnit("DIS", distanceUnitLabel)}</div>
           <div class="head-cell tall ee-head">${withUnit("EE", eeUnitLabel)}</div>
           <div class="head-cell tall et-head"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
@@ -1828,28 +1850,24 @@
     `;
   }
 
-  function getKioskPhoneSpeedCellMode(index) {
-    const byLeg = state.meta && state.meta.kioskGps ? state.meta.kioskGps.speedCellModeByLeg : null;
-    const mode = byLeg && byLeg[index] === "ta" ? "ta" : "gs";
-    return mode;
+  function getKioskPhoneSpeedCellMode() {
+    const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : null;
+    if (!gps) return "gs";
+    if (gps.speedCellMode === "ta") return "ta";
+    return "gs";
   }
 
-  function setKioskPhoneSpeedCellMode(index, mode) {
+  function setKioskPhoneSpeedCellMode(mode) {
     if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
-    const byLeg = state.meta.kioskGps.speedCellModeByLeg || {};
-    byLeg[index] = mode === "ta" ? "ta" : "gs";
-    state.meta.kioskGps.speedCellModeByLeg = byLeg;
+    state.meta.kioskGps.speedCellMode = mode === "ta" ? "ta" : "gs";
   }
 
   function renderKioskPhoneSpeedCell(leg, index) {
-    const mode = getKioskPhoneSpeedCellMode(index);
-    const gsValue = legFieldValue(leg, "gs");
-    const taValue = legFieldValue(leg, "ta");
-    const activeValue = mode === "ta" ? taValue : gsValue;
+    const mode = getKioskPhoneSpeedCellMode();
+    const activeField = mode === "ta" ? "ta" : "gs";
+    const activeValue = legFieldValue(leg, activeField);
     return `
-      <div class="${legFieldClass(leg, "gs", "kiosk-phone-speed-cell")}">
-        <button type="button" class="kiosk-speed-btn ${mode === "gs" ? "active" : ""}" data-kiosk-speed-mode="${index}:gs">GS</button>
-        <button type="button" class="kiosk-speed-btn ${mode === "ta" ? "active" : ""}" data-kiosk-speed-mode="${index}:ta">TA</button>
+      <div class="${legFieldClass(leg, activeField, "kiosk-phone-speed-cell")}">
         <input data-kiosk-speed-display="${index}" value="${escapeAttr(activeValue)}" readonly />
       </div>
     `;
@@ -2694,11 +2712,8 @@
     if (phoneMode) {
       document.querySelectorAll("[data-kiosk-speed-mode]").forEach((button) => {
         button.addEventListener("click", () => {
-          const raw = String(button.getAttribute("data-kiosk-speed-mode") || "");
-          const [indexText, modeText] = raw.split(":");
-          const index = Number(indexText);
-          if (!Number.isFinite(index) || index < 0 || index >= state.navlog.legs.length) return;
-          setKioskPhoneSpeedCellMode(index, modeText === "ta" ? "ta" : "gs");
+          const modeText = String(button.getAttribute("data-kiosk-speed-mode") || "");
+          setKioskPhoneSpeedCellMode(modeText === "ta" ? "ta" : "gs");
           render();
         });
       });
@@ -3620,6 +3635,15 @@
   function updateKioskGpsDom() {
     const node = document.getElementById("kiosk-gps-speed");
     if (node) node.textContent = getKioskGpsSpeedDisplayText();
+    syncKioskWhereAmIButtonStateDom();
+  }
+
+  function syncKioskWhereAmIButtonStateDom() {
+    const button = document.getElementById("kiosk-whereami-open");
+    if (!button) return;
+    const stateInfo = getKioskWhereAmIButtonState();
+    button.textContent = stateInfo.label;
+    button.classList.toggle("is-error", stateInfo.unavailable);
   }
 
   function stopKioskGpsTracking() {
@@ -6361,10 +6385,10 @@
 
   function syncKioskPhoneSpeedDisplayValues() {
     if (!isPhoneActivateMode()) return;
+    const mode = getKioskPhoneSpeedCellMode();
     state.navlog.legs.forEach((leg, index) => {
       const node = document.querySelector(`[data-kiosk-speed-display="${index}"]`);
       if (!node) return;
-      const mode = getKioskPhoneSpeedCellMode(index);
       node.value = mode === "ta" ? legFieldValue(leg, "ta") : legFieldValue(leg, "gs");
     });
   }
