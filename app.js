@@ -108,6 +108,8 @@
       kioskRouteEstimate: createEmptyKioskRouteEstimateState(),
       kioskEventTimer: createEmptyKioskEventTimerState(),
       kioskTimerAlerts: createEmptyKioskTimerAlertState(),
+      kioskGps: createEmptyKioskGpsState(),
+      routeProgressMarkerSnapshot: null,
       monthlyVisitors: 0,
     },
   };
@@ -124,6 +126,9 @@
   let manualMathRetryCount = 0;
   let kioskPadState = null;
   let viewportFitResizeBound = false;
+  let gpsWatchId = null;
+  let gpsLastPoint = null;
+  let gpsSpeedSamplesKts = [];
 
   function createBlankLeg(route) {
     return {
@@ -216,6 +221,26 @@
     return [];
   }
 
+  function createEmptyKioskGpsState() {
+    return {
+      supported: false,
+      tracking: false,
+      error: "",
+      speedKts: null,
+      headingTrue: null,
+      latitude: null,
+      longitude: null,
+      accuracyMeters: null,
+      speedCellModeByLeg: {},
+      whereAmI: {
+        open: false,
+        query: "",
+        result: null,
+        error: "",
+      },
+    };
+  }
+
   function normalizeActivateRows(addExtraAirportRow = false) {
     normalizeDestinationLegPlacement();
     if (!Array.isArray(state.navlog.radios)) state.navlog.radios = [];
@@ -272,6 +297,7 @@
       route: "",
       tc: "",
       distance: "",
+      coord: "",
     };
   }
 
@@ -411,6 +437,198 @@
     };
   }
 
+  function parseHemisphericCoordinateToken(rawToken, kind) {
+    const text = String(rawToken || "").trim().toUpperCase();
+    if (!text) return null;
+    let hemisphere = "";
+    let numericText = text;
+    if (/^[NSEW]/.test(numericText)) {
+      hemisphere = numericText[0];
+      numericText = numericText.slice(1);
+    }
+    if (/[NSEW]$/.test(numericText)) {
+      hemisphere = numericText.slice(-1);
+      numericText = numericText.slice(0, -1);
+    }
+    numericText = numericText.replaceAll("°", " ").replaceAll("'", " ").replaceAll("\"", " ").replace(/\s+/g, " ").trim();
+    if (!numericText) return null;
+
+    let value = null;
+    const parts = numericText.split(" ").filter(Boolean);
+    if (parts.length >= 2) {
+      const deg = Number(parts[0]);
+      const minutes = Number(parts[1]);
+      const seconds = Number(parts[2] || 0);
+      if (Number.isFinite(deg) && Number.isFinite(minutes) && Number.isFinite(seconds)) {
+        value = Math.abs(deg) + (Math.abs(minutes) / 60) + (Math.abs(seconds) / 3600);
+      }
+    }
+    if (value == null) {
+      const numeric = Number(numericText);
+      if (!Number.isFinite(numeric)) return null;
+      value = numeric;
+      if (/^\d{4,}(\.\d+)?$/.test(numericText)) {
+        const abs = Math.abs(numeric);
+        const degrees = Math.floor(abs / 100);
+        const minutes = abs - (degrees * 100);
+        if (minutes < 60) value = degrees + (minutes / 60);
+      }
+    }
+
+    const normalizedKind = kind === "lat" ? "lat" : "lon";
+    let signed = Number(value);
+    if (hemisphere) {
+      if (hemisphere === "S" || hemisphere === "W") signed *= -1;
+      if (hemisphere === "N" || hemisphere === "E") signed = Math.abs(signed);
+    }
+    if (normalizedKind === "lat") {
+      if (signed < -90 || signed > 90) return null;
+    } else if (signed < -180 || signed > 180) {
+      return null;
+    }
+    return signed;
+  }
+
+  function parseWaypointCoordinate(rawValue) {
+    const text = String(rawValue || "").trim();
+    if (!text) return null;
+    const compact = text.replace(/\s+/g, " ").trim();
+
+    const decimalPair = compact.match(/^\s*([+-]?\d+(?:\.\d+)?)\s*[, ]\s*([+-]?\d+(?:\.\d+)?)\s*$/);
+    if (decimalPair) {
+      const lat = Number(decimalPair[1]);
+      const lon = Number(decimalPair[2]);
+      if (Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180) {
+        return { lat, lon };
+      }
+    }
+
+    const parts = compact.split(/[, ]+/).filter(Boolean);
+    if (parts.length >= 2) {
+      const lat = parseHemisphericCoordinateToken(parts[0], "lat");
+      const lon = parseHemisphericCoordinateToken(parts[1], "lon");
+      if (lat != null && lon != null) return { lat, lon };
+    }
+
+    const merged = compact.toUpperCase().replace(/\s+/g, "");
+    const mergedMatch = merged.match(/^([NS]?[0-9.]+[NS]?)([EW]?[0-9.]+[EW]?)$/);
+    if (mergedMatch) {
+      const lat = parseHemisphericCoordinateToken(mergedMatch[1], "lat");
+      const lon = parseHemisphericCoordinateToken(mergedMatch[2], "lon");
+      if (lat != null && lon != null) return { lat, lon };
+    }
+
+    return null;
+  }
+
+  function buildWaypointCoordinateCatalog() {
+    const catalog = new Map();
+    const presets = Array.isArray(state.catalog.routePresets) ? state.catalog.routePresets : [];
+    presets.forEach((preset) => {
+      const legs = Array.isArray(preset && preset.legs) ? preset.legs : [];
+      legs.forEach((leg) => {
+        const routeCode = normalizeCode(leg && leg.route);
+        if (!routeCode) return;
+        const coordRaw = String(
+          (leg && (leg.coord ?? leg.coordinates ?? leg.latlon ?? leg.coordinate ?? "")) || "",
+        ).trim();
+        if (!coordRaw) return;
+        const parsed = parseWaypointCoordinate(coordRaw);
+        if (!parsed) return;
+        if (!catalog.has(routeCode)) {
+          catalog.set(routeCode, {
+            code: routeCode,
+            lat: parsed.lat,
+            lon: parsed.lon,
+            coordText: coordRaw,
+          });
+        }
+      });
+    });
+    return catalog;
+  }
+
+  function getWaypointCoordinate(routeText) {
+    const code = normalizeCode(routeText);
+    if (!code) return null;
+    const catalog = buildWaypointCoordinateCatalog();
+    return catalog.get(code) || null;
+  }
+
+  function getWaypointCodesForSuggestions() {
+    const catalog = buildWaypointCoordinateCatalog();
+    return Array.from(catalog.keys()).sort();
+  }
+
+  function shouldTreatDistanceAsAutofill(leg) {
+    if (!leg || !leg._manual) return true;
+    if (!leg._manual.distance) return true;
+    return leg._distanceAutofillFromCoords === true;
+  }
+
+  function autofillDistanceBetweenWaypoints(distanceLegIndex) {
+    const legIndex = Number(distanceLegIndex);
+    if (!Number.isFinite(legIndex) || legIndex <= 0 || legIndex >= state.navlog.legs.length) return false;
+    const targetLeg = state.navlog.legs[legIndex];
+    if (!targetLeg || !shouldTreatDistanceAsAutofill(targetLeg)) return false;
+    const fromRoute = state.navlog.legs[legIndex - 1] ? state.navlog.legs[legIndex - 1].route : "";
+    const toRoute = targetLeg.route;
+    const fromCoord = getWaypointCoordinate(fromRoute);
+    const toCoord = getWaypointCoordinate(toRoute);
+    if (!fromCoord || !toCoord) return false;
+    const distanceNm = computeGreatCircleDistanceNm(fromCoord.lat, fromCoord.lon, toCoord.lat, toCoord.lon);
+    if (!Number.isFinite(distanceNm) || distanceNm <= 0) return false;
+    targetLeg.distance = formatDistanceDisplay(distanceNm);
+    targetLeg._manual = targetLeg._manual || {};
+    targetLeg._manual.distance = true;
+    targetLeg._distanceAutofillFromCoords = true;
+    return true;
+  }
+
+  function applyCoordinateDistanceAutofillAroundRoute(routeIndex) {
+    const index = Number(routeIndex);
+    if (!Number.isFinite(index)) return false;
+    const changedCurrent = autofillDistanceBetweenWaypoints(index);
+    const changedNext = autofillDistanceBetweenWaypoints(index + 1);
+    return changedCurrent || changedNext;
+  }
+
+  function computeGreatCircleDistanceNm(fromLatDeg, fromLonDeg, toLatDeg, toLonDeg) {
+    const toRad = (value) => value * Math.PI / 180;
+    const lat1 = toRad(Number(fromLatDeg));
+    const lon1 = toRad(Number(fromLonDeg));
+    const lat2 = toRad(Number(toLatDeg));
+    const lon2 = toRad(Number(toLonDeg));
+    if (![lat1, lon1, lat2, lon2].every((value) => Number.isFinite(value))) return null;
+    const dLat = lat2 - lat1;
+    const dLon = lon2 - lon1;
+    const a = (Math.sin(dLat / 2) ** 2) + (Math.cos(lat1) * Math.cos(lat2) * (Math.sin(dLon / 2) ** 2));
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const earthRadiusNm = 3440.065;
+    return earthRadiusNm * c;
+  }
+
+  function computeInitialTrueBearing(fromLatDeg, fromLonDeg, toLatDeg, toLonDeg) {
+    const toRad = (value) => value * Math.PI / 180;
+    const toDeg = (value) => value * 180 / Math.PI;
+    const lat1 = toRad(Number(fromLatDeg));
+    const lat2 = toRad(Number(toLatDeg));
+    const deltaLon = toRad(Number(toLonDeg) - Number(fromLonDeg));
+    if (![lat1, lat2, deltaLon].every((value) => Number.isFinite(value))) return null;
+    const y = Math.sin(deltaLon) * Math.cos(lat2);
+    const x = (Math.cos(lat1) * Math.sin(lat2)) - (Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLon));
+    const bearing = toDeg(Math.atan2(y, x));
+    return normalizeAngle(bearing);
+  }
+
+  function bearingToCompass16(bearingDegrees) {
+    const value = Number(bearingDegrees);
+    if (!Number.isFinite(value)) return "";
+    const labels = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+    const index = Math.floor(((normalizeAngle(value) + 11.25) % 360) / 22.5);
+    return labels[index % 16];
+  }
+
   function render() {
     if (state.view !== "ipad-kiosk") document.body.classList.remove("kiosk-mode");
     document.body.classList.remove("kiosk-phone-mode");
@@ -440,7 +658,11 @@
     else if (state.view === "admin") wireAdminPanel();
     else if (state.view === "ipad-kiosk") wireIpadKiosk();
     else wireNavlog();
-    if (state.view === "ipad-kiosk") return;
+    if (state.view === "ipad-kiosk") {
+      syncKioskGpsTrackingForView();
+      return;
+    }
+    syncKioskGpsTrackingForView();
     wireUtcAdminTrigger();
     wireFooterActions();
     wireBugReportModal();
@@ -794,18 +1016,21 @@
                 <div><button class="mini-plus inline admin-head-plus" id="admin-preset-add-row" type="button" aria-label="Add preset row">+</button>ROUTE</div>
                 <div>TC</div>
                 <div>DIS</div>
+                <div>COORDS</div>
                 <div></div>
               </div>
               <div class="admin-preset-body">
                 ${presetRows.map((row, index) => {
                   const rowHasContent = String(row.route || "").trim() !== ""
                     || String(row.tc || "").trim() !== ""
-                    || String(row.distance || "").trim() !== "";
+                    || String(row.distance || "").trim() !== ""
+                    || String(row.coord || "").trim() !== "";
                   return `
                     <div class="admin-preset-row">
                       <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" />
                       <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" />
                       <input data-admin-preset-row="${index}:distance" value="${escapeAttr(row.distance)}" />
+                      <input data-admin-preset-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="lat,lon or N/S E/W" />
                       <button class="action admin-mini-btn${rowHasContent ? " active" : ""}" data-admin-preset-remove="${index}" type="button" aria-label="Remove preset row" ${rowHasContent ? "" : "disabled"}>-</button>
                     </div>
                   `;
@@ -1053,30 +1278,43 @@
   function renderIpadKioskScreen() {
     const h = state.navlog.header;
     const phoneMode = isPhoneActivateMode();
-    const headerSection = `
-      <section class="sheet-header">
-        ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
-        <div class="header-box dark static planning-box" id="kiosk-planner-toggle">SCRATCHPAD</div>
-        ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
-         ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
-        ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
-        <div class="header-box static navlog-box">NAVIGATION LOG</div>
-        ${renderHeaderInputBox("UTC TIME", `<input data-header="timeUtc" value="${escapeAttr(h.timeUtc)}" />`, "utc-box")}
+    const gpsSpeedLabel = getKioskGpsSpeedDisplayText();
+    const topStrip = `
+      <section class="kiosk-top-strip${phoneMode ? " is-phone" : ""}">
+        <div class="kiosk-utc" id="utc-clock">UTC ${formatUtcNow()}</div>
+        <div class="kiosk-gps-speed" id="kiosk-gps-speed">${escapeHtml(gpsSpeedLabel)}</div>
+        ${phoneMode ? '<button class="action kiosk-top-scratchpad" id="kiosk-top-scratchpad" type="button">Scratchpad</button>' : ""}
       </section>
     `;
+    const headerSection = phoneMode
+      ? renderKioskPhoneHeaderSummary(h)
+      : `
+        <section class="sheet-header">
+          ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
+          <div class="header-box dark static planning-box" id="kiosk-planner-toggle">SCRATCHPAD</div>
+          ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
+           ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
+          ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
+          <div class="header-box static navlog-box">NAVIGATION LOG</div>
+          ${renderHeaderInputBox("UTC TIME", `<input data-header="timeUtc" value="${escapeAttr(h.timeUtc)}" />`, "utc-box")}
+        </section>
+      `;
     return `
       <main class="ipad-kiosk-page${phoneMode ? " kiosk-phone-activate-page" : ""}">
-        <div class="kiosk-utc" id="utc-clock">UTC ${formatUtcNow()}</div>
+        ${topStrip}
         ${phoneMode ? '<p class="kiosk-phone-orientation-hint">Activate iPhone view is designed for portrait mode.</p>' : ""}
         ${renderKioskEventTimerStrip()}
         <section class="sheet-wrap ipad-kiosk-wrap">
           <div class="sheet ipad-kiosk-sheet${phoneMode ? " kiosk-phone-sheet" : ""}">
-            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-header-scroll">${headerSection}</section>` : headerSection}
-            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-route-scroll">${renderRouteTable()}</section>` : renderRouteTable()}
+            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-static-part kiosk-phone-header-panel"><p class="kiosk-part-label">Header</p>${headerSection}</section>` : headerSection}
+            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-scroll-part kiosk-phone-route-scroll"><p class="kiosk-part-label">Route (scroll)</p>${renderRouteTable()}</section>` : renderRouteTable()}
             ${renderTocTod()}
-            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-airport-scroll">${renderLocationTable()}</section>` : renderLocationTable()}
+            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-scroll-part kiosk-phone-airport-scroll"><p class="kiosk-part-label">Airport Info (scroll)</p>${renderLocationTable()}</section>` : renderLocationTable()}
             ${phoneMode ? "" : renderAtisSection()}
           </div>
+        </section>
+        <section class="kiosk-whereami-wrap">
+          <button class="activate-button kiosk-whereami-btn" id="kiosk-whereami-open" type="button">Where am I</button>
         </section>
         <section class="kiosk-pad-overlay" id="kiosk-pad-overlay" aria-hidden="true">
           <div class="kiosk-pad-card">
@@ -1088,8 +1326,39 @@
           </div>
         </section>
         ${renderKioskRouteEstimateModal()}
+        ${renderKioskWhereAmIModal()}
         ${renderKioskTimerAlertModal()}
       </main>
+    `;
+  }
+
+  function renderKioskPhoneHeaderSummary(header) {
+    const rpCNo = String(header && header.rpCNo ? header.rpCNo : "").trim();
+    const aircraft = String(header && header.aircraft ? header.aircraft : "").trim();
+    const rpDisplay = rpCNo || aircraft
+      ? `RP-C ${rpCNo || "-"}${aircraft ? ` (${aircraft})` : ""}`
+      : "";
+    const dateDisplay = normalizeDisplayDate(header && header.date ? header.date : "");
+    const utcTimeDisplay = String(header && header.timeUtc ? header.timeUtc : "").trim();
+    return `
+      <section class="kiosk-phone-header-grid">
+        <label class="kiosk-phone-head-card">
+          <span>RP-C</span>
+          <input data-header="rpCNo" value="${escapeAttr(rpDisplay)}" readonly />
+        </label>
+        <label class="kiosk-phone-head-card">
+          <span>GPH/PPH</span>
+          <input data-header="gphPph" value="${escapeAttr(header && header.gphPph ? header.gphPph : "")}" />
+        </label>
+        <label class="kiosk-phone-head-card">
+          <span>Date</span>
+          <input data-header="date" value="${escapeAttr(dateDisplay)}" readonly />
+        </label>
+        <label class="kiosk-phone-head-card">
+          <span>UTC Time</span>
+          <input data-header="timeUtc" value="${escapeAttr(utcTimeDisplay)}" />
+        </label>
+      </section>
     `;
   }
 
@@ -1147,6 +1416,64 @@
           <div class="kiosk-estimate-actions">
             <button class="action" id="kiosk-route-estimate-compute" type="button">Execute</button>
             <button class="action primary" id="kiosk-route-estimate-set-timer" type="button">Start Timer</button>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  function getKioskGpsSpeedDisplayText() {
+    const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : createEmptyKioskGpsState();
+    if (gps.error) return "GPS unavailable";
+    if (!Number.isFinite(gps.speedKts)) return "GPS -- kts";
+    return `GPS ${formatSpeedDisplayForUnit(gps.speedKts, "kts")} kts`;
+  }
+
+  function renderKioskWhereAmIModal() {
+    const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : createEmptyKioskGpsState();
+    const model = gps.whereAmI || { open: false, query: "", result: null, error: "" };
+    if (!model.open) return "";
+    const routeOptions = getWaypointCodesForSuggestions()
+      .map((code) => `<option value="${escapeAttr(code)}"></option>`)
+      .join("");
+    const result = model.result || null;
+    const distanceLabel = result && Number.isFinite(result.distanceNm) ? `${formatDistanceDisplayWithRounding(result.distanceNm, false)} NM` : "--";
+    const quadrantLabel = result && result.quadrant ? result.quadrant : "--";
+    const headingLabel = result && Number.isFinite(result.headingTrue) ? `${String(roundHalfUp(result.headingTrue)).padStart(3, "0")}°T` : "--";
+    return `
+      <div class="bug-report-overlay" id="kiosk-whereami-overlay">
+        <section class="bug-report-modal kiosk-whereami-modal" role="dialog" aria-modal="true" aria-label="Where am I">
+          <div class="bug-report-head">
+            <h3>Where am I</h3>
+            <button class="action bug-report-close" id="kiosk-whereami-close" type="button">Close</button>
+          </div>
+          <p class="kiosk-whereami-subtitle">Select a waypoint to compute distance, quadrant, and true heading to it.</p>
+          <label class="setup-field kiosk-whereami-input">
+            <span>Waypoint</span>
+            <input id="kiosk-whereami-query" list="kiosk-whereami-waypoint-list" value="${escapeAttr(model.query || "")}" placeholder="Type waypoint" />
+            <datalist id="kiosk-whereami-waypoint-list">${routeOptions}</datalist>
+          </label>
+          <div class="kiosk-whereami-quick">
+            <button class="action" id="kiosk-whereami-use-departure" type="button">Departure</button>
+            <button class="action" id="kiosk-whereami-use-destination" type="button">Destination</button>
+          </div>
+          ${model.error ? `<p class="kiosk-estimate-error">${escapeHtml(model.error)}</p>` : ""}
+          <div class="kiosk-whereami-results">
+            <article>
+              <span>Distance</span>
+              <strong>${escapeHtml(distanceLabel)}</strong>
+            </article>
+            <article>
+              <span>Quadrant</span>
+              <strong>${escapeHtml(quadrantLabel)}</strong>
+            </article>
+            <article>
+              <span>TH To</span>
+              <strong>${escapeHtml(headingLabel)}</strong>
+            </article>
+          </div>
+          <div class="kiosk-estimate-actions">
+            <button class="action primary" id="kiosk-whereami-compute" type="button">Compute</button>
           </div>
         </section>
       </div>
@@ -1241,6 +1568,10 @@
   function renderRouteTable() {
     const variationDeviationEnabled = Boolean(state.settings.variationDeviationEnabled);
     const isPhoneKiosk = isPhoneActivateMode();
+    const showCasColumn = state.view !== "ipad-kiosk";
+    const waypointOptions = getWaypointCodesForSuggestions()
+      .map((code) => `<option value="${escapeAttr(code)}"></option>`)
+      .join("");
     const speedUnitLabel =
       state.settings.speedUnit === "mph"
         ? "MPH"
@@ -1275,8 +1606,7 @@
           <div class="head-cell tall route-head">ROUTE <button class="mini-plus inline" id="add-leg" type="button">+</button></div>
           <div class="head-cell tall alt-head">${withUnit("ALT", altUnitLabel)}</div>
           <div class="head-cell tall">${headingLabel}</div>
-          <div class="head-cell tall ta-head">${withUnit("TA", speedUnitLabel)}</div>
-          <div class="head-cell tall gs-head">${withUnit("GS", speedUnitLabel)}</div>
+          <div class="head-cell tall speed-head">${withUnit("SPD", speedUnitLabel)}</div>
           <div class="head-cell tall dis-head">${withUnit("DIS", distanceUnitLabel)}</div>
           <div class="head-cell tall ee-head">${withUnit("EE", eeUnitLabel)}</div>
           <div class="head-cell tall et-head"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
@@ -1284,7 +1614,11 @@
         </div>
       `;
     } else {
-      const headClass = variationDeviationEnabled ? "nav-head-grid nav-head-grid-vd" : "nav-head-grid";
+      const headClass = [
+        "nav-head-grid",
+        variationDeviationEnabled ? "nav-head-grid-vd" : "",
+        !showCasColumn ? "nav-head-grid-no-cas" : "",
+      ].filter(Boolean).join(" ");
       tableHead = variationDeviationEnabled
         ? `
           <div class="${headClass}">
@@ -1301,7 +1635,7 @@
             <div class="head-cell tall ee-head-vd">${withUnit("EE", eeUnitLabel)}</div>
             <div class="head-cell tall et-head-vd"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
             <div class="head-cell tall at-head-vd"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
-            <div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>
+            ${showCasColumn ? `<div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>` : ""}
             <div class="head-cell sub alt-head">${withUnit("ALT", altUnitLabel)}</div>
             <div class="head-cell sub temp-head">${withUnit("TEMP", tempUnitLabel)}</div>
             <div class="head-cell sub dir-head">DIR</div>
@@ -1324,7 +1658,7 @@
             <div class="head-cell tall ee-head">${withUnit("EE", eeUnitLabel)}</div>
             <div class="head-cell tall et-head"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
             <div class="head-cell tall at-head"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
-            <div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>
+            ${showCasColumn ? `<div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>` : ""}
             <div class="head-cell sub alt-head">${withUnit("ALT", altUnitLabel)}</div>
             <div class="head-cell sub temp-head">${withUnit("TEMP", tempUnitLabel)}</div>
             <div class="head-cell sub dir-head">DIR</div>
@@ -1332,17 +1666,31 @@
           </div>
         `;
     }
+    const markerSnapshot = state.meta && state.meta.routeProgressMarkerSnapshot
+      ? state.meta.routeProgressMarkerSnapshot
+      : null;
+    const markerClass = [
+      "route-progress-marker",
+      markerSnapshot && markerSnapshot.visible ? "visible" : "",
+      markerSnapshot && markerSnapshot.overdue ? "overdue" : "",
+    ].filter(Boolean).join(" ");
+    const markerStyle = markerSnapshot
+      && Number.isFinite(Number(markerSnapshot.leftPx))
+      && Number.isFinite(Number(markerSnapshot.topPx))
+      ? ` style="left:${Number(markerSnapshot.leftPx).toFixed(3)}px;top:${Number(markerSnapshot.topPx).toFixed(3)}px;"`
+      : "";
     return `
       <section class="nav-table">
         ${tableHead}
         <div class="table-body">
           ${state.navlog.legs.map((leg, index) => renderLegRow(leg, index, variationDeviationEnabled)).join("")}
           ${state.view === "ipad-kiosk" ? `
-            <div class="route-progress-marker" id="route-progress-marker" aria-hidden="true">
+            <div class="${markerClass}" id="route-progress-marker" aria-hidden="true"${markerStyle}>
               <span class="route-progress-dot"></span>
             </div>
           ` : ""}
         </div>
+        <datalist id="route-waypoint-catalog">${waypointOptions}</datalist>
       </section>
     `;
   }
@@ -1393,6 +1741,7 @@
 
   function renderLegRow(leg, index, variationDeviationEnabled = false) {
     const isPhoneKiosk = isPhoneActivateMode();
+    const showCasColumn = state.view !== "ipad-kiosk";
     const removable = index > 0 && index < state.navlog.legs.length - 1;
     const altExtra = index === 0 ? "first-alt" : "";
     const distanceToGo = getDistanceToGoDisplay(index);
@@ -1401,11 +1750,11 @@
     const routeCellExtra = isFirstRoute ? "first-route-hint" : (isLastRoute ? "last-route-hint" : "");
     const rowClass = isPhoneKiosk
       ? `leg-row leg-row-phone${variationDeviationEnabled ? " leg-row-phone-vd" : ""}`
-      : (variationDeviationEnabled ? "leg-row leg-row-vd" : "leg-row");
+      : `${variationDeviationEnabled ? "leg-row leg-row-vd" : "leg-row"}${showCasColumn ? "" : " leg-row-no-cas"}`;
     const routeCellMarkup = `
       <div class="${legFieldClass(leg, "route", `route route-cell ${routeCellExtra}`.trim())}">
         <div class="route-main">
-          <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" />
+          <input data-leg-field="${index}:route" list="route-waypoint-catalog" value="${escapeAttr(leg.route)}" />
           ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
           ${
             isFirstRoute
@@ -1426,8 +1775,7 @@
           ${routeCellMarkup}
           <div class="${legFieldClass(leg, "alt", altExtra)}"><input data-leg-field="${index}:alt" value="${escapeAttr(legFieldValue(leg, "alt"))}" /></div>
           <div class="${legFieldClass(leg, headingField)}"><input data-leg-field="${index}:${headingField}" value="${escapeAttr(legFieldValue(leg, headingField))}" /></div>
-          <div class="${legFieldClass(leg, "ta")}"><input data-leg-field="${index}:ta" value="${escapeAttr(legFieldValue(leg, "ta"))}" /></div>
-          <div class="${legFieldClass(leg, "gs")}"><input data-leg-field="${index}:gs" value="${escapeAttr(legFieldValue(leg, "gs"))}" /></div>
+          ${renderKioskPhoneSpeedCell(leg, index)}
           <div class="${legFieldClass(leg, "distance")}"><input data-leg-field="${index}:distance" value="${escapeAttr(legFieldValue(leg, "distance"))}" /></div>
           <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(legFieldValue(leg, "ee"))}" /></div>
           <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(legFieldValue(leg, "et"))}" /></div>
@@ -1457,7 +1805,7 @@
     return `
       <div class="${rowClass}">
         ${routeCellMarkup}
-        <div class="${legFieldClass(leg, "cas")}"><input data-leg-field="${index}:cas" value="${escapeAttr(legFieldValue(leg, "cas"))}" /></div>
+        ${showCasColumn ? `<div class="${legFieldClass(leg, "cas")}"><input data-leg-field="${index}:cas" value="${escapeAttr(legFieldValue(leg, "cas"))}" /></div>` : ""}
         <div class="${legFieldClass(leg, "alt", altExtra)}">
           <input data-leg-field="${index}:alt" value="${escapeAttr(legFieldValue(leg, "alt"))}" />
           ${
@@ -1476,6 +1824,33 @@
         <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(legFieldValue(leg, "ee"))}" /></div>
         <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(legFieldValue(leg, "et"))}" /></div>
         <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" ${index === 0 ? 'placeholder="AB TIME"' : ""} ${state.view === "ipad-kiosk" ? 'inputmode="numeric" pattern="[0-9]*"' : ""} /></div>
+      </div>
+    `;
+  }
+
+  function getKioskPhoneSpeedCellMode(index) {
+    const byLeg = state.meta && state.meta.kioskGps ? state.meta.kioskGps.speedCellModeByLeg : null;
+    const mode = byLeg && byLeg[index] === "ta" ? "ta" : "gs";
+    return mode;
+  }
+
+  function setKioskPhoneSpeedCellMode(index, mode) {
+    if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
+    const byLeg = state.meta.kioskGps.speedCellModeByLeg || {};
+    byLeg[index] = mode === "ta" ? "ta" : "gs";
+    state.meta.kioskGps.speedCellModeByLeg = byLeg;
+  }
+
+  function renderKioskPhoneSpeedCell(leg, index) {
+    const mode = getKioskPhoneSpeedCellMode(index);
+    const gsValue = legFieldValue(leg, "gs");
+    const taValue = legFieldValue(leg, "ta");
+    const activeValue = mode === "ta" ? taValue : gsValue;
+    return `
+      <div class="${legFieldClass(leg, "gs", "kiosk-phone-speed-cell")}">
+        <button type="button" class="kiosk-speed-btn ${mode === "gs" ? "active" : ""}" data-kiosk-speed-mode="${index}:gs">GS</button>
+        <button type="button" class="kiosk-speed-btn ${mode === "ta" ? "active" : ""}" data-kiosk-speed-mode="${index}:ta">TA</button>
+        <input data-kiosk-speed-display="${index}" value="${escapeAttr(activeValue)}" readonly />
       </div>
     `;
   }
@@ -1798,7 +2173,7 @@
     if (activateButton) {
       activateButton.addEventListener("click", () => {
         if (!isActivateSupportedDevice()) {
-          state.meta.activateError = "Activate is only avbl on iPhone and ipad.";
+          state.meta.activateError = "Only avbl on iphone & ipad";
           render();
           return;
         }
@@ -1834,6 +2209,7 @@
           state.navlog = kioskNavlog;
           state.navlog.tocTod.tocEditing = false;
           state.navlog.tocTod.todEditing = false;
+          state.meta.routeProgressMarkerSnapshot = null;
           state.view = "ipad-kiosk";
           normalizeActivateRows(false);
           render();
@@ -1951,6 +2327,8 @@
         leg[field] = nextValue;
         leg._manual = leg._manual || {};
         leg._manual[field] = nextValue.trim() !== "";
+        if (field === "distance") leg._distanceAutofillFromCoords = false;
+        if (field === "route") applyCoordinateDistanceAutofillAroundRoute(index);
         computeRouteMath({ index, field });
         updateComputedCells({ index, field });
         if (index === 0 && field === "alt") syncFirstAltHint();
@@ -2234,16 +2612,20 @@
       const radioField = String(node.getAttribute("data-radio-field") || "");
       const footerField = String(node.getAttribute("data-footer") || "");
       const isTocTodTitle = String(node.getAttribute("data-edit-toc") || "") !== "";
+      const isSpeedToggle = Boolean(node.getAttribute("data-kiosk-speed-mode"));
+      const isWhereAmIOpenButton = node.id === "kiosk-whereami-open";
+      const isTopScratchpadButton = node.id === "kiosk-top-scratchpad";
       const isKioskUtilityUi = Boolean(
         (node.closest && node.closest("#kiosk-route-estimate-overlay"))
         || (node.closest && node.closest("#kiosk-timer-alert-overlay"))
+        || (node.closest && node.closest("#kiosk-whereami-overlay"))
         || (node.closest && node.closest(".kiosk-event-stack")),
       );
       const allowAt = legField.endsWith(":at");
       const allowLocation = radioField.endsWith(":location");
       const allowAtisCode = footerField === "depAtisCode" || footerField === "destinAtisCode";
       const isDateHeader = String(node.getAttribute("data-header") || "") === "date" || node.hasAttribute("data-date-picker");
-      const keepInteractive = allowAt || allowLocation || allowAtisCode || isKioskUtilityUi;
+      const keepInteractive = allowAt || allowLocation || allowAtisCode || isKioskUtilityUi || isSpeedToggle || isWhereAmIOpenButton || isTopScratchpadButton;
       if (!keepInteractive && node.tagName === "BUTTON" && !isTocTodTitle) node.style.display = "none";
       if (isTocTodTitle) {
         node.classList.add("kiosk-static-toc");
@@ -2309,6 +2691,19 @@
       }
     });
 
+    if (phoneMode) {
+      document.querySelectorAll("[data-kiosk-speed-mode]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const raw = String(button.getAttribute("data-kiosk-speed-mode") || "");
+          const [indexText, modeText] = raw.split(":");
+          const index = Number(indexText);
+          if (!Number.isFinite(index) || index < 0 || index >= state.navlog.legs.length) return;
+          setKioskPhoneSpeedCellMode(index, modeText === "ta" ? "ta" : "gs");
+          render();
+        });
+      });
+    }
+
     document.querySelectorAll("[data-radio-field$=':location']").forEach((input) => {
       wireKioskDelayedKeyboard(input);
       input.addEventListener("input", (event) => {
@@ -2346,6 +2741,7 @@
     });
 
     wireKioskRouteEstimateModal();
+    wireKioskWhereAmIControls();
     wireKioskEventTimerControls();
     wireKioskTimerAlertControls();
     syncKioskEventTimerDisplay();
@@ -2353,11 +2749,6 @@
     bindKioskDoubleTapGuard();
     bindKioskPullToRefreshGuard();
     setupKioskScratchPad();
-    const marker = document.getElementById("route-progress-marker");
-    if (marker) {
-      marker.classList.remove("visible");
-      delete marker.dataset.positioned;
-    }
     requestAnimationFrame(() => {
       if (!phoneMode) fitSheetToViewport(".ipad-kiosk-wrap");
       requestAnimationFrame(() => syncRouteProgressMarkerDisplay());
@@ -2553,6 +2944,48 @@
       nextLeg._manual = nextLeg._manual || {};
       nextLeg._manual.at = false;
     }
+  }
+
+  function getKioskDepartureRouteCode() {
+    const legs = Array.isArray(state.navlog && state.navlog.legs) ? state.navlog.legs : [];
+    return legs.length ? normalizeCode(legs[0].route) : "";
+  }
+
+  function getKioskDestinationRouteCode() {
+    const legs = Array.isArray(state.navlog && state.navlog.legs) ? state.navlog.legs : [];
+    return legs.length ? normalizeCode(legs[legs.length - 1].route) : "";
+  }
+
+  function setKioskWhereAmIState(next) {
+    if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
+    const previous = state.meta.kioskGps.whereAmI || { open: false, query: "", result: null, error: "" };
+    state.meta.kioskGps.whereAmI = {
+      ...previous,
+      ...next,
+    };
+  }
+
+  function getKioskCurrentGpsPoint() {
+    const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : null;
+    if (!gps) return null;
+    if (!Number.isFinite(gps.latitude) || !Number.isFinite(gps.longitude)) return null;
+    return { lat: gps.latitude, lon: gps.longitude };
+  }
+
+  function computeWhereAmIResultForWaypoint(routeText) {
+    const current = getKioskCurrentGpsPoint();
+    if (!current) return { error: "GPS position unavailable." };
+    const target = getWaypointCoordinate(routeText);
+    if (!target) return { error: "Waypoint not recognized." };
+    const distanceNm = computeGreatCircleDistanceNm(current.lat, current.lon, target.lat, target.lon);
+    const headingTrue = computeInitialTrueBearing(current.lat, current.lon, target.lat, target.lon);
+    if (!Number.isFinite(distanceNm) || !Number.isFinite(headingTrue)) return { error: "Could not compute position." };
+    return {
+      distanceNm,
+      headingTrue,
+      quadrant: bearingToCompass16(headingTrue),
+      waypoint: normalizeCode(routeText),
+    };
   }
 
   function getKioskDistanceUnitLabel() {
@@ -2899,6 +3332,101 @@
     }
   }
 
+  function readKioskWhereAmIQueryFromDom() {
+    const input = document.getElementById("kiosk-whereami-query");
+    if (!input) return;
+    setKioskWhereAmIState({ query: String(input.value || "") });
+  }
+
+  function computeAndStoreKioskWhereAmI() {
+    const model = state.meta.kioskGps && state.meta.kioskGps.whereAmI ? state.meta.kioskGps.whereAmI : { query: "" };
+    const query = String(model.query || "").trim();
+    if (!query) {
+      setKioskWhereAmIState({ result: null, error: "Enter or select a waypoint." });
+      render();
+      return;
+    }
+    const result = computeWhereAmIResultForWaypoint(query);
+    if (result && result.error) {
+      setKioskWhereAmIState({ result: null, error: result.error });
+      render();
+      return;
+    }
+    setKioskWhereAmIState({ result, error: "" });
+    render();
+  }
+
+  function wireKioskWhereAmIControls() {
+    const openButton = document.getElementById("kiosk-whereami-open");
+    if (openButton) {
+      openButton.addEventListener("click", () => {
+        const current = state.meta.kioskGps && state.meta.kioskGps.whereAmI ? state.meta.kioskGps.whereAmI : null;
+        setKioskWhereAmIState({
+          open: true,
+          query: current && current.query ? current.query : "",
+          error: "",
+        });
+        render();
+      });
+    }
+
+    const overlay = document.getElementById("kiosk-whereami-overlay");
+    if (!overlay) return;
+    const closeButton = document.getElementById("kiosk-whereami-close");
+    const computeButton = document.getElementById("kiosk-whereami-compute");
+    const queryInput = document.getElementById("kiosk-whereami-query");
+    const depButton = document.getElementById("kiosk-whereami-use-departure");
+    const destButton = document.getElementById("kiosk-whereami-use-destination");
+
+    if (queryInput) {
+      queryInput.addEventListener("input", () => {
+        readKioskWhereAmIQueryFromDom();
+      });
+      queryInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        readKioskWhereAmIQueryFromDom();
+        computeAndStoreKioskWhereAmI();
+      });
+    }
+
+    if (depButton) {
+      depButton.addEventListener("click", () => {
+        const departure = getKioskDepartureRouteCode();
+        setKioskWhereAmIState({ query: departure, error: "" });
+        render();
+      });
+    }
+
+    if (destButton) {
+      destButton.addEventListener("click", () => {
+        const destination = getKioskDestinationRouteCode();
+        setKioskWhereAmIState({ query: destination, error: "" });
+        render();
+      });
+    }
+
+    if (closeButton) {
+      closeButton.addEventListener("click", () => {
+        setKioskWhereAmIState({ open: false, error: "" });
+        render();
+      });
+    }
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target !== overlay) return;
+      setKioskWhereAmIState({ open: false, error: "" });
+      render();
+    });
+
+    if (computeButton) {
+      computeButton.addEventListener("click", () => {
+        readKioskWhereAmIQueryFromDom();
+        computeAndStoreKioskWhereAmI();
+      });
+    }
+  }
+
   function wireKioskEventTimerControls() {
     document.querySelectorAll("[data-kiosk-timer-clear]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -3070,6 +3598,133 @@
     return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
   }
 
+  function median(values) {
+    const list = (Array.isArray(values) ? values : [])
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value))
+      .sort((a, b) => a - b);
+    if (!list.length) return null;
+    const middle = Math.floor(list.length / 2);
+    if (list.length % 2) return list[middle];
+    return (list[middle - 1] + list[middle]) / 2;
+  }
+
+  function pruneGpsSpeedSamples(nowMs) {
+    const now = Number(nowMs || Date.now());
+    gpsSpeedSamplesKts = gpsSpeedSamplesKts
+      .filter((item) => item && Number.isFinite(item.kts) && Number.isFinite(item.tsMs))
+      .filter((item) => (now - item.tsMs) <= 20000)
+      .slice(-9);
+  }
+
+  function updateKioskGpsDom() {
+    const node = document.getElementById("kiosk-gps-speed");
+    if (node) node.textContent = getKioskGpsSpeedDisplayText();
+  }
+
+  function stopKioskGpsTracking() {
+    if (gpsWatchId != null && navigator.geolocation && typeof navigator.geolocation.clearWatch === "function") {
+      try {
+        navigator.geolocation.clearWatch(gpsWatchId);
+      } catch {
+        // ignore
+      }
+    }
+    gpsWatchId = null;
+    gpsLastPoint = null;
+    gpsSpeedSamplesKts = [];
+    if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
+    state.meta.kioskGps.tracking = false;
+  }
+
+  function handleKioskGpsSuccess(position) {
+    if (!position || !position.coords) return;
+    if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
+    const coords = position.coords;
+    const timestampMs = Number(position.timestamp || Date.now());
+    const lat = Number(coords.latitude);
+    const lon = Number(coords.longitude);
+    const accuracy = Number(coords.accuracy);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    const now = Date.now();
+    let fallbackKts = null;
+    let headingTrue = Number.isFinite(Number(coords.heading)) && Number(coords.heading) >= 0
+      ? normalizeAngle(Number(coords.heading))
+      : null;
+    if (gpsLastPoint && Number.isFinite(gpsLastPoint.tsMs)) {
+      const elapsedSeconds = (timestampMs - gpsLastPoint.tsMs) / 1000;
+      if (elapsedSeconds >= 1 && elapsedSeconds <= 20) {
+        const distanceNm = computeGreatCircleDistanceNm(gpsLastPoint.lat, gpsLastPoint.lon, lat, lon);
+        if (Number.isFinite(distanceNm)) {
+          fallbackKts = (distanceNm * 3600) / elapsedSeconds;
+          if (headingTrue == null && distanceNm > 0.005) {
+            headingTrue = computeInitialTrueBearing(gpsLastPoint.lat, gpsLastPoint.lon, lat, lon);
+          }
+        }
+      }
+    }
+    const nativeMps = Number(coords.speed);
+    const nativeKts = Number.isFinite(nativeMps) && nativeMps >= 0 ? nativeMps * KNOTS_PER_MS : null;
+    const selectedKts = Number.isFinite(nativeKts) && nativeKts >= 0 ? nativeKts : fallbackKts;
+    if (Number.isFinite(selectedKts) && selectedKts >= 0 && selectedKts <= 420) {
+      gpsSpeedSamplesKts.push({ kts: selectedKts, tsMs: timestampMs });
+    }
+    pruneGpsSpeedSamples(now);
+    const smoothedKts = median(gpsSpeedSamplesKts.map((item) => item.kts));
+
+    state.meta.kioskGps.supported = true;
+    state.meta.kioskGps.tracking = true;
+    state.meta.kioskGps.error = "";
+    state.meta.kioskGps.latitude = lat;
+    state.meta.kioskGps.longitude = lon;
+    state.meta.kioskGps.accuracyMeters = Number.isFinite(accuracy) ? accuracy : null;
+    state.meta.kioskGps.headingTrue = Number.isFinite(headingTrue) ? headingTrue : state.meta.kioskGps.headingTrue;
+    state.meta.kioskGps.speedKts = Number.isFinite(smoothedKts) ? smoothedKts : state.meta.kioskGps.speedKts;
+
+    gpsLastPoint = { lat, lon, tsMs: timestampMs };
+    updateKioskGpsDom();
+  }
+
+  function handleKioskGpsError(error) {
+    if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
+    state.meta.kioskGps.supported = Boolean(navigator.geolocation);
+    state.meta.kioskGps.tracking = false;
+    state.meta.kioskGps.error = error && error.message ? String(error.message) : "GPS unavailable.";
+    updateKioskGpsDom();
+  }
+
+  function startKioskGpsTracking() {
+    if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
+    if (!navigator.geolocation || typeof navigator.geolocation.watchPosition !== "function") {
+      state.meta.kioskGps.supported = false;
+      state.meta.kioskGps.tracking = false;
+      state.meta.kioskGps.error = "GPS unavailable.";
+      updateKioskGpsDom();
+      return;
+    }
+    state.meta.kioskGps.supported = true;
+    if (gpsWatchId != null) return;
+    try {
+      gpsWatchId = navigator.geolocation.watchPosition(
+        handleKioskGpsSuccess,
+        handleKioskGpsError,
+        { enableHighAccuracy: true, maximumAge: 1000, timeout: 12000 },
+      );
+      state.meta.kioskGps.tracking = true;
+      state.meta.kioskGps.error = "";
+      updateKioskGpsDom();
+    } catch {
+      state.meta.kioskGps.tracking = false;
+      state.meta.kioskGps.error = "GPS unavailable.";
+      updateKioskGpsDom();
+    }
+  }
+
+  function syncKioskGpsTrackingForView() {
+    if (state.view === "ipad-kiosk") startKioskGpsTracking();
+    else stopKioskGpsTracking();
+  }
+
   function bindKioskDoubleTapGuard() {
     const page = document.querySelector(".ipad-kiosk-page");
     if (!page || page.dataset.doubleTapGuardBound === "1") return;
@@ -3142,9 +3797,10 @@
 
   function wireKioskScratchPadToggle() {
     const plannerCell = document.getElementById("kiosk-planner-toggle");
+    const topScratchpadButton = document.getElementById("kiosk-top-scratchpad");
     const overlay = document.getElementById("kiosk-pad-overlay");
     const closeButton = document.getElementById("kiosk-pad-close");
-    if (!plannerCell || !overlay) return;
+    if ((!plannerCell && !topScratchpadButton) || !overlay) return;
 
     const openOverlay = () => {
       overlay.classList.add("open");
@@ -3156,7 +3812,7 @@
       overlay.setAttribute("aria-hidden", "true");
     };
 
-    if (!plannerCell.dataset.tripleBound) {
+    if (plannerCell && !plannerCell.dataset.tripleBound) {
       let tapCount = 0;
       let lastTapAt = 0;
       const windowMs = 1400;
@@ -3173,6 +3829,10 @@
       if (window.PointerEvent) plannerCell.addEventListener("pointerdown", onPlannerTap);
       else plannerCell.addEventListener("click", onPlannerTap);
       plannerCell.dataset.tripleBound = "1";
+    }
+    if (topScratchpadButton && !topScratchpadButton.dataset.bound) {
+      topScratchpadButton.addEventListener("click", openOverlay);
+      topScratchpadButton.dataset.bound = "1";
     }
     if (closeButton && !closeButton.dataset.bound) {
       closeButton.addEventListener("click", closeOverlay);
@@ -4601,6 +5261,7 @@
         route: String(row && row.route != null ? row.route : ""),
         tc: String(row && row.tc != null ? row.tc : ""),
         distance: String(row && row.distance != null ? row.distance : ""),
+        coord: String(row && row.coord != null ? row.coord : ""),
       }));
     return normalized.length ? normalized : [createEmptyPresetRow()];
   }
@@ -4617,6 +5278,7 @@
           String(row.route || "").trim() !== ""
           || String(row.tc || "").trim() !== ""
           || String(row.distance || "").trim() !== ""
+          || String(row.coord || "").trim() !== ""
         )
       );
       button.disabled = !hasContent;
@@ -4631,6 +5293,7 @@
         route: leg && leg.route != null ? leg.route : "",
         tc: leg && leg.tc != null ? leg.tc : "",
         distance: leg && leg.distance != null ? leg.distance : "",
+        coord: leg && (leg.coord ?? leg.coordinates ?? leg.latlon) != null ? (leg.coord ?? leg.coordinates ?? leg.latlon) : "",
       })),
     );
   }
@@ -4642,13 +5305,15 @@
       const route = String(row && row.route != null ? row.route : "").trim();
       const tcRaw = String(row && row.tc != null ? row.tc : "").trim();
       const distanceRaw = String(row && row.distance != null ? row.distance : "").trim();
-      if (!route && !tcRaw && !distanceRaw) return;
+      const coordRaw = String(row && row.coord != null ? row.coord : "").trim();
+      if (!route && !tcRaw && !distanceRaw && !coordRaw) return;
       const leg = {};
       if (route) leg.route = route;
       const tc = num(tcRaw);
       const distance = num(distanceRaw);
       if (tc != null) leg.tc = roundHalfUp(tc);
       if (distance != null) leg.distance = distance;
+      if (coordRaw) leg.coord = coordRaw;
       legs.push(leg);
     });
     return legs;
@@ -5690,7 +6355,18 @@
     if (tocTime) tocTime.value = state.navlog.tocTod.tocTime;
     if (todDistance) todDistance.value = state.navlog.tocTod.todDistance;
     if (todTime) todTime.value = state.navlog.tocTod.todTime;
+    syncKioskPhoneSpeedDisplayValues();
     syncRouteProgressMarkerDisplay();
+  }
+
+  function syncKioskPhoneSpeedDisplayValues() {
+    if (!isPhoneActivateMode()) return;
+    state.navlog.legs.forEach((leg, index) => {
+      const node = document.querySelector(`[data-kiosk-speed-display="${index}"]`);
+      if (!node) return;
+      const mode = getKioskPhoneSpeedCellMode(index);
+      node.value = mode === "ta" ? legFieldValue(leg, "ta") : legFieldValue(leg, "gs");
+    });
   }
 
   function syncDistanceToGo() {
@@ -5741,6 +6417,8 @@
   function syncRouteProgressMarkerDisplay() {
     const marker = document.getElementById("route-progress-marker");
     if (!marker) return;
+    if (!state.meta) state.meta = {};
+    if (!("routeProgressMarkerSnapshot" in state.meta)) state.meta.routeProgressMarkerSnapshot = null;
     const tableBody = marker.closest(".table-body");
     if (!tableBody) return;
     if (state.view === "ipad-kiosk" && isIpadDevice()) {
@@ -5753,13 +6431,16 @@
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
       delete marker.dataset.positioned;
+      state.meta.routeProgressMarkerSnapshot = null;
       return;
     }
     const hasUnlaidOutRow = routeCells.some((cell) => cell.offsetHeight < 4 || cell.offsetWidth < 4);
     if (hasUnlaidOutRow || tableBody.offsetHeight < 12) {
+      if (marker.dataset.positioned === "1") return;
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
       delete marker.dataset.positioned;
+      state.meta.routeProgressMarkerSnapshot = null;
       return;
     }
 
@@ -5768,6 +6449,7 @@
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
       delete marker.dataset.positioned;
+      state.meta.routeProgressMarkerSnapshot = null;
       return;
     }
 
@@ -5781,6 +6463,7 @@
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
       delete marker.dataset.positioned;
+      state.meta.routeProgressMarkerSnapshot = null;
       return;
     }
 
@@ -5812,6 +6495,12 @@
       marker.classList.add("visible");
       marker.classList.toggle("overdue", Boolean(progressState.overdue));
       marker.dataset.positioned = "1";
+      state.meta.routeProgressMarkerSnapshot = {
+        leftPx: dividerX,
+        topPx: markerY,
+        overdue: Boolean(progressState.overdue),
+        visible: true,
+      };
       marker.getBoundingClientRect();
       marker.style.transition = "";
       return;
@@ -5821,6 +6510,12 @@
     marker.style.top = nextTop;
     marker.classList.add("visible");
     marker.classList.toggle("overdue", Boolean(progressState.overdue));
+    state.meta.routeProgressMarkerSnapshot = {
+      leftPx: dividerX,
+      topPx: markerY,
+      overdue: Boolean(progressState.overdue),
+      visible: true,
+    };
   }
 
   function syncLegField(index, field, value, activeEdit, leg) {
@@ -6376,6 +7071,7 @@
     if (state.view === "ipad-kiosk") {
       syncKioskEventTimerDisplay();
       syncKioskRouteEstimateLiveDistanceDisplay();
+      updateKioskGpsDom();
     }
     syncRouteProgressMarkerDisplay();
   }
@@ -6454,6 +7150,21 @@
           // PDF-only row floor: keep route and airport tables expanded to printable minimums.
           ensureMinimumRows(doc.querySelector(".table-body"), ".leg-row", 8);
           ensureMinimumRows(doc.querySelector(".radio-body"), ".radio-row", 5);
+
+          // PDF view hides CAS structurally: remove CAS cells and shift table grids.
+          doc.querySelectorAll(".nav-head-grid").forEach((head) => {
+            if (!head.classList.contains("nav-head-grid-phone")) head.classList.add("nav-head-grid-no-cas");
+            head.querySelectorAll(".cas-head").forEach((cell) => cell.remove());
+          });
+          doc.querySelectorAll(".leg-row").forEach((row) => {
+            if (row.classList.contains("leg-row-phone")) return;
+            const casInput = row.querySelector('input[data-leg-field$=":cas"]');
+            if (casInput) {
+              const casCell = casInput.closest("div");
+              if (casCell && casCell.parentElement === row) casCell.remove();
+            }
+            row.classList.add("leg-row-no-cas");
+          });
         },
       });
       const image = canvas.toDataURL("image/png");
@@ -6687,13 +7398,14 @@
     const kioskRequested = params.get("kiosk") === "1";
     if (kioskRequested && state.meta.navlogUnlocked && isActivateSupportedDevice()) {
       state.view = "ipad-kiosk";
+      state.meta.routeProgressMarkerSnapshot = null;
       restoreKioskPayload();
       state.navlog.tocTod.tocEditing = false;
       state.navlog.tocTod.todEditing = false;
       normalizeActivateRows(false);
     } else if (kioskRequested && state.meta.navlogUnlocked && !isActivateSupportedDevice()) {
       state.view = "navlog";
-      state.meta.activateError = "Activate is only avbl on iPhone and ipad.";
+      state.meta.activateError = "Only avbl on iphone & ipad";
     } else if (kioskRequested && !state.meta.navlogUnlocked) {
       state.view = "access";
       state.meta.accessError = "Enter access key before opening Activate mode.";
