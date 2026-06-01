@@ -133,7 +133,6 @@
   let gpsLastPoint = null;
   let gpsSpeedSamplesKts = [];
   let gpsPermissionDecisionPending = false;
-  let gpsPermissionPromptSuppressUntil = 0;
 
   function createBlankLeg(route) {
     return {
@@ -646,10 +645,14 @@
     if (state.view !== "ipad-kiosk") document.body.classList.remove("kiosk-mode");
     document.body.classList.remove("kiosk-phone-mode");
     document.body.classList.remove("ipad-desktop-scale");
+    document.body.classList.remove("iphone-navlog-vd-mode");
     if (isIpadDevice() && (state.view === "navlog" || state.view === "ipad-kiosk")) {
       document.body.classList.add("ipad-desktop-scale");
     }
     if (isPhoneActivateMode()) document.body.classList.add("kiosk-phone-mode");
+    if (state.view === "navlog" && isIphoneDevice() && state.settings.variationDeviationEnabled) {
+      document.body.classList.add("iphone-navlog-vd-mode");
+    }
     evaluateAnnouncementsPrompt();
     computeRouteMath();
     if (state.view === "access") app.innerHTML = renderAccessScreen();
@@ -1334,8 +1337,8 @@
         <section class="kiosk-pad-overlay" id="kiosk-pad-overlay" aria-hidden="true">
           <div class="kiosk-pad-card">
             <div class="kiosk-pad-head">
-              <button class="action" id="kiosk-pad-close" type="button">Close</button>
               <button class="action" id="kiosk-pad-clear" type="button">Clear</button>
+              <button class="action" id="kiosk-pad-close" type="button">Close</button>
             </div>
             <canvas id="kiosk-pad-canvas" aria-label="Scratch pad"></canvas>
           </div>
@@ -1474,8 +1477,8 @@
     if (!isActivateGpsEnabled()) return "No GS avbl";
     const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : createEmptyKioskGpsState();
     if (gps.error) return "No GS avbl";
-    if (!Number.isFinite(gps.speedKts)) return "GPS -- kts";
-    return `GPS ${formatSpeedDisplayForUnit(gps.speedKts, "kts")} kts`;
+    if (!Number.isFinite(gps.speedKts)) return "GS -- kts";
+    return `GS ${formatSpeedDisplayForUnit(gps.speedKts, "kts")} kts`;
   }
 
   function getKioskWhereAmIButtonState() {
@@ -4061,11 +4064,7 @@
         if (state.view === "ipad-kiosk" && isActivateGpsEnabled()) startKioskGpsTracking();
       },
       (retryError) => {
-        if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
-        state.meta.kioskGps.supported = true;
-        state.meta.kioskGps.tracking = false;
-        state.meta.kioskGps.error = retryError && retryError.message ? String(retryError.message) : "GPS unavailable.";
-        updateKioskGpsDom();
+        handleKioskGpsError(retryError);
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 },
     );
@@ -4073,15 +4072,6 @@
 
   function handleKioskGpsError(error) {
     const permissionDenied = Number(error && error.code) === 1;
-    const now = Date.now();
-    if (permissionDenied && now < gpsPermissionPromptSuppressUntil) {
-      if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
-      state.meta.kioskGps.supported = Boolean(navigator.geolocation);
-      state.meta.kioskGps.tracking = false;
-      state.meta.kioskGps.error = error && error.message ? String(error.message) : "GPS unavailable.";
-      updateKioskGpsDom();
-      return;
-    }
     if (
       permissionDenied
       && state.view === "ipad-kiosk"
@@ -4099,11 +4089,8 @@
         return;
       }
       gpsPermissionDecisionPending = false;
-      gpsPermissionPromptSuppressUntil = Date.now() + 1500;
       stopKioskGpsTracking();
-      setTimeout(() => {
-        if (state.view === "ipad-kiosk" && isActivateGpsEnabled()) retryKioskGpsPermissionRequest();
-      }, 180);
+      if (state.view === "ipad-kiosk" && isActivateGpsEnabled()) retryKioskGpsPermissionRequest();
       return;
     }
     if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
@@ -7889,6 +7876,11 @@
   function installReloadProtection() {
     if (window.__navlogReloadProtectionBound === "1") return;
     const reloadMessage = "Please verify you have internet available before reloading. You may not be able to use Navlog further if you reload without internet.";
+    const beforeUnloadHandler = (event) => {
+      event.preventDefault();
+      event.returnValue = reloadMessage;
+      return reloadMessage;
+    };
     window.addEventListener("keydown", (event) => {
       const key = String(event.key || "");
       const isRefreshKey = key === "F5" || ((event.ctrlKey || event.metaKey) && key.toLowerCase() === "r");
@@ -7896,11 +7888,38 @@
       event.preventDefault();
       window.alert(reloadMessage);
     });
-    window.addEventListener("beforeunload", (event) => {
+    window.addEventListener("beforeunload", beforeUnloadHandler);
+    window.onbeforeunload = beforeUnloadHandler;
+    let pullStartY = 0;
+    let pullTracking = false;
+    let pullAlerted = false;
+    window.addEventListener("touchstart", (event) => {
+      const touch = event.touches && event.touches[0];
+      if (!touch) return;
+      pullStartY = touch.clientY;
+      pullTracking = window.scrollY <= 0;
+      pullAlerted = false;
+    }, { passive: true });
+    window.addEventListener("touchmove", (event) => {
+      if (!pullTracking) return;
+      const touch = event.touches && event.touches[0];
+      if (!touch) return;
+      const pullingDown = touch.clientY > (pullStartY + 10);
+      if (!pullingDown || window.scrollY > 0) return;
       event.preventDefault();
-      event.returnValue = reloadMessage;
-      return reloadMessage;
-    });
+      if (!pullAlerted) {
+        pullAlerted = true;
+        window.alert(reloadMessage);
+      }
+    }, { passive: false });
+    window.addEventListener("touchend", () => {
+      pullTracking = false;
+      pullAlerted = false;
+    }, { passive: true });
+    window.addEventListener("touchcancel", () => {
+      pullTracking = false;
+      pullAlerted = false;
+    }, { passive: true });
     window.__navlogReloadProtectionBound = "1";
   }
 

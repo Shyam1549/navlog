@@ -1562,6 +1562,10 @@ body.kiosk-mode .field input.at-hold-done {
 .radio-block,
 .atis-block { border: 2px solid var(--line); }
 
+body.kiosk-mode .nav-table {
+  border-bottom-width: 1.5px;
+}
+
 .sheet-header {
   display: grid;
   grid-template-columns: var(--header-side-width) minmax(0, 1fr) var(--header-side-width);
@@ -3406,6 +3410,15 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   .sheet {
     min-width: 1000px;
     padding: 10px;
+  }
+
+  body.iphone-navlog-vd-mode .sheet {
+    min-width: 1220px;
+  }
+
+  body.iphone-navlog-vd-mode .nav-head-grid.nav-head-grid-vd,
+  body.iphone-navlog-vd-mode .leg-row.leg-row-vd {
+    min-width: 1200px;
   }
 
   .kiosk-event-stack { width: 96vw; }
