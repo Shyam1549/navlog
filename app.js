@@ -105,6 +105,7 @@
       navlogUnlocked: readStoredValue(NAVLOG_ACCESS_KEY_UNLOCK) === "1",
       accessError: "",
       activateInfoOpen: false,
+      activateGpsEnabled: false,
       kioskRouteEstimate: createEmptyKioskRouteEstimateState(),
       kioskEventTimer: createEmptyKioskEventTimerState(),
       kioskTimerAlerts: createEmptyKioskTimerAlertState(),
@@ -203,6 +204,7 @@
       open: false,
       legIndex: -1,
       routeLabel: "",
+      routeCode: "",
       direction: "outbound",
       distance: "10",
       groundspeed: "",
@@ -297,7 +299,6 @@
     return {
       route: "",
       tc: "",
-      distance: "",
       coord: "",
     };
   }
@@ -592,6 +593,13 @@
     const changedCurrent = autofillDistanceBetweenWaypoints(index);
     const changedNext = autofillDistanceBetweenWaypoints(index + 1);
     return changedCurrent || changedNext;
+  }
+
+  function autofillAllCoordinateDistances() {
+    if (!Array.isArray(state.navlog.legs) || state.navlog.legs.length < 2) return;
+    for (let index = 1; index < state.navlog.legs.length; index += 1) {
+      autofillDistanceBetweenWaypoints(index);
+    }
   }
 
   function computeGreatCircleDistanceNm(fromLatDeg, fromLonDeg, toLatDeg, toLonDeg) {
@@ -1016,7 +1024,6 @@
               <div class="admin-preset-head">
                 <div><button class="mini-plus inline admin-head-plus" id="admin-preset-add-row" type="button" aria-label="Add preset row">+</button>ROUTE</div>
                 <div>TC</div>
-                <div>DIS</div>
                 <div>COORDS</div>
                 <div></div>
               </div>
@@ -1024,13 +1031,11 @@
                 ${presetRows.map((row, index) => {
                   const rowHasContent = String(row.route || "").trim() !== ""
                     || String(row.tc || "").trim() !== ""
-                    || String(row.distance || "").trim() !== ""
                     || String(row.coord || "").trim() !== "";
                   return `
                     <div class="admin-preset-row">
                       <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" />
                       <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" />
-                      <input data-admin-preset-row="${index}:distance" value="${escapeAttr(row.distance)}" />
                       <input data-admin-preset-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
                       <button class="action admin-mini-btn${rowHasContent ? " active" : ""}" data-admin-preset-remove="${index}" type="button" aria-label="Remove preset row" ${rowHasContent ? "" : "disabled"}>-</button>
                     </div>
@@ -1281,11 +1286,12 @@
     const phoneMode = isPhoneActivateMode();
     const gpsSpeedLabel = getKioskGpsSpeedDisplayText();
     const whereAmIButtonState = getKioskWhereAmIButtonState();
+    const topClockLabel = phoneMode ? `${formatUtcNow()}Z` : `UTC ${formatUtcNow()}`;
     const topStrip = `
       <section class="kiosk-top-strip${phoneMode ? " is-phone" : ""}">
-        <div class="kiosk-utc" id="utc-clock">UTC ${formatUtcNow()}</div>
+        <div class="kiosk-utc" id="utc-clock">${topClockLabel}</div>
         <div class="kiosk-gps-speed" id="kiosk-gps-speed">${escapeHtml(gpsSpeedLabel)}</div>
-        ${phoneMode ? '<button class="action kiosk-top-scratchpad" id="kiosk-top-scratchpad" type="button">Scratchpad</button>' : ""}
+        <button class="action kiosk-top-scratchpad" id="kiosk-top-scratchpad" type="button">Scratchpad</button>
       </section>
     `;
     const headerSection = phoneMode
@@ -1293,24 +1299,23 @@
       : `
         <section class="sheet-header">
           ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
-          <div class="header-box dark static planning-box" id="kiosk-planner-toggle">SCRATCHPAD</div>
+          <div class="header-box dark static planning-box">PREFLIGHT PLANNER</div>
           ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
            ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
           ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
           <div class="header-box static navlog-box">NAVIGATION LOG</div>
           ${renderHeaderInputBox("UTC TIME", `<input data-header="timeUtc" value="${escapeAttr(h.timeUtc)}" />`, "utc-box")}
         </section>
-      `;
+    `;
     return `
       <main class="ipad-kiosk-page${phoneMode ? " kiosk-phone-activate-page" : ""}">
         ${topStrip}
-        ${phoneMode ? '<p class="kiosk-phone-orientation-hint">Activate iPhone view is designed for portrait mode.</p>' : ""}
         ${renderKioskEventTimerStrip()}
         <section class="sheet-wrap ipad-kiosk-wrap">
           <div class="sheet ipad-kiosk-sheet${phoneMode ? " kiosk-phone-sheet" : ""}">
-            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-static-part kiosk-phone-header-panel"><p class="kiosk-part-label">Header</p>${headerSection}</section>` : headerSection}
+            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-static-part kiosk-phone-header-panel"><p class="kiosk-part-label">Info</p>${headerSection}</section>` : headerSection}
             ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-scroll-part kiosk-phone-route-scroll"><p class="kiosk-part-label">Route</p>${renderRouteTable()}</section>` : renderRouteTable()}
-            ${renderTocTod()}
+            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-static-part kiosk-phone-toc-panel">${renderTocTod()}</section>` : renderTocTod()}
             ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-scroll-part kiosk-phone-airport-scroll"><p class="kiosk-part-label">Airport Info</p>${renderLocationTable()}</section>` : renderLocationTable()}
             ${phoneMode ? "" : renderAtisSection()}
           </div>
@@ -1349,12 +1354,12 @@
           <input data-header="rpCNo" value="${escapeAttr(rpDisplay)}" readonly />
         </label>
         <label class="kiosk-phone-head-card">
-          <span>GPH/PPH</span>
-          <input data-header="gphPph" value="${escapeAttr(header && header.gphPph ? header.gphPph : "")}" />
-        </label>
-        <label class="kiosk-phone-head-card">
           <span>Date</span>
           <input data-header="date" value="${escapeAttr(dateDisplay)}" readonly />
+        </label>
+        <label class="kiosk-phone-head-card">
+          <span>GPH/PPH</span>
+          <input data-header="gphPph" value="${escapeAttr(header && header.gphPph ? header.gphPph : "")}" />
         </label>
         <label class="kiosk-phone-head-card">
           <span>UTC Time</span>
@@ -1367,14 +1372,21 @@
   function renderKioskEventTimerStrip() {
     const timers = Array.isArray(state.meta.kioskEventTimer) ? state.meta.kioskEventTimer : [];
     if (!timers.length) return "";
-    const rows = timers.map((timer) => `
-      <section class="kiosk-event-timer" data-kiosk-timer-id="${escapeAttr(timer.id)}">
-        <span class="kiosk-event-label">${escapeHtml(timer.label || "Position estimate")}</span>
-        <span class="kiosk-event-countdown" data-kiosk-timer-countdown="${escapeAttr(timer.id)}">T--:--</span>
-        <span class="kiosk-event-target" data-kiosk-timer-target="${escapeAttr(timer.id)}">${escapeHtml(timer.targetHhmm || "")}Z</span>
-        <button class="kiosk-event-clear" data-kiosk-timer-clear="${escapeAttr(timer.id)}" type="button" aria-label="Clear timer">×</button>
-      </section>
-    `).join("");
+    const rows = timers.map((timer) => {
+      const kind = String(timer && timer.kind ? timer.kind : "time");
+      const countdownDefault = kind === "gps-distance" ? "-- NM" : "T--:--";
+      const targetDefault = kind === "gps-distance"
+        ? (timer.targetHhmm ? `ETA ${timer.targetHhmm}Z` : "--")
+        : `${String(timer.targetHhmm || "")}Z`;
+      return `
+        <section class="kiosk-event-timer" data-kiosk-timer-id="${escapeAttr(timer.id)}">
+          <span class="kiosk-event-label">${escapeHtml(timer.label || "Position estimate")}</span>
+          <span class="kiosk-event-countdown" data-kiosk-timer-countdown="${escapeAttr(timer.id)}">${escapeHtml(countdownDefault)}</span>
+          <span class="kiosk-event-target" data-kiosk-timer-target="${escapeAttr(timer.id)}">${escapeHtml(targetDefault)}</span>
+          <button class="kiosk-event-clear" data-kiosk-timer-clear="${escapeAttr(timer.id)}" type="button" aria-label="Clear timer">×</button>
+        </section>
+      `;
+    }).join("");
     return `
       <div class="kiosk-event-stack">${rows}</div>
     `;
@@ -1383,9 +1395,12 @@
   function renderKioskRouteEstimateModal() {
     const model = state.meta.kioskRouteEstimate;
     if (!model || !model.open) return "";
+    const gpsEnabled = isActivateGpsEnabled();
     const liveDistanceText = computeKioskRouteLiveDistanceText(model);
     const routeLabel = String(model.routeLabel || "Waypoint");
-    const routeContext = liveDistanceText ? `${routeLabel} (${liveDistanceText})` : routeLabel;
+    const routeContext = gpsEnabled
+      ? routeLabel
+      : (liveDistanceText ? `${routeLabel} (${liveDistanceText})` : routeLabel);
     return `
       <div class="bug-report-overlay" id="kiosk-route-estimate-overlay">
         <section class="bug-report-modal kiosk-estimate-modal" role="dialog" aria-modal="true" aria-label="Route estimate calculator">
@@ -1394,10 +1409,31 @@
             <button class="action bug-report-close" id="kiosk-route-estimate-close" type="button">Close</button>
           </div>
           <p class="kiosk-estimate-context" id="kiosk-estimate-context">${escapeHtml(routeContext)}</p>
-          <div class="kiosk-direction-toggle" id="kiosk-route-estimate-direction">
-            <button type="button" class="kiosk-direction-btn ${model.direction === "inbound" ? "active" : ""}" data-kiosk-direction="inbound">Inbound</button>
-            <button type="button" class="kiosk-direction-btn ${model.direction === "outbound" ? "active" : ""}" data-kiosk-direction="outbound">Outbound</button>
-          </div>
+          ${
+            gpsEnabled
+              ? `
+                <div class="kiosk-whereami-results kiosk-route-gps-readout">
+                  <article>
+                    <span>Status</span>
+                    <strong id="kiosk-route-gps-direction">--</strong>
+                  </article>
+                  <article>
+                    <span>Distance</span>
+                    <strong id="kiosk-route-gps-distance">--</strong>
+                  </article>
+                  <article>
+                    <span>Quadrant</span>
+                    <strong id="kiosk-route-gps-quadrant">--</strong>
+                  </article>
+                </div>
+              `
+              : `
+                <div class="kiosk-direction-toggle" id="kiosk-route-estimate-direction">
+                  <button type="button" class="kiosk-direction-btn ${model.direction === "inbound" ? "active" : ""}" data-kiosk-direction="inbound">Inbound</button>
+                  <button type="button" class="kiosk-direction-btn ${model.direction === "outbound" ? "active" : ""}" data-kiosk-direction="outbound">Outbound</button>
+                </div>
+              `
+          }
           <div class="kiosk-estimate-grid">
             <label>
               <span>Distance (NM)</span>
@@ -1413,11 +1449,11 @@
               <input id="kiosk-route-estimate-gs" value="${escapeAttr(model.groundspeed)}" inputmode="decimal" />
             </label>
           </div>
-          ${model.resultHhmm ? `<p class="kiosk-estimate-result">Estimate: <strong>${escapeHtml(model.resultHhmm)}Z</strong></p>` : ""}
+          ${model.resultHhmm ? `<p class="kiosk-estimate-result" id="kiosk-route-estimate-result">Estimate: <strong>${escapeHtml(model.resultHhmm)}Z</strong></p>` : '<p class="kiosk-estimate-result hidden" id="kiosk-route-estimate-result">Estimate: <strong>--</strong></p>'}
           ${model.error ? `<p class="kiosk-estimate-error">${escapeHtml(model.error)}</p>` : ""}
           <div class="kiosk-estimate-actions">
-            <button class="action" id="kiosk-route-estimate-compute" type="button">Execute</button>
-            <button class="action primary" id="kiosk-route-estimate-set-timer" type="button">Start Timer</button>
+            ${gpsEnabled ? "" : '<button class="action" id="kiosk-route-estimate-compute" type="button">Execute</button>'}
+            <button class="action primary" id="kiosk-route-estimate-set-timer" type="button">${gpsEnabled ? "Start Reminder" : "Start Timer"}</button>
           </div>
         </section>
       </div>
@@ -1425,6 +1461,7 @@
   }
 
   function getKioskGpsSpeedDisplayText() {
+    if (!isActivateGpsEnabled()) return "GPS unavailable";
     const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : createEmptyKioskGpsState();
     if (gps.error) return "GPS unavailable";
     if (!Number.isFinite(gps.speedKts)) return "GPS -- kts";
@@ -1432,6 +1469,12 @@
   }
 
   function getKioskWhereAmIButtonState() {
+    if (!isActivateGpsEnabled()) {
+      return {
+        unavailable: true,
+        label: "GPS unavailable",
+      };
+    }
     const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : createEmptyKioskGpsState();
     const unavailable = Boolean(String(gps.error || "").trim());
     return {
@@ -1472,23 +1515,20 @@
             <button class="kiosk-preset-btn kiosk-whereami-preset" id="kiosk-whereami-use-departure" type="button">${escapeHtml(depLabel)}</button>
             <button class="kiosk-preset-btn kiosk-whereami-preset" id="kiosk-whereami-use-destination" type="button">${escapeHtml(destLabel)}</button>
           </div>
-          ${model.error ? `<p class="kiosk-estimate-error">${escapeHtml(model.error)}</p>` : ""}
+          <p class="kiosk-estimate-error${model.error ? "" : " hidden"}" id="kiosk-whereami-error">${escapeHtml(model.error || "")}</p>
           <div class="kiosk-whereami-results">
             <article>
               <span>Distance</span>
-              <strong>${escapeHtml(distanceLabel)}</strong>
+              <strong id="kiosk-whereami-distance">${escapeHtml(distanceLabel)}</strong>
             </article>
             <article>
               <span>Quadrant</span>
-              <strong>${escapeHtml(quadrantLabel)}</strong>
+              <strong id="kiosk-whereami-quadrant">${escapeHtml(quadrantLabel)}</strong>
             </article>
             <article>
               <span>TH To</span>
-              <strong>${escapeHtml(headingLabel)}</strong>
+              <strong id="kiosk-whereami-heading">${escapeHtml(headingLabel)}</strong>
             </article>
-          </div>
-          <div class="kiosk-estimate-actions">
-            <button class="action primary" id="kiosk-whereami-compute" type="button">Compute</button>
           </div>
         </section>
       </div>
@@ -1557,11 +1597,14 @@
             <p class="cockpit-info-intro">You are about to enter Cockpit Mode.</p>
             <p class="cockpit-info-recommend">Recommended: Turn on Guided Access and DND.</p>
             <ul class="cockpit-info-list">
-              <li>Tap "SCRATCHPAD" (top right) 3 times to open the scratch pad.</li>
               <li>Press and hold Actual Time (AT) for 2 seconds to auto-enter current ZULU time.</li>
-              <li>To use keyboard entry for interactive fields (AT, ATIS, LOCATION), tap the respective table cell 3 times.</li>
+              <li>To use keyboard entry for interactive fields (AT, ATIS, LOCATION), tap the respective table cell 2 times.</li>
               <li>For inbound/outbound time estimate, press and hold the route for 2 seconds.</li>
             </ul>
+            <label class="settings-item cockpit-gps-toggle">
+              <input type="checkbox" id="activate-enable-gps" ${isActivateGpsEnabled() ? "checked" : ""} />
+              <span>Enable GPS?</span>
+            </label>
           </div>
           <div class="bug-report-actions">
             <button class="action primary" id="activate-info-continue" type="button">Continue</button>
@@ -1623,7 +1666,6 @@
           <div class="head-cell tall alt-head">${withUnit("ALT", altUnitLabel)}</div>
           <div class="head-cell tall">${headingLabel}</div>
           <div class="head-cell tall speed-head speed-mode-head">
-            <span class="speed-mode-title">${withUnit("SPD", speedUnitLabel)}</span>
             <span class="kiosk-global-speed-toggle">
               <button type="button" class="kiosk-speed-btn ${phoneSpeedMode === "gs" ? "active" : ""}" data-kiosk-speed-mode="gs">GS</button>
               <button type="button" class="kiosk-speed-btn ${phoneSpeedMode === "ta" ? "active" : ""}" data-kiosk-speed-mode="ta">TAS</button>
@@ -2218,11 +2260,13 @@
     const activateInfoContinue = document.getElementById("activate-info-continue");
     if (activateInfoContinue) {
       activateInfoContinue.addEventListener("click", () => {
+        const enableGpsToggle = document.getElementById("activate-enable-gps");
+        state.meta.activateGpsEnabled = Boolean(enableGpsToggle && enableGpsToggle.checked);
         state.meta.activateInfoOpen = false;
         const kioskNavlog = buildActivateNavlogSnapshot();
         state.navlog.tocTod.tocEditing = false;
         state.navlog.tocTod.todEditing = false;
-        persistKioskPayload({ navlog: kioskNavlog });
+        persistKioskPayload({ navlog: kioskNavlog, activateGpsEnabled: state.meta.activateGpsEnabled });
         if (navigator.onLine === false) {
           state.navlog = kioskNavlog;
           state.navlog.tocTod.tocEditing = false;
@@ -3071,8 +3115,8 @@
     const referenceUtcMs = Number(timeline[index]?.referenceUtcMs);
     if (!Number.isFinite(referenceUtcMs)) return null;
 
-    const isInbound = nowMs < referenceUtcMs;
-    const direction = isInbound ? "inbound" : "outbound";
+    const direction = nowMs < referenceUtcMs ? "inbound" : "outbound";
+    const isInbound = direction === "inbound";
     const speedLegIndex = isInbound ? index - 1 : index;
     if (speedLegIndex < 0 || speedLegIndex >= state.navlog.legs.length) return null;
 
@@ -3084,6 +3128,72 @@
     const deltaHours = Math.abs(referenceUtcMs - nowMs) / (60 * 60 * 1000);
     const distanceNm = deltaHours * speedKnots;
     return { direction, distanceNm };
+  }
+
+  function getKioskRouteTimeDirection(legIndex, nowMs = Date.now()) {
+    const index = Number(legIndex);
+    if (!Number.isFinite(index) || index < 0 || index >= state.navlog.legs.length) return "";
+    const timeline = buildLegAbsoluteTimeTimeline();
+    const referenceUtcMs = Number(timeline[index]?.referenceUtcMs);
+    if (!Number.isFinite(referenceUtcMs)) return "";
+    return nowMs < referenceUtcMs ? "inbound" : "outbound";
+  }
+
+  function computeKioskRouteGpsRelativeInfo(legIndex) {
+    const index = Number(legIndex);
+    if (!Number.isFinite(index) || index < 0 || index >= state.navlog.legs.length) return { error: "Waypoint unavailable." };
+    const leg = state.navlog.legs[index] || {};
+    const routeCode = normalizeCode(leg.route);
+    if (!routeCode) return { error: "Waypoint unavailable." };
+    const target = getWaypointCoordinate(routeCode);
+    if (!target) return { error: "Waypoint coordinates unavailable." };
+    const current = getKioskCurrentGpsPoint();
+    if (!current) return { error: "GPS position unavailable." };
+    const distanceNm = computeGreatCircleDistanceNm(current.lat, current.lon, target.lat, target.lon);
+    const waypointToUserBearing = computeInitialTrueBearing(target.lat, target.lon, current.lat, current.lon);
+    if (!Number.isFinite(distanceNm) || !Number.isFinite(waypointToUserBearing)) return { error: "Could not compute GPS position." };
+    return {
+      distanceNm,
+      quadrant: bearingToCompass16(waypointToUserBearing),
+      routeCode,
+    };
+  }
+
+  function computeKioskGpsReminderEstimateFromDraft(model, nowMs = Date.now()) {
+    if (!model || !model.open) return null;
+    const direction = getKioskRouteTimeDirection(model.legIndex, nowMs) || "outbound";
+    const targetDistanceNm = parseDistanceInputWithUnit(model.distance, "nm");
+    if (!Number.isFinite(targetDistanceNm) || targetDistanceNm <= 0) {
+      return { error: "Distance/groundspeed invalid. cannot compute." };
+    }
+    const relative = computeKioskRouteGpsRelativeInfo(model.legIndex);
+    if (relative && relative.error) return { error: relative.error };
+    const currentDistanceNm = Number(relative.distanceNm);
+    if (!Number.isFinite(currentDistanceNm)) return { error: "Could not compute GPS position." };
+    const liveGpsSpeed = state.meta?.kioskGps?.speedKts;
+    const draftSpeed = parseSpeedInput(model.groundspeed);
+    const speedKnots = Number.isFinite(draftSpeed) && draftSpeed > 0
+      ? draftSpeed
+      : (Number.isFinite(liveGpsSpeed) && liveGpsSpeed > 0 ? liveGpsSpeed : Number.NaN);
+    if (!Number.isFinite(speedKnots) || speedKnots <= 0) return { error: "Distance/groundspeed invalid. cannot compute." };
+    const remainingNm = direction === "inbound"
+      ? Math.max(0, currentDistanceNm - targetDistanceNm)
+      : Math.max(0, targetDistanceNm - currentDistanceNm);
+    const dueUtcMs = nowMs + Math.round((remainingNm / speedKnots) * 60 * 60 * 1000);
+    const dueDate = new Date(dueUtcMs);
+    const hhmm = `${String(dueDate.getUTCHours()).padStart(2, "0")}${String(dueDate.getUTCMinutes()).padStart(2, "0")}`;
+    return {
+      direction,
+      speedKnots,
+      targetDistanceNm,
+      currentDistanceNm,
+      remainingNm,
+      dueUtcMs,
+      hhmm,
+      routeCode: String(relative.routeCode || ""),
+      quadrant: String(relative.quadrant || ""),
+      distanceNm: currentDistanceNm,
+    };
   }
 
   function computeKioskRouteLiveDistanceText(model, nowMs = Date.now()) {
@@ -3100,6 +3210,34 @@
     if (!node) return;
     const model = state.meta.kioskRouteEstimate;
     const routeLabel = String(model?.routeLabel || "Waypoint");
+    if (isActivateGpsEnabled()) {
+      node.textContent = routeLabel;
+      const directionNode = document.getElementById("kiosk-route-gps-direction");
+      const distanceNode = document.getElementById("kiosk-route-gps-distance");
+      const quadrantNode = document.getElementById("kiosk-route-gps-quadrant");
+      const estimateNode = document.getElementById("kiosk-route-estimate-result");
+      const direction = getKioskRouteTimeDirection(model?.legIndex, Date.now()) || "--";
+      const relative = computeKioskRouteGpsRelativeInfo(model?.legIndex);
+      if (directionNode) directionNode.textContent = direction === "inbound" ? "Inbound" : direction === "outbound" ? "Outbound" : "--";
+      if (distanceNode) {
+        distanceNode.textContent = relative && !relative.error && Number.isFinite(relative.distanceNm)
+          ? `${formatDistanceDisplayWithRounding(relative.distanceNm, false)} NM`
+          : "--";
+      }
+      if (quadrantNode) quadrantNode.textContent = relative && !relative.error ? String(relative.quadrant || "--") : "--";
+      const estimate = computeKioskGpsReminderEstimateFromDraft(model, Date.now());
+      if (estimateNode) {
+        const strong = estimateNode.querySelector("strong");
+        if (!estimate || estimate.error) {
+          estimateNode.classList.add("hidden");
+          if (strong) strong.textContent = "--";
+        } else {
+          estimateNode.classList.remove("hidden");
+          if (strong) strong.textContent = `${estimate.hhmm}Z`;
+        }
+      }
+      return;
+    }
     const liveDistanceText = computeKioskRouteLiveDistanceText(model);
     node.textContent = liveDistanceText ? `${routeLabel} (${liveDistanceText})` : routeLabel;
   }
@@ -3108,14 +3246,19 @@
     if (!Number.isFinite(legIndex) || legIndex < 0 || legIndex >= state.navlog.legs.length) return;
     const leg = state.navlog.legs[legIndex] || {};
     const routeLabel = String(leg.route || "").trim() || `Waypoint ${legIndex + 1}`;
+    const direction = getKioskRouteTimeDirection(legIndex) || "outbound";
+    const defaultGpsSpeed = Number.isFinite(state.meta?.kioskGps?.speedKts) ? formatSpeedDisplayForUnit(state.meta.kioskGps.speedKts, "kts") : "";
     state.meta.kioskRouteEstimate = {
       ...createEmptyKioskRouteEstimateState(),
       open: true,
       legIndex,
       routeLabel,
-      direction: "outbound",
+      routeCode: normalizeCode(leg.route),
+      direction,
       distance: "10",
-      groundspeed: getKioskRouteEstimateDefaultGroundspeed(legIndex, "outbound"),
+      groundspeed: isActivateGpsEnabled()
+        ? (defaultGpsSpeed || getKioskRouteEstimateDefaultGroundspeed(legIndex, direction))
+        : getKioskRouteEstimateDefaultGroundspeed(legIndex, direction),
     };
     render();
   }
@@ -3237,6 +3380,7 @@
   function wireKioskRouteEstimateModal() {
     const overlay = document.getElementById("kiosk-route-estimate-overlay");
     if (!overlay) return;
+    const gpsEnabled = isActivateGpsEnabled();
     const closeButton = document.getElementById("kiosk-route-estimate-close");
     const computeButton = document.getElementById("kiosk-route-estimate-compute");
     const setTimerButton = document.getElementById("kiosk-route-estimate-set-timer");
@@ -3253,20 +3397,22 @@
         syncKioskRouteEstimateLiveDistanceDisplay();
       });
     });
-    document.querySelectorAll("[data-kiosk-direction]").forEach((button) => {
-      button.addEventListener("click", () => {
-        syncKioskRouteEstimateDraftFromDom();
-        const nextDirection = button.dataset.kioskDirection === "inbound" ? "inbound" : "outbound";
-        state.meta.kioskRouteEstimate.direction = nextDirection;
-        state.meta.kioskRouteEstimate.groundspeed = getKioskRouteEstimateDefaultGroundspeed(state.meta.kioskRouteEstimate.legIndex, nextDirection);
-        state.meta.kioskRouteEstimate.error = "";
-        state.meta.kioskRouteEstimate.resultLabel = "";
-        state.meta.kioskRouteEstimate.resultHhmm = "";
-        state.meta.kioskRouteEstimate.resultMinuteOfDay = null;
-        render();
-        syncKioskRouteEstimateLiveDistanceDisplay();
+    if (!gpsEnabled) {
+      document.querySelectorAll("[data-kiosk-direction]").forEach((button) => {
+        button.addEventListener("click", () => {
+          syncKioskRouteEstimateDraftFromDom();
+          const nextDirection = button.dataset.kioskDirection === "inbound" ? "inbound" : "outbound";
+          state.meta.kioskRouteEstimate.direction = nextDirection;
+          state.meta.kioskRouteEstimate.groundspeed = getKioskRouteEstimateDefaultGroundspeed(state.meta.kioskRouteEstimate.legIndex, nextDirection);
+          state.meta.kioskRouteEstimate.error = "";
+          state.meta.kioskRouteEstimate.resultLabel = "";
+          state.meta.kioskRouteEstimate.resultHhmm = "";
+          state.meta.kioskRouteEstimate.resultMinuteOfDay = null;
+          render();
+          syncKioskRouteEstimateLiveDistanceDisplay();
+        });
       });
-    });
+    }
     document.querySelectorAll("[data-kiosk-distance-preset]").forEach((button) => {
       button.addEventListener("click", () => {
         const value = String(button.dataset.kioskDistancePreset || "");
@@ -3292,6 +3438,7 @@
 
     if (computeButton) {
       computeButton.addEventListener("click", () => {
+        if (gpsEnabled) return;
         syncKioskRouteEstimateDraftFromDom();
         const result = computeKioskRouteEstimateFromDraft();
         const model = state.meta.kioskRouteEstimate;
@@ -3322,6 +3469,25 @@
     if (setTimerButton) {
       setTimerButton.addEventListener("click", () => {
         syncKioskRouteEstimateDraftFromDom();
+        if (gpsEnabled) {
+          const model = state.meta.kioskRouteEstimate;
+          const reminder = computeKioskGpsReminderEstimateFromDraft(model);
+          if (!reminder) {
+            model.error = "Distance/groundspeed invalid. cannot compute.";
+            render();
+            return;
+          }
+          if (reminder.error) {
+            model.error = reminder.error;
+            render();
+            return;
+          }
+          model.error = "";
+          setKioskGpsDistanceReminderFromEstimate(model, reminder);
+          state.meta.kioskRouteEstimate = createEmptyKioskRouteEstimateState();
+          render();
+          return;
+        }
         const result = computeKioskRouteEstimateFromDraft();
         const model = state.meta.kioskRouteEstimate;
         if (!result) {
@@ -3345,6 +3511,7 @@
         render();
       });
     }
+    syncKioskRouteEstimateLiveDistanceDisplay();
   }
 
   function readKioskWhereAmIQueryFromDom() {
@@ -3353,22 +3520,52 @@
     setKioskWhereAmIState({ query: String(input.value || "") });
   }
 
-  function computeAndStoreKioskWhereAmI() {
+  function syncKioskWhereAmIResultDom() {
+    const model = state.meta.kioskGps && state.meta.kioskGps.whereAmI ? state.meta.kioskGps.whereAmI : { result: null, error: "" };
+    const result = model.result || null;
+    const errorNode = document.getElementById("kiosk-whereami-error");
+    const distanceNode = document.getElementById("kiosk-whereami-distance");
+    const quadrantNode = document.getElementById("kiosk-whereami-quadrant");
+    const headingNode = document.getElementById("kiosk-whereami-heading");
+    if (errorNode) {
+      errorNode.textContent = String(model.error || "");
+      errorNode.classList.toggle("hidden", !model.error);
+    }
+    if (distanceNode) {
+      distanceNode.textContent = result && Number.isFinite(result.distanceNm)
+        ? `${formatDistanceDisplayWithRounding(result.distanceNm, false)} NM`
+        : "--";
+    }
+    if (quadrantNode) quadrantNode.textContent = result && result.quadrant ? result.quadrant : "--";
+    if (headingNode) headingNode.textContent = result && Number.isFinite(result.headingTrue) ? `${String(roundHalfUp(result.headingTrue)).padStart(3, "0")}°T` : "--";
+  }
+
+  function computeAndStoreKioskWhereAmI(options = {}) {
+    const shouldRender = options.render === true;
+    if (!isActivateGpsEnabled()) {
+      setKioskWhereAmIState({ result: null, error: "GPS unavailable." });
+      if (shouldRender) render();
+      else syncKioskWhereAmIResultDom();
+      return;
+    }
     const model = state.meta.kioskGps && state.meta.kioskGps.whereAmI ? state.meta.kioskGps.whereAmI : { query: "" };
     const query = String(model.query || "").trim();
     if (!query) {
-      setKioskWhereAmIState({ result: null, error: "Enter or select a waypoint." });
-      render();
+      setKioskWhereAmIState({ result: null, error: "" });
+      if (shouldRender) render();
+      else syncKioskWhereAmIResultDom();
       return;
     }
     const result = computeWhereAmIResultForWaypoint(query);
     if (result && result.error) {
       setKioskWhereAmIState({ result: null, error: result.error });
-      render();
+      if (shouldRender) render();
+      else syncKioskWhereAmIResultDom();
       return;
     }
     setKioskWhereAmIState({ result, error: "" });
-    render();
+    if (shouldRender) render();
+    else syncKioskWhereAmIResultDom();
   }
 
   function wireKioskWhereAmIControls() {
@@ -3388,7 +3585,6 @@
     const overlay = document.getElementById("kiosk-whereami-overlay");
     if (!overlay) return;
     const closeButton = document.getElementById("kiosk-whereami-close");
-    const computeButton = document.getElementById("kiosk-whereami-compute");
     const queryInput = document.getElementById("kiosk-whereami-query");
     const depButton = document.getElementById("kiosk-whereami-use-departure");
     const destButton = document.getElementById("kiosk-whereami-use-destination");
@@ -3396,6 +3592,11 @@
     if (queryInput) {
       queryInput.addEventListener("input", () => {
         readKioskWhereAmIQueryFromDom();
+        computeAndStoreKioskWhereAmI();
+      });
+      queryInput.addEventListener("change", () => {
+        readKioskWhereAmIQueryFromDom();
+        computeAndStoreKioskWhereAmI();
       });
       queryInput.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
@@ -3409,7 +3610,9 @@
       depButton.addEventListener("click", () => {
         const departure = getKioskDepartureRouteCode();
         setKioskWhereAmIState({ query: departure, error: "" });
-        render();
+        const inputNode = document.getElementById("kiosk-whereami-query");
+        if (inputNode) inputNode.value = departure;
+        computeAndStoreKioskWhereAmI();
       });
     }
 
@@ -3417,7 +3620,9 @@
       destButton.addEventListener("click", () => {
         const destination = getKioskDestinationRouteCode();
         setKioskWhereAmIState({ query: destination, error: "" });
-        render();
+        const inputNode = document.getElementById("kiosk-whereami-query");
+        if (inputNode) inputNode.value = destination;
+        computeAndStoreKioskWhereAmI();
       });
     }
 
@@ -3433,13 +3638,7 @@
       setKioskWhereAmIState({ open: false, error: "" });
       render();
     });
-
-    if (computeButton) {
-      computeButton.addEventListener("click", () => {
-        readKioskWhereAmIQueryFromDom();
-        computeAndStoreKioskWhereAmI();
-      });
-    }
+    computeAndStoreKioskWhereAmI();
   }
 
   function wireKioskEventTimerControls() {
@@ -3509,7 +3708,8 @@
     const distanceLabel = formatDistanceDisplay(distanceNm);
     const distanceUnitLabel = getKioskDistanceUnitLabel();
     const routeLabel = String(leg.route || "").trim() || `Waypoint ${legIndex + 1}`;
-    const label = `${distanceLabel} ${distanceUnitLabel} ${direction} from ${routeLabel}`;
+    const relation = direction === "inbound" ? "to" : "from";
+    const label = `${distanceLabel} ${distanceUnitLabel} ${direction} ${relation} ${routeLabel}`;
     return { minuteOfDay, hhmm, label, dueUtcMs };
   }
 
@@ -3519,9 +3719,35 @@
     const timers = Array.isArray(state.meta.kioskEventTimer) ? state.meta.kioskEventTimer.slice() : [];
     timers.push({
       id: `kt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+      kind: "time",
       label: String(estimate.label || "Position estimate"),
       targetHhmm: String(estimate.hhmm || ""),
       dueUtcMs,
+    });
+    state.meta.kioskEventTimer = timers;
+  }
+
+  function setKioskGpsDistanceReminderFromEstimate(model, estimate) {
+    if (!model || !estimate) return;
+    const legIndex = Number(model.legIndex);
+    const routeLabel = String(model.routeLabel || `Waypoint ${legIndex + 1}`);
+    const routeCode = String(model.routeCode || routeLabel || "").trim();
+    const direction = String(estimate.direction || getKioskRouteTimeDirection(legIndex) || "outbound");
+    const toFromText = direction === "inbound" ? "to" : "from";
+    const targetDistanceNm = Number(estimate.targetDistanceNm);
+    if (!Number.isFinite(targetDistanceNm) || targetDistanceNm <= 0) return;
+    const timers = Array.isArray(state.meta.kioskEventTimer) ? state.meta.kioskEventTimer.slice() : [];
+    timers.push({
+      id: `kg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+      kind: "gps-distance",
+      label: `${formatDistanceDisplay(targetDistanceNm)} NM ${direction} ${toFromText} ${routeLabel}`,
+      targetHhmm: String(estimate.hhmm || ""),
+      waypointIndex: Number.isFinite(legIndex) ? legIndex : -1,
+      waypointCode: routeCode,
+      direction,
+      targetDistanceNm,
+      speedKts: Number(estimate.speedKnots),
+      dueUtcMs: Number(estimate.dueUtcMs || Date.now()),
     });
     state.meta.kioskEventTimer = timers;
   }
@@ -3552,6 +3778,26 @@
     return Date.now() + Math.round(deltaMinutes * 60000);
   }
 
+  function resolveKioskTimerWaypointCode(timer) {
+    const fromTimer = normalizeCode(timer && timer.waypointCode);
+    if (fromTimer) return fromTimer;
+    const legIndex = Number(timer && timer.waypointIndex);
+    if (Number.isFinite(legIndex) && legIndex >= 0 && legIndex < state.navlog.legs.length) {
+      return normalizeCode(state.navlog.legs[legIndex] && state.navlog.legs[legIndex].route);
+    }
+    return "";
+  }
+
+  function computeGpsDistanceNmForKioskTimer(timer) {
+    const routeCode = resolveKioskTimerWaypointCode(timer);
+    if (!routeCode) return null;
+    const target = getWaypointCoordinate(routeCode);
+    const current = getKioskCurrentGpsPoint();
+    if (!target || !current) return null;
+    const distanceNm = computeGreatCircleDistanceNm(current.lat, current.lon, target.lat, target.lon);
+    return Number.isFinite(distanceNm) ? distanceNm : null;
+  }
+
   function syncKioskEventTimerDisplay() {
     const timers = Array.isArray(state.meta.kioskEventTimer) ? state.meta.kioskEventTimer : [];
     if (!timers.length) {
@@ -3565,6 +3811,44 @@
       if (!timerId) return;
       const countdownNode = document.querySelector(`[data-kiosk-timer-countdown="${timerId}"]`);
       const targetNode = document.querySelector(`[data-kiosk-timer-target="${timerId}"]`);
+      const timerKind = String(timer.kind || "time");
+
+      if (timerKind === "gps-distance") {
+        const direction = timer.direction === "inbound" ? "inbound" : "outbound";
+        const targetDistanceNm = Number(timer.targetDistanceNm);
+        const liveDistanceNm = computeGpsDistanceNmForKioskTimer(timer);
+        const routeCode = resolveKioskTimerWaypointCode(timer) || String(timer.waypointCode || "");
+        const liveSpeed = Number.isFinite(state.meta?.kioskGps?.speedKts) ? Number(state.meta.kioskGps.speedKts) : Number.NaN;
+        const timerSpeed = Number.isFinite(Number(timer.speedKts)) ? Number(timer.speedKts) : Number.NaN;
+        const speedKts = Number.isFinite(liveSpeed) && liveSpeed > 0 ? liveSpeed : timerSpeed;
+        const canMeasure = Number.isFinite(liveDistanceNm) && Number.isFinite(targetDistanceNm) && targetDistanceNm >= 0;
+        const reached = canMeasure
+          ? (direction === "inbound" ? liveDistanceNm <= targetDistanceNm : liveDistanceNm >= targetDistanceNm)
+          : false;
+
+        if (countdownNode) {
+          if (!Number.isFinite(liveDistanceNm)) countdownNode.textContent = "GPS unavailable";
+          else countdownNode.textContent = `${formatDistanceDisplayWithRounding(liveDistanceNm, false)} NM`;
+        }
+        if (targetNode) {
+          if (!canMeasure || !Number.isFinite(speedKts) || speedKts <= 0) {
+            targetNode.textContent = `${routeCode || "--"} ${direction}`;
+          } else {
+            const remainingNm = direction === "inbound"
+              ? Math.max(0, liveDistanceNm - targetDistanceNm)
+              : Math.max(0, targetDistanceNm - liveDistanceNm);
+            const dueUtcMs = nowMs + Math.round((remainingNm / speedKts) * 60 * 60 * 1000);
+            const dueDate = new Date(dueUtcMs);
+            const hhmm = `${String(dueDate.getUTCHours()).padStart(2, "0")}${String(dueDate.getUTCMinutes()).padStart(2, "0")}`;
+            timer.targetHhmm = hhmm;
+            timer.dueUtcMs = dueUtcMs;
+            targetNode.textContent = `ETA ${hhmm}Z`;
+          }
+        }
+        if (reached) completedTimerIds.push(timerId);
+        return;
+      }
+
       const remainingMs = Number(timer.dueUtcMs || 0) - nowMs;
       if (countdownNode) countdownNode.textContent = `T-${formatDurationClockFromMs(remainingMs, false)}`;
       if (targetNode) targetNode.textContent = `${timer.targetHhmm}Z`;
@@ -3745,8 +4029,18 @@
   }
 
   function syncKioskGpsTrackingForView() {
-    if (state.view === "ipad-kiosk") startKioskGpsTracking();
-    else stopKioskGpsTracking();
+    if (state.view === "ipad-kiosk" && isActivateGpsEnabled()) {
+      startKioskGpsTracking();
+      return;
+    }
+    stopKioskGpsTracking();
+    if (state.view === "ipad-kiosk") {
+      if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
+      state.meta.kioskGps.error = "GPS unavailable.";
+      state.meta.kioskGps.supported = false;
+      state.meta.kioskGps.tracking = false;
+      updateKioskGpsDom();
+    }
   }
 
   function bindKioskDoubleTapGuard() {
@@ -3820,11 +4114,10 @@
   }
 
   function wireKioskScratchPadToggle() {
-    const plannerCell = document.getElementById("kiosk-planner-toggle");
     const topScratchpadButton = document.getElementById("kiosk-top-scratchpad");
     const overlay = document.getElementById("kiosk-pad-overlay");
     const closeButton = document.getElementById("kiosk-pad-close");
-    if ((!plannerCell && !topScratchpadButton) || !overlay) return;
+    if (!topScratchpadButton || !overlay) return;
 
     const openOverlay = () => {
       overlay.classList.add("open");
@@ -3836,24 +4129,6 @@
       overlay.setAttribute("aria-hidden", "true");
     };
 
-    if (plannerCell && !plannerCell.dataset.tripleBound) {
-      let tapCount = 0;
-      let lastTapAt = 0;
-      const windowMs = 1400;
-      const onPlannerTap = () => {
-        const now = Date.now();
-        if (now - lastTapAt > windowMs) tapCount = 0;
-        tapCount += 1;
-        lastTapAt = now;
-        if (tapCount >= 3) {
-          tapCount = 0;
-          openOverlay();
-        }
-      };
-      if (window.PointerEvent) plannerCell.addEventListener("pointerdown", onPlannerTap);
-      else plannerCell.addEventListener("click", onPlannerTap);
-      plannerCell.dataset.tripleBound = "1";
-    }
     if (topScratchpadButton && !topScratchpadButton.dataset.bound) {
       topScratchpadButton.addEventListener("click", openOverlay);
       topScratchpadButton.dataset.bound = "1";
@@ -4050,11 +4325,18 @@
     return state.view === "ipad-kiosk" && isIphoneDevice();
   }
 
+  function isActivateGpsEnabled() {
+    return Boolean(state.meta && state.meta.activateGpsEnabled);
+  }
+
   function persistKioskPayload(overrides = {}) {
     try {
       const payload = {
         navlog: overrides.navlog || state.navlog,
         settings: overrides.settings || state.settings,
+        activateGpsEnabled: Object.prototype.hasOwnProperty.call(overrides, "activateGpsEnabled")
+          ? Boolean(overrides.activateGpsEnabled)
+          : isActivateGpsEnabled(),
         ts: Date.now(),
       };
       window.localStorage.setItem(NAVLOG_KIOSK_PAYLOAD_KEY, JSON.stringify(payload));
@@ -4071,6 +4353,9 @@
       if (!parsed || typeof parsed !== "object") return;
       if (parsed.navlog && typeof parsed.navlog === "object") state.navlog = parsed.navlog;
       if (parsed.settings && typeof parsed.settings === "object") state.settings = { ...createDefaultSettings(), ...parsed.settings };
+      if (Object.prototype.hasOwnProperty.call(parsed, "activateGpsEnabled")) {
+        state.meta.activateGpsEnabled = Boolean(parsed.activateGpsEnabled);
+      }
     } catch {
       // ignore bad payload
     }
@@ -4216,6 +4501,7 @@
       createBlankLeg(""),
       createBlankLeg(state.navlog.setup.destination),
     ];
+    autofillAllCoordinateDistances();
     applyDefaultCasForAircraft(getMappedAircraftFromRpc(state.navlog.header.rpCNo));
   }
 
@@ -4241,7 +4527,7 @@
     leg._derived = {};
     leg._errors = {};
     Object.entries(fields).forEach(([field, value]) => {
-      if (field === "cas") return;
+      if (field === "cas" || field === "distance") return;
       leg[field] = String(value);
       leg._manual[field] = true;
     });
@@ -5284,7 +5570,6 @@
       .map((row) => ({
         route: String(row && row.route != null ? row.route : ""),
         tc: String(row && row.tc != null ? row.tc : ""),
-        distance: String(row && row.distance != null ? row.distance : ""),
         coord: String(row && row.coord != null ? row.coord : ""),
       }));
     return normalized.length ? normalized : [createEmptyPresetRow()];
@@ -5301,7 +5586,6 @@
         && (
           String(row.route || "").trim() !== ""
           || String(row.tc || "").trim() !== ""
-          || String(row.distance || "").trim() !== ""
           || String(row.coord || "").trim() !== ""
         )
       );
@@ -5316,7 +5600,6 @@
       legs.map((leg) => ({
         route: leg && leg.route != null ? leg.route : "",
         tc: leg && leg.tc != null ? leg.tc : "",
-        distance: leg && leg.distance != null ? leg.distance : "",
         coord: leg && (leg.coord ?? leg.coordinates ?? leg.latlon) != null ? (leg.coord ?? leg.coordinates ?? leg.latlon) : "",
       })),
     );
@@ -5328,15 +5611,12 @@
     source.forEach((row) => {
       const route = String(row && row.route != null ? row.route : "").trim();
       const tcRaw = String(row && row.tc != null ? row.tc : "").trim();
-      const distanceRaw = String(row && row.distance != null ? row.distance : "").trim();
       const coordRaw = String(row && row.coord != null ? row.coord : "").trim();
-      if (!route && !tcRaw && !distanceRaw && !coordRaw) return;
+      if (!route && !tcRaw && !coordRaw) return;
       const leg = {};
       if (route) leg.route = route;
       const tc = num(tcRaw);
-      const distance = num(distanceRaw);
       if (tc != null) leg.tc = roundHalfUp(tc);
-      if (distance != null) leg.distance = distance;
       if (coordRaw) leg.coord = coordRaw;
       legs.push(leg);
     });
@@ -6460,6 +6740,15 @@
     }
     const hasUnlaidOutRow = routeCells.some((cell) => cell.offsetHeight < 4 || cell.offsetWidth < 4);
     if (hasUnlaidOutRow || tableBody.offsetHeight < 12) {
+      const snapshot = state.meta.routeProgressMarkerSnapshot;
+      if (snapshot && Number.isFinite(Number(snapshot.leftPx)) && Number.isFinite(Number(snapshot.topPx))) {
+        marker.style.left = `${Number(snapshot.leftPx).toFixed(3)}px`;
+        marker.style.top = `${Number(snapshot.topPx).toFixed(3)}px`;
+        marker.classList.toggle("visible", Boolean(snapshot.visible));
+        marker.classList.toggle("overdue", Boolean(snapshot.overdue));
+        marker.dataset.positioned = "1";
+        return;
+      }
       if (marker.dataset.positioned === "1") return;
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
@@ -6477,12 +6766,26 @@
       return;
     }
 
+    const bodyRect = tableBody.getBoundingClientRect();
+    const markerCenters = routeCells
+      .map((cell) => cell.querySelector(".route-waypoint-marker"))
+      .map((node) => {
+        if (!node) return null;
+        const rect = node.getBoundingClientRect();
+        if (!rect.width || !rect.height) return null;
+        return {
+          x: (rect.left + (rect.width / 2)) - bodyRect.left,
+          y: (rect.top + (rect.height / 2)) - bodyRect.top,
+        };
+      });
+    const hasMarkerCenters = markerCenters.every((entry) => entry && Number.isFinite(entry.x) && Number.isFinite(entry.y));
     const firstRouteCell = routeCells[0];
     const borderRightWidth = parseFloat(window.getComputedStyle(firstRouteCell).borderRightWidth || "2") || 2;
-    const dividerX = firstRouteCell.offsetLeft + firstRouteCell.offsetWidth - (borderRightWidth / 2);
-    const waypointYPositions = routeCells.map((cell) => {
-      return cell.offsetTop + (cell.offsetHeight / 2);
-    });
+    const fallbackDividerX = firstRouteCell.offsetLeft + firstRouteCell.offsetWidth - (borderRightWidth / 2);
+    const dividerX = hasMarkerCenters ? markerCenters[0].x : fallbackDividerX;
+    const waypointYPositions = hasMarkerCenters
+      ? markerCenters.map((entry) => entry.y)
+      : routeCells.map((cell) => cell.offsetTop + (cell.offsetHeight / 2));
     if (!waypointYPositions.length || !Number.isFinite(dividerX) || dividerX <= 0) {
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
@@ -7090,6 +7393,10 @@
   function updateClock() {
     const now = formatUtcNow();
     document.querySelectorAll("#utc-clock").forEach((node) => {
+      if (state.view === "ipad-kiosk" && isPhoneActivateMode()) {
+        node.textContent = `${now}Z`;
+        return;
+      }
       node.textContent = `UTC ${now}`;
     });
     if (state.view === "ipad-kiosk") {

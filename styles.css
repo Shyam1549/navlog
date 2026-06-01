@@ -36,6 +36,11 @@ button,
 input,
 select { font: inherit; }
 
+input[list]::-webkit-calendar-picker-indicator {
+  display: none !important;
+  opacity: 0 !important;
+}
+
 .entry-page,
 .page {
   width: min(1320px, 100%);
@@ -530,7 +535,7 @@ body.kiosk-mode .time-head {
 .admin-preset-head,
 .admin-preset-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.7fr) minmax(0, 0.7fr) minmax(0, 1.35fr) 42px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.8fr) minmax(0, 1.45fr) 42px;
 }
 
 .admin-airport-head,
@@ -727,6 +732,10 @@ body.kiosk-mode .time-head {
   padding: 8px;
   overflow: visible;
   overscroll-behavior-y: none;
+}
+
+body.kiosk-mode .ipad-kiosk-page {
+  background: #efe3cf;
 }
 
 .kiosk-utc {
@@ -990,6 +999,10 @@ body.kiosk-mode .time-head {
   margin-top: 14px;
 }
 
+.cockpit-gps-toggle {
+  margin-top: 10px;
+}
+
 #kiosk-route-estimate-overlay,
 #kiosk-timer-alert-overlay {
   z-index: 2300;
@@ -1002,6 +1015,7 @@ body.kiosk-mode .time-head {
 .ipad-kiosk-sheet {
   height: auto;
   padding: 8px;
+  background: rgba(255, 255, 255, 0.72);
 }
 
 .kiosk-phone-sheet {
@@ -1013,8 +1027,8 @@ body.kiosk-mode .time-head {
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
-  border: 2px solid rgba(33, 76, 90, 0.2);
-  border-radius: 12px;
+  border: 2px solid rgba(46, 41, 35, 0.35);
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.72);
   padding: 6px;
 }
@@ -1034,6 +1048,12 @@ body.kiosk-mode .time-head {
   letter-spacing: 0.05em;
   color: #234b59;
   font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid rgba(46, 41, 35, 0.24);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .kiosk-phone-header-scroll .sheet-header {
@@ -1063,43 +1083,46 @@ body.kiosk-phone-mode .sheet {
 }
 
 body.kiosk-phone-mode .toc-tod {
-  margin-top: 2px;
+  margin-top: 0;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
 body.kiosk-phone-mode .toc-tod-card {
-  grid-template-columns: 1fr;
-  grid-template-rows: auto 1fr;
+  grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: 1fr;
   min-height: 0;
-  border-radius: 12px;
+  border-radius: 0;
   overflow: hidden;
-  border: 2px solid rgba(46, 41, 35, 0.28);
+  border: 2px solid var(--line);
   background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 6px 12px rgba(46, 41, 35, 0.08);
+  box-shadow: none;
 }
 
 body.kiosk-phone-mode .toc-tod-title {
-  width: 100%;
-  min-height: 34px;
-  border-right: 0;
-  border-bottom: 1.5px solid rgba(46, 41, 35, 0.24);
+  width: auto;
+  min-height: 56px;
+  border-right: 2px solid var(--line);
+  border-bottom: 0;
   font-size: 0.84rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--ink);
-  background: rgba(46, 41, 35, 0.08);
+  background: rgba(46, 41, 35, 0.05);
 }
 
 body.kiosk-phone-mode .toc-value-wrap {
-  min-height: 42px;
+  min-height: 56px;
   padding: 8px 8px;
-  border-right: 0;
-  border-bottom: 1px dashed rgba(46, 41, 35, 0.18);
+  border-right: 1.5px dashed rgba(46, 41, 35, 0.34);
+  border-bottom: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 body.kiosk-phone-mode .toc-value-wrap.is-last {
-  border-bottom: 0;
+  border-right: 0;
 }
 
 body.kiosk-phone-mode .toc-unit {
@@ -1115,10 +1138,11 @@ body.kiosk-phone-mode .toc-value-wrap input {
   font-weight: 700;
   color: var(--ink);
   padding-right: 0;
+  text-align: center;
 }
 
 body.kiosk-phone-mode .toc-tod-card.resolved .toc-tod-title {
-  background: rgba(46, 41, 35, 0.16);
+  background: rgba(46, 41, 35, 0.1);
 }
 
 .kiosk-phone-orientation-hint {
@@ -1246,6 +1270,10 @@ body.kiosk-phone-mode .toc-tod-card.resolved .toc-tod-title {
 .kiosk-whereami-results strong {
   font-size: 0.95rem;
   color: #102f3b;
+}
+
+.kiosk-route-gps-readout {
+  margin: 8px 0 10px;
 }
 
 .ipad-kiosk-page .route-inline-hint,
@@ -1696,12 +1724,12 @@ body.kiosk-mode .date-picker-proxy::-webkit-date-and-time-value {
 
 .nav-head-grid.nav-head-grid-no-cas,
 .leg-row.leg-row-no-cas {
-  grid-template-columns: 1.35fr repeat(11, 1fr);
+  grid-template-columns: 1.55fr repeat(11, 1fr);
 }
 
 .nav-head-grid.nav-head-grid-vd.nav-head-grid-no-cas,
 .leg-row.leg-row-vd.leg-row-no-cas {
-  grid-template-columns: 1.35fr repeat(14, 1fr);
+  grid-template-columns: 1.55fr repeat(14, 1fr);
 }
 
 .nav-head-grid.nav-head-grid-phone,
@@ -1759,15 +1787,26 @@ body.kiosk-mode .date-picker-proxy::-webkit-date-and-time-value {
 
 .route-waypoint-marker {
   position: absolute;
-  left: calc(100% - 1px);
+  right: -1px;
   top: 50%;
-  transform: translate(-50%, -50%);
+  transform: translate(50%, -50%);
   width: 10px;
   height: 10px;
   border-radius: 999px;
   background: #000;
   pointer-events: none;
   z-index: 2;
+}
+
+body.kiosk-phone-mode .route-waypoint-marker {
+  width: 8px;
+  height: 8px;
+  right: -1px;
+}
+
+body.kiosk-phone-mode .route-progress-dot {
+  width: 17px;
+  height: 17px;
 }
 
 .nav-head-grid {
@@ -1927,14 +1966,16 @@ body.kiosk-mode .date-picker-proxy::-webkit-date-and-time-value {
 
 .kiosk-speed-btn {
   width: 100%;
+  height: 100%;
   border: 1px solid rgba(46, 41, 35, 0.25);
-  border-radius: 7px;
+  border-radius: 0;
   background: rgba(255, 255, 255, 0.62);
   color: var(--ink);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   cursor: pointer;
+  min-height: 34px;
 }
 
 .kiosk-speed-btn.active {
@@ -1944,22 +1985,19 @@ body.kiosk-mode .date-picker-proxy::-webkit-date-and-time-value {
 
 .speed-mode-head {
   display: grid;
-  grid-template-rows: auto auto;
+  grid-template-rows: 1fr;
   align-content: stretch;
-  gap: 4px;
-  padding: 5px 6px;
-}
-
-.speed-mode-head .speed-mode-title {
-  display: flex;
-  justify-content: center;
+  gap: 0;
+  padding: 0;
 }
 
 .kiosk-global-speed-toggle {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 0;
   width: 100%;
+  height: 100%;
 }
 
 .kiosk-phone-speed-cell input[data-kiosk-speed-display] {
@@ -2313,6 +2351,13 @@ body.kiosk-mode .date-picker-proxy::-webkit-date-and-time-value {
 .location-cell input {
   text-align: left;
   min-width: 0;
+}
+
+.route-main input[list],
+#kiosk-whereami-query {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: none !important;
 }
 
 .route-main input {
@@ -3131,7 +3176,7 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
   .admin-preset-head,
   .admin-preset-row {
-    min-width: 520px;
+    min-width: 470px;
   }
 
   .admin-airport-head,
@@ -3482,6 +3527,16 @@ body.ipad-desktop-scale .leg-row {
 body.ipad-desktop-scale .nav-head-grid.nav-head-grid-vd,
 body.ipad-desktop-scale .leg-row.leg-row-vd {
   grid-template-columns: 1.35fr repeat(15, 1fr) !important;
+}
+
+body.ipad-desktop-scale .nav-head-grid.nav-head-grid-no-cas,
+body.ipad-desktop-scale .leg-row.leg-row-no-cas {
+  grid-template-columns: 1.55fr repeat(11, 1fr) !important;
+}
+
+body.ipad-desktop-scale .nav-head-grid.nav-head-grid-vd.nav-head-grid-no-cas,
+body.ipad-desktop-scale .leg-row.leg-row-vd.leg-row-no-cas {
+  grid-template-columns: 1.55fr repeat(14, 1fr) !important;
 }
 
 body.ipad-desktop-scale .nav-head-grid {
