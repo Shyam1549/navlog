@@ -23,6 +23,7 @@
   const NAVLOG_KIOSK_PAD_KEY = "navlog_kiosk_pad_v1";
   const NAVLOG_PUBLIC_CATALOG_CACHE_KEY = "navlog_public_catalog_cache_v1";
   const NAVLOG_ACCESS_KEY_UNLOCK = "navlog_access_unlocked_v1";
+  const NAVLOG_WELCOME_BEHAVIOUR_SEEN = "navlog_welcome_behaviour_seen_v1";
   const NAVLOG_MONTHLY_VISITOR_KEY = "navlog_monthly_visitor_marker";
   const NAVLOG_MONTHLY_VISITOR_COUNT_KEY = "navlog_monthly_visitor_count";
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
@@ -104,6 +105,7 @@
       additionalInfoPanel: "",
       navlogUnlocked: readStoredValue(NAVLOG_ACCESS_KEY_UNLOCK) === "1",
       accessError: "",
+      showWelcomeBehaviourNotice: false,
       activateInfoOpen: false,
       activateGpsEnabled: false,
       kioskRouteEstimate: createEmptyKioskRouteEstimateState(),
@@ -130,6 +132,7 @@
   let gpsWatchId = null;
   let gpsLastPoint = null;
   let gpsSpeedSamplesKts = [];
+  let gpsPermissionDecisionPending = false;
 
   function createBlankLeg(route) {
     return {
@@ -697,6 +700,9 @@
   function renderSetupScreen() {
     const presetStatus = getPresetStatusMarkup();
     const showResume = shouldShowResumeButton();
+    const welcomeBehaviourNotice = state.meta.showWelcomeBehaviourNotice
+      ? '<p class="welcome-behaviour-note">Welcome to Navlog. Please read "Navlog Behaviours" in the User Manual before proceeding.</p>'
+      : "";
     const maintenanceBanner = state.catalog.content.maintenanceMode
       ? `<p class="maintenance-warning">${escapeHtml(state.catalog.content.maintenanceText || "under maintenance: service is undergoing maintenance. do not trust.")}</p>`
       : "";
@@ -708,6 +714,7 @@
             <h1>Navlog</h1>
             <div class="utc-pill" id="utc-clock">UTC ${formatUtcNow()}</div>
             <p class="setup-caption">Enter your DEP and ARR aerodrome.</p>
+            ${welcomeBehaviourNotice}
             ${maintenanceBanner}
           </div>
         </section>
@@ -1426,6 +1433,8 @@
                     <strong id="kiosk-route-gps-quadrant">--</strong>
                   </article>
                 </div>
+                <p class="kiosk-estimate-result kiosk-gps-estimate" id="kiosk-route-gps-station-estimate">GPS estimate: <strong>--</strong></p>
+                <p class="kiosk-estimate-context kiosk-reminder-heading">Reminder setup</p>
               `
               : `
                 <div class="kiosk-direction-toggle" id="kiosk-route-estimate-direction">
@@ -1449,7 +1458,7 @@
               <input id="kiosk-route-estimate-gs" value="${escapeAttr(model.groundspeed)}" inputmode="decimal" />
             </label>
           </div>
-          ${model.resultHhmm ? `<p class="kiosk-estimate-result" id="kiosk-route-estimate-result">Estimate: <strong>${escapeHtml(model.resultHhmm)}Z</strong></p>` : '<p class="kiosk-estimate-result hidden" id="kiosk-route-estimate-result">Estimate: <strong>--</strong></p>'}
+          ${model.resultHhmm ? `<p class="kiosk-estimate-result" id="kiosk-route-estimate-result">${gpsEnabled ? "Reminder estimate" : "Estimate"}: <strong>${escapeHtml(model.resultHhmm)}Z</strong></p>` : `<p class="kiosk-estimate-result hidden" id="kiosk-route-estimate-result">${gpsEnabled ? "Reminder estimate" : "Estimate"}: <strong>--</strong></p>`}
           ${model.error ? `<p class="kiosk-estimate-error">${escapeHtml(model.error)}</p>` : ""}
           <div class="kiosk-estimate-actions">
             ${gpsEnabled ? "" : '<button class="action" id="kiosk-route-estimate-compute" type="button">Execute</button>'}
@@ -2151,6 +2160,9 @@
       state.meta.navlogUnlocked = true;
       state.meta.accessError = "";
       writeStoredValue(NAVLOG_ACCESS_KEY_UNLOCK, "1");
+      const welcomeSeen = readStoredValue(NAVLOG_WELCOME_BEHAVIOUR_SEEN) === "1";
+      state.meta.showWelcomeBehaviourNotice = !welcomeSeen;
+      if (!welcomeSeen) writeStoredValue(NAVLOG_WELCOME_BEHAVIOUR_SEEN, "1");
       state.view = "setup";
       render();
     };
@@ -3197,6 +3209,19 @@
     };
   }
 
+  function computeKioskGpsStationEstimate(legIndex, nowMs = Date.now()) {
+    const relative = computeKioskRouteGpsRelativeInfo(legIndex);
+    if (!relative || relative.error) return { error: relative && relative.error ? relative.error : "GPS position unavailable." };
+    const liveSpeed = Number(state.meta?.kioskGps?.speedKts);
+    if (!Number.isFinite(liveSpeed) || liveSpeed <= 0) return { error: "No GS avbl" };
+    const direction = getKioskRouteTimeDirection(legIndex, nowMs) || "outbound";
+    const offsetMs = Math.round((Number(relative.distanceNm) / liveSpeed) * 60 * 60 * 1000);
+    const estimateUtcMs = direction === "inbound" ? (nowMs + offsetMs) : (nowMs - offsetMs);
+    const estimateDate = new Date(estimateUtcMs);
+    const hhmm = `${String(estimateDate.getUTCHours()).padStart(2, "0")}${String(estimateDate.getUTCMinutes()).padStart(2, "0")}`;
+    return { hhmm, direction };
+  }
+
   function computeKioskRouteLiveDistanceText(model, nowMs = Date.now()) {
     if (!model || !model.open) return "";
     const live = computeKioskRouteLiveDistanceInfo(model.legIndex, model.groundspeed, nowMs);
@@ -3216,6 +3241,7 @@
       const directionNode = document.getElementById("kiosk-route-gps-direction");
       const distanceNode = document.getElementById("kiosk-route-gps-distance");
       const quadrantNode = document.getElementById("kiosk-route-gps-quadrant");
+      const stationEstimateNode = document.getElementById("kiosk-route-gps-station-estimate");
       const estimateNode = document.getElementById("kiosk-route-estimate-result");
       const direction = getKioskRouteTimeDirection(model?.legIndex, Date.now()) || "--";
       const relative = computeKioskRouteGpsRelativeInfo(model?.legIndex);
@@ -3226,6 +3252,11 @@
           : "--";
       }
       if (quadrantNode) quadrantNode.textContent = relative && !relative.error ? String(relative.quadrant || "--") : "--";
+      const stationEstimate = computeKioskGpsStationEstimate(model?.legIndex, Date.now());
+      if (stationEstimateNode) {
+        const strong = stationEstimateNode.querySelector("strong");
+        if (strong) strong.textContent = stationEstimate && !stationEstimate.error ? `${stationEstimate.hhmm}Z` : "--";
+      }
       const estimate = computeKioskGpsReminderEstimateFromDraft(model, Date.now());
       if (estimateNode) {
         const strong = estimateNode.querySelector("strong");
@@ -3995,6 +4026,30 @@
   }
 
   function handleKioskGpsError(error) {
+    const permissionDenied = Number(error && error.code) === 1;
+    if (
+      permissionDenied
+      && state.view === "ipad-kiosk"
+      && isActivateGpsEnabled()
+      && !gpsPermissionDecisionPending
+    ) {
+      gpsPermissionDecisionPending = true;
+      const continueWithoutGps = window.confirm("Continue without GPS?");
+      if (continueWithoutGps) {
+        state.meta.activateGpsEnabled = false;
+        persistKioskPayload({ activateGpsEnabled: false });
+        stopKioskGpsTracking();
+        gpsPermissionDecisionPending = false;
+        render();
+        return;
+      }
+      gpsPermissionDecisionPending = false;
+      stopKioskGpsTracking();
+      setTimeout(() => {
+        if (state.view === "ipad-kiosk" && isActivateGpsEnabled()) startKioskGpsTracking();
+      }, 140);
+      return;
+    }
     if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
     state.meta.kioskGps.supported = Boolean(navigator.geolocation);
     state.meta.kioskGps.tracking = false;
@@ -6767,28 +6822,20 @@
       return;
     }
 
-    const markerCenters = routeCells
-      .map((cell) => cell.querySelector(".route-waypoint-marker"))
-      .map((node, cellIndex) => {
-        if (!node) return null;
-        const cell = routeCells[cellIndex];
-        if (!cell) return null;
-        const width = Number(node.offsetWidth || 0);
-        const height = Number(node.offsetHeight || 0);
-        if (width <= 0 || height <= 0) return null;
-        return {
-          x: cell.offsetLeft + node.offsetLeft + (width / 2),
-          y: cell.offsetTop + node.offsetTop + (height / 2),
-        };
-      });
-    const hasMarkerCenters = markerCenters.every((entry) => entry && Number.isFinite(entry.x) && Number.isFinite(entry.y));
     const firstRouteCell = routeCells[0];
-    const borderRightWidth = parseFloat(window.getComputedStyle(firstRouteCell).borderRightWidth || "2") || 2;
-    const fallbackDividerX = firstRouteCell.offsetLeft + firstRouteCell.offsetWidth - (borderRightWidth / 2);
-    const dividerX = hasMarkerCenters ? markerCenters[0].x : fallbackDividerX;
-    const waypointYPositions = hasMarkerCenters
-      ? markerCenters.map((entry) => entry.y)
-      : routeCells.map((cell) => cell.offsetTop + (cell.offsetHeight / 2));
+    let dividerX = Number.NaN;
+    const firstWaypointMarker = firstRouteCell.querySelector(".route-waypoint-marker");
+    if (firstWaypointMarker && firstWaypointMarker.offsetWidth > 0) {
+      // Use the exact visual waypoint marker center to keep the moving dot and
+      // static waypoint markers on the same axis across phone/iPad/resizes.
+      const bodyRect = tableBody.getBoundingClientRect();
+      const markerRect = firstWaypointMarker.getBoundingClientRect();
+      dividerX = (markerRect.left - bodyRect.left) + tableBody.scrollLeft + (markerRect.width / 2);
+    } else {
+      const borderRightWidth = parseFloat(window.getComputedStyle(firstRouteCell).borderRightWidth || "2") || 2;
+      dividerX = firstRouteCell.offsetLeft + firstRouteCell.offsetWidth - (borderRightWidth / 2);
+    }
+    const waypointYPositions = routeCells.map((cell) => cell.offsetTop + (cell.offsetHeight / 2));
     if (!waypointYPositions.length || !Number.isFinite(dividerX) || dividerX <= 0) {
       marker.classList.remove("visible");
       marker.classList.remove("overdue");
