@@ -1461,25 +1461,20 @@
   }
 
   function getKioskGpsSpeedDisplayText() {
-    if (!isActivateGpsEnabled()) return "GPS unavailable";
+    if (!isActivateGpsEnabled()) return "No GS avbl";
     const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : createEmptyKioskGpsState();
-    if (gps.error) return "GPS unavailable";
+    if (gps.error) return "No GS avbl";
     if (!Number.isFinite(gps.speedKts)) return "GPS -- kts";
     return `GPS ${formatSpeedDisplayForUnit(gps.speedKts, "kts")} kts`;
   }
 
   function getKioskWhereAmIButtonState() {
-    if (!isActivateGpsEnabled()) {
-      return {
-        unavailable: true,
-        label: "GPS unavailable",
-      };
-    }
+    if (!isActivateGpsEnabled()) return { unavailable: false, label: "Where am I" };
     const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : createEmptyKioskGpsState();
     const unavailable = Boolean(String(gps.error || "").trim());
     return {
       unavailable,
-      label: unavailable ? "GPS unavailable" : "Where am I",
+      label: "Where am I",
     };
   }
 
@@ -1816,9 +1811,9 @@
       ? `leg-row leg-row-phone${variationDeviationEnabled ? " leg-row-phone-vd" : ""}`
       : `${variationDeviationEnabled ? "leg-row leg-row-vd" : "leg-row"}${showCasColumn ? "" : " leg-row-no-cas"}`;
     const routeCellMarkup = `
-      <div class="${legFieldClass(leg, "route", `route route-cell ${routeCellExtra}`.trim())}">
+        <div class="${legFieldClass(leg, "route", `route route-cell ${routeCellExtra}`.trim())}">
         <div class="route-main">
-          <input data-leg-field="${index}:route" list="route-waypoint-catalog" value="${escapeAttr(leg.route)}" />
+          <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" />
           ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
           ${
             isFirstRoute
@@ -2757,8 +2752,14 @@
       document.querySelectorAll("[data-kiosk-speed-mode]").forEach((button) => {
         button.addEventListener("click", () => {
           const modeText = String(button.getAttribute("data-kiosk-speed-mode") || "");
-          setKioskPhoneSpeedCellMode(modeText === "ta" ? "ta" : "gs");
-          render();
+          const mode = modeText === "ta" ? "ta" : "gs";
+          setKioskPhoneSpeedCellMode(mode);
+          document.querySelectorAll("[data-kiosk-speed-mode]").forEach((node) => {
+            const nodeMode = String(node.getAttribute("data-kiosk-speed-mode") || "");
+            node.classList.toggle("active", (nodeMode === mode));
+          });
+          syncKioskPhoneSpeedDisplayValues();
+          persistKioskPayload();
         });
       });
     }
@@ -6766,16 +6767,18 @@
       return;
     }
 
-    const bodyRect = tableBody.getBoundingClientRect();
     const markerCenters = routeCells
       .map((cell) => cell.querySelector(".route-waypoint-marker"))
-      .map((node) => {
+      .map((node, cellIndex) => {
         if (!node) return null;
-        const rect = node.getBoundingClientRect();
-        if (!rect.width || !rect.height) return null;
+        const cell = routeCells[cellIndex];
+        if (!cell) return null;
+        const width = Number(node.offsetWidth || 0);
+        const height = Number(node.offsetHeight || 0);
+        if (width <= 0 || height <= 0) return null;
         return {
-          x: (rect.left + (rect.width / 2)) - bodyRect.left,
-          y: (rect.top + (rect.height / 2)) - bodyRect.top,
+          x: cell.offsetLeft + node.offsetLeft + (width / 2),
+          y: cell.offsetTop + node.offsetTop + (height / 2),
         };
       });
     const hasMarkerCenters = markerCenters.every((entry) => entry && Number.isFinite(entry.x) && Number.isFinite(entry.y));
@@ -7761,12 +7764,26 @@
     });
   }
 
-  window.addEventListener("beforeunload", (event) => {
-    event.preventDefault();
-    event.returnValue = "";
-  });
+  function installReloadProtection() {
+    if (window.__navlogReloadProtectionBound === "1") return;
+    const reloadMessage = "Please verify you have internet available before reloading. You may not be able to use Navlog further if you reload without internet.";
+    window.addEventListener("keydown", (event) => {
+      const key = String(event.key || "");
+      const isRefreshKey = key === "F5" || ((event.ctrlKey || event.metaKey) && key.toLowerCase() === "r");
+      if (!isRefreshKey) return;
+      event.preventDefault();
+      window.alert(reloadMessage);
+    });
+    window.addEventListener("beforeunload", (event) => {
+      event.preventDefault();
+      event.returnValue = reloadMessage;
+      return reloadMessage;
+    });
+    window.__navlogReloadProtectionBound = "1";
+  }
 
   registerOfflineServiceWorker();
+  installReloadProtection();
   initializeApp();
 })();
 

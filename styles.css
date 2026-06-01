@@ -1001,6 +1001,17 @@ body.kiosk-mode .ipad-kiosk-page {
 
 .cockpit-gps-toggle {
   margin-top: 10px;
+  border: 2px solid rgba(46, 41, 35, 0.35);
+  border-radius: 10px;
+  background: rgba(247, 242, 231, 0.92);
+  padding: 8px 10px;
+  font-weight: 800;
+  color: #1b1813;
+}
+
+.cockpit-gps-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
 }
 
 #kiosk-route-estimate-overlay,
@@ -1015,7 +1026,7 @@ body.kiosk-mode .ipad-kiosk-page {
 .ipad-kiosk-sheet {
   height: auto;
   padding: 8px;
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(247, 242, 231, 0.94);
 }
 
 .kiosk-phone-sheet {
@@ -1048,12 +1059,14 @@ body.kiosk-mode .ipad-kiosk-page {
   letter-spacing: 0.05em;
   color: #234b59;
   font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 7px;
-  border: 1px solid rgba(46, 41, 35, 0.24);
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.7);
+}
+
+.kiosk-phone-toc-panel {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  overflow: visible;
+  box-shadow: none;
 }
 
 .kiosk-phone-header-scroll .sheet-header {
@@ -1274,6 +1287,23 @@ body.kiosk-phone-mode .toc-tod-card.resolved .toc-tod-title {
 
 .kiosk-route-gps-readout {
   margin: 8px 0 10px;
+}
+
+body.kiosk-mode:not(.kiosk-phone-mode) .sheet,
+body.kiosk-mode:not(.kiosk-phone-mode) .ipad-kiosk-sheet {
+  background: rgba(247, 242, 231, 0.94);
+}
+
+body.kiosk-mode:not(.kiosk-phone-mode) .sheet-header,
+body.kiosk-mode:not(.kiosk-phone-mode) .nav-table,
+body.kiosk-mode:not(.kiosk-phone-mode) .radio-block,
+body.kiosk-mode:not(.kiosk-phone-mode) .atis-block,
+body.kiosk-mode:not(.kiosk-phone-mode) .toc-tod-card {
+  background: rgba(247, 242, 231, 0.78);
+}
+
+body.kiosk-mode:not(.kiosk-phone-mode) .header-box {
+  background: rgba(247, 242, 231, 0.84);
 }
 
 .ipad-kiosk-page .route-inline-hint,
@@ -1987,8 +2017,10 @@ body.kiosk-phone-mode .route-progress-dot {
   display: grid;
   grid-template-rows: 1fr;
   align-content: stretch;
+  align-items: stretch;
+  justify-items: stretch;
   gap: 0;
-  padding: 0;
+  padding: 0 !important;
 }
 
 .kiosk-global-speed-toggle {
