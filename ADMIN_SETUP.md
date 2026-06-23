@@ -24,13 +24,15 @@
 
 ## 5) What can be edited
 - Route presets
+- Waypoint coordinates
+- RP-C registry
 - Airport records
 - User manual HTML
 - Privacy policy HTML
 
 ## Notes
 - Public app reads presets/airports/manual/privacy from Supabase when URL/key are configured.
-- Preset, airport, manual, and privacy content are DB-only now (no JS hardcoded fallback data).
-- `supabase-seed.sql` loads the previous default airports, route presets, manual, and privacy content into Supabase.
+- Preset, waypoint, RP-C registry, airport, manual, and privacy content are DB-backed now.
+- `supabase-seed.sql` loads the previous default airports, route presets, RP-C registry defaults, manual, and privacy content into Supabase.
 - Current SQL allows any authenticated Supabase user to write admin data.
   - For production, limit writes to trusted admin users only.

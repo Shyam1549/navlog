@@ -538,6 +538,21 @@ body.kiosk-mode .time-head {
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.8fr) minmax(0, 1.45fr) 42px;
 }
 
+.admin-preset-head-extended,
+.admin-preset-row-extended {
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) minmax(0, 0.8fr) minmax(0, 0.95fr) 42px;
+}
+
+.admin-waypoint-head,
+.admin-waypoint-row {
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.15fr) 42px;
+}
+
+.admin-rpc-head,
+.admin-rpc-row {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.1fr) minmax(0, 0.8fr) minmax(0, 0.95fr) minmax(0, 0.7fr) 42px;
+}
+
 .admin-airport-head,
 .admin-airport-row {
   display: grid;
@@ -586,6 +601,152 @@ body.kiosk-mode .time-head {
 
 .admin-preset-row input:last-of-type {
   border-right: 1px solid rgba(46, 41, 35, 0.14);
+}
+
+.admin-waypoint-row input:last-of-type,
+.admin-rpc-row input:last-of-type {
+  border-right: 0;
+}
+
+.admin-code-input-wrap {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 34px;
+  align-items: stretch;
+}
+
+.admin-code-input-wrap input {
+  border-right: 0;
+}
+
+.admin-code-picker {
+  position: relative;
+  border-left: 1px solid rgba(46, 41, 35, 0.14);
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.admin-code-picker > summary {
+  list-style: none;
+  width: 100%;
+  height: 100%;
+  min-height: var(--admin-row-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink);
+  font-weight: 700;
+  user-select: none;
+}
+
+.admin-code-picker > summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-code-picker[open] > summary {
+  background: rgba(33, 76, 90, 0.12);
+}
+
+.admin-code-picker-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+  width: min(360px, 72vw);
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid rgba(46, 41, 35, 0.18);
+  border-radius: 10px;
+  background: #fffdf8;
+  box-shadow: 0 18px 28px rgba(18, 47, 58, 0.12);
+  padding: 4px;
+}
+
+.admin-code-picker-option {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.admin-code-picker-option:hover {
+  background: rgba(33, 76, 90, 0.08);
+}
+
+.admin-code-picker-option.missing {
+  color: #b33a2b;
+}
+
+.admin-code-picker-option.missing:hover {
+  background: rgba(179, 58, 43, 0.08);
+}
+
+.admin-toggle-line.admin-preset-lock-line {
+  margin-top: 10px;
+  align-items: flex-start;
+  min-height: 0;
+}
+
+.admin-toggle-line-label {
+  display: block;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.admin-info-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.admin-info-badge {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: rgba(33, 76, 90, 0.12);
+  color: #214c5a;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.admin-info-text {
+  text-transform: none;
+}
+
+.admin-waypoint-table .admin-preset-head > div:first-child,
+.admin-rpc-table .admin-preset-head > div:first-child {
+  justify-content: flex-start;
+  padding-left: 8px;
+}
+
+.admin-waypoint-table .admin-preset-head > div,
+.admin-rpc-table .admin-preset-head > div {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  border-right: 1px solid rgba(46, 41, 35, 0.16);
+  background: rgba(33, 76, 90, 0.08);
+}
+
+.admin-waypoint-table .admin-preset-head > div:last-child,
+.admin-rpc-table .admin-preset-head > div:last-child {
+  border-right: 0;
 }
 
 .admin-airport-row input:last-child {
@@ -1090,7 +1251,8 @@ body.kiosk-mode .ipad-kiosk-page {
   border: 0;
   background: transparent;
   padding: 0;
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: hidden;
   box-shadow: none;
 }
 
@@ -1104,6 +1266,14 @@ body.kiosk-mode .ipad-kiosk-page {
 
 .kiosk-phone-airport-scroll .radio-block {
   min-width: 1080px;
+}
+
+.kiosk-phone-toc-panel .toc-tod {
+  min-width: 620px;
+}
+
+.kiosk-phone-atis-scroll .atis-block {
+  min-width: 420px;
 }
 
 body.kiosk-phone-mode {
@@ -3554,8 +3724,11 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   font-size: 1.08em !important;
 }
 .pdf-export input::placeholder { color: transparent !important; }
-.pdf-export .head-format-note,
-.pdf-export .toc-unit { display: none !important; }
+.pdf-export .head-format-note { display: none !important; }
+.pdf-export .toc-unit {
+  display: inline-flex !important;
+  color: var(--muted) !important;
+}
 .pdf-export .cas-head { color: transparent !important; }
 .pdf-export input[data-leg-field$=":cas"] {
   color: transparent !important;

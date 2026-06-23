@@ -45,6 +45,8 @@
     catalog: {
       airports: [],
       routePresets: [],
+      waypoints: [],
+      rpcRegistry: [],
       content: {
         manualHtml: "",
         privacyHtml: "",
@@ -72,9 +74,16 @@
       session: null,
       presets: [],
       airports: [],
+      waypoints: [],
+      rpcRegistry: [],
       selectedPresetId: "",
       selectedAirportCode: "",
+      selectedWaypointName: "",
+      selectedRpcRegistration: "",
       presetForm: createEmptyPresetForm(),
+      presetManualMode: false,
+      waypointForm: createEmptyWaypointForm(),
+      rpcRegistryForm: createEmptyRpcRegistryForm(),
       airportForm: createEmptyAirportForm(),
       manualHtmlDraft: "",
       privacyHtmlDraft: "",
@@ -112,11 +121,26 @@
       kioskEventTimer: createEmptyKioskEventTimerState(),
       kioskTimerAlerts: createEmptyKioskTimerAlertState(),
       kioskGps: createEmptyKioskGpsState(),
+      gpsPermissionPromptOpen: false,
       routeProgressMarkerSnapshot: null,
       monthlyVisitors: 0,
     },
   };
   const TRIG_TOLERANCE = 1e-6;
+  const DEFAULT_RPC_REGISTRY = [
+    { registration: "832", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
+    { registration: "840", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
+    { registration: "860", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
+    { registration: "831", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
+    { registration: "8749", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
+    { registration: "8596", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
+    { registration: "8152", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
+    { registration: "8804", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
+    { registration: "8747", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
+    { registration: "3288", aircraftType: "C172", casClimb: "", casCruise: "", gph: "" },
+    { registration: "833", aircraftType: "C172", casClimb: "", casCruise: "", gph: "" },
+    { registration: "8734", aircraftType: "Seneca", casClimb: "", casCruise: "", gph: "" },
+  ];
   const FEET_PER_METER = 3.280839895013123;
   const KNOTS_PER_MPH = 0.868976;
   const KNOTS_PER_KMH = 1 / 1.852;
@@ -132,7 +156,6 @@
   let gpsWatchId = null;
   let gpsLastPoint = null;
   let gpsSpeedSamplesKts = [];
-  let gpsPermissionDecisionPending = false;
 
   function createBlankLeg(route) {
     return {
@@ -199,6 +222,35 @@
       radios: [createBlankRadioRow()],
       depAtisCode: "",
       destinAtisCode: "",
+    };
+  }
+
+  function createEmptyWaypointForm() {
+    return {
+      rows: [createEmptyWaypointRow()],
+    };
+  }
+
+  function createEmptyWaypointRow() {
+    return {
+      name: "",
+      coord: "",
+    };
+  }
+
+  function createEmptyRpcRegistryForm() {
+    return {
+      rows: [createEmptyRpcRegistryRow()],
+    };
+  }
+
+  function createEmptyRpcRegistryRow() {
+    return {
+      registration: "",
+      aircraftType: "",
+      casClimb: "",
+      casCruise: "",
+      gph: "",
     };
   }
 
@@ -294,6 +346,7 @@
     return {
       departure: "",
       destination: "",
+      locked: true,
       rows: [createEmptyPresetRow()],
     };
   }
@@ -301,8 +354,14 @@
   function createEmptyPresetRow() {
     return {
       route: "",
-      tc: "",
       coord: "",
+      tc: "",
+      distance: "",
+      _manual: {
+        coord: false,
+        tc: false,
+        distance: false,
+      },
     };
   }
 
@@ -429,6 +488,35 @@
     };
   }
 
+  function cloneWaypointRecord(record) {
+    return normalizeWaypointRecord(record);
+  }
+
+  function cloneRpcRegistryRecord(record) {
+    return normalizeRpcRegistryRecord(record);
+  }
+
+  function normalizeWaypointRecord(record) {
+    const name = normalizeCode(record && (record.name ?? record.code ?? record.route));
+    return {
+      id: String(record && record.id != null ? record.id : name),
+      name,
+      coord: String(record && (record.coord ?? record.coordinates ?? record.latlon ?? record.coordinate) != null ? (record.coord ?? record.coordinates ?? record.latlon ?? record.coordinate) : ""),
+    };
+  }
+
+  function normalizeRpcRegistryRecord(record) {
+    const registration = normalizeCode(record && (record.registration ?? record.rpCNo ?? record.rpc));
+    return {
+      id: String(record && record.id != null ? record.id : registration),
+      registration,
+      aircraftType: String(record && (record.aircraftType ?? record.aircraft_type ?? record.aircraft ?? "") || ""),
+      casClimb: String(record && (record.casClimb ?? record.cas_climb ?? "") || ""),
+      casCruise: String(record && (record.casCruise ?? record.cas_cruise ?? "") || ""),
+      gph: String(record && (record.gph ?? record.gph_pph ?? "") || ""),
+    };
+  }
+
   function normalizeAirportRecord(airport) {
     return {
       id: String(airport.id || airport.code || "").trim().toUpperCase(),
@@ -526,28 +614,59 @@
     return null;
   }
 
-  function buildWaypointCoordinateCatalog() {
+  function buildWaypointDataCatalog() {
     const catalog = new Map();
+    const addEntry = (name, coordRaw = "") => {
+      const code = normalizeCode(name);
+      if (!code) return;
+      const current = catalog.get(code) || { code, hasCoords: false, coordText: "", lat: null, lon: null };
+      const nextCoordRaw = String(coordRaw || "").trim();
+      if (!nextCoordRaw) {
+        if (!catalog.has(code)) catalog.set(code, current);
+        return;
+      }
+      const parsed = parseWaypointCoordinate(nextCoordRaw);
+      if (!parsed) {
+        if (!catalog.has(code)) catalog.set(code, current);
+        return;
+      }
+      catalog.set(code, {
+        code,
+        hasCoords: true,
+        lat: parsed.lat,
+        lon: parsed.lon,
+        coordText: nextCoordRaw,
+      });
+    };
+
+    const waypointRows = Array.isArray(state.catalog.waypoints) ? state.catalog.waypoints : [];
+    waypointRows.forEach((row) => addEntry(row && row.name, row && row.coord));
+    const adminWaypointRows = Array.isArray(state.admin && state.admin.waypointForm && state.admin.waypointForm.rows)
+      ? state.admin.waypointForm.rows
+      : [];
+    adminWaypointRows.forEach((row) => addEntry(row && row.name, row && row.coord));
+
     const presets = Array.isArray(state.catalog.routePresets) ? state.catalog.routePresets : [];
     presets.forEach((preset) => {
       const legs = Array.isArray(preset && preset.legs) ? preset.legs : [];
-      legs.forEach((leg) => {
-        const routeCode = normalizeCode(leg && leg.route);
-        if (!routeCode) return;
-        const coordRaw = String(
-          (leg && (leg.coord ?? leg.coordinates ?? leg.latlon ?? leg.coordinate ?? "")) || "",
-        ).trim();
-        if (!coordRaw) return;
-        const parsed = parseWaypointCoordinate(coordRaw);
-        if (!parsed) return;
-        if (!catalog.has(routeCode)) {
-          catalog.set(routeCode, {
-            code: routeCode,
-            lat: parsed.lat,
-            lon: parsed.lon,
-            coordText: coordRaw,
-          });
-        }
+      legs.forEach((leg) => addEntry(leg && leg.route, leg && (leg.coord ?? leg.coordinates ?? leg.latlon ?? leg.coordinate ?? "")));
+    });
+
+    const navlogLegs = Array.isArray(state.navlog && state.navlog.legs) ? state.navlog.legs : [];
+    navlogLegs.forEach((leg) => addEntry(leg && leg.route, leg && (leg.coord ?? leg.coordinates ?? leg.latlon ?? leg.coordinate ?? "")));
+
+    return catalog;
+  }
+
+  function buildWaypointCoordinateCatalog() {
+    const catalog = new Map();
+    buildWaypointDataCatalog().forEach((entry, code) => {
+      if (!entry || !entry.hasCoords) return;
+      catalog.set(code, {
+        code,
+        lat: entry.lat,
+        lon: entry.lon,
+        coordText: entry.coordText,
       });
     });
     return catalog;
@@ -560,9 +679,81 @@
     return catalog.get(code) || null;
   }
 
+  function getWaypointData(routeText) {
+    const code = normalizeCode(routeText);
+    if (!code) return null;
+    return buildWaypointDataCatalog().get(code) || null;
+  }
+
   function getWaypointCodesForSuggestions() {
-    const catalog = buildWaypointCoordinateCatalog();
-    return Array.from(catalog.keys()).sort();
+    return Array.from(buildWaypointDataCatalog().keys()).sort();
+  }
+
+  function getWaypointPickerOptions() {
+    return Array.from(buildWaypointDataCatalog().values())
+      .map((entry) => ({
+        code: String(entry.code || ""),
+        hasCoords: Boolean(entry.hasCoords),
+        coordText: String(entry.coordText || ""),
+      }))
+      .filter((entry) => entry.code)
+      .sort((left, right) => left.code.localeCompare(right.code));
+  }
+
+  function getRpcRegistryData() {
+    const catalog = new Map();
+    const addEntry = (record, source = "") => {
+      const normalized = normalizeRpcRegistryRecord(record);
+      if (!normalized.registration) return;
+      const current = catalog.get(normalized.registration) || {};
+      catalog.set(normalized.registration, {
+        ...current,
+        ...normalized,
+        source,
+      });
+    };
+
+    DEFAULT_RPC_REGISTRY.forEach((record) => addEntry(record, "default"));
+    (Array.isArray(state.catalog.rpcRegistry) ? state.catalog.rpcRegistry : []).forEach((record) => addEntry(record, "catalog"));
+    (Array.isArray(state.admin.rpcRegistry) ? state.admin.rpcRegistry : []).forEach((record) => addEntry(record, "admin"));
+    (Array.isArray(state.admin && state.admin.rpcRegistryForm && state.admin.rpcRegistryForm.rows) ? state.admin.rpcRegistryForm.rows : [])
+      .forEach((record) => addEntry(record, "form"));
+    return catalog;
+  }
+
+  function getRpcRegistryRecord(rpcValue) {
+    const key = normalizeCode(rpcValue);
+    if (!key) return null;
+    return getRpcRegistryData().get(key) || null;
+  }
+
+  function getRpcRegistryOptions() {
+    return Array.from(getRpcRegistryData().values())
+      .map((entry) => ({
+        registration: String(entry.registration || ""),
+        hasValues: Boolean(entry.aircraftType || entry.casClimb || entry.casCruise || entry.gph),
+        aircraftType: String(entry.aircraftType || ""),
+      }))
+      .filter((entry) => entry.registration)
+      .sort((left, right) => left.registration.localeCompare(right.registration));
+  }
+
+  function renderAdminWaypointPickerMenu() {
+    return getWaypointPickerOptions()
+      .map((entry) => {
+        const label = entry.hasCoords ? entry.code : `${entry.code} - missing coords`;
+        return `<button type="button" class="admin-code-picker-option${entry.hasCoords ? "" : " missing"}" data-admin-waypoint-pick="${escapeAttr(entry.code)}">${escapeHtml(label)}</button>`;
+      })
+      .join("");
+  }
+
+  function renderAdminRpcPickerMenu() {
+    return getRpcRegistryOptions()
+      .map((entry) => {
+        const label = entry.hasValues ? `${entry.registration} - ${entry.aircraftType || "Unassigned"}` : `${entry.registration} - unassigned`;
+        return `<button type="button" class="admin-code-picker-option${entry.hasValues ? "" : " missing"}" data-admin-rpc-pick="${escapeAttr(entry.registration)}">${escapeHtml(label)}</button>`;
+      })
+      .join("");
   }
 
   function shouldTreatDistanceAsAutofill(leg) {
@@ -973,15 +1164,34 @@
     const panel = String(state.admin.panel || "dashboard");
     const presetLookup = getPresetLookupState();
     const airportLookup = getAirportLookupState();
-    const presetRows = Array.isArray(state.admin.presetForm.rows) && state.admin.presetForm.rows.length
-      ? state.admin.presetForm.rows
-      : [createEmptyPresetRow()];
+    const presetRows = normalizePresetRows(
+      Array.isArray(state.admin.presetForm.rows) && state.admin.presetForm.rows.length
+        ? state.admin.presetForm.rows
+        : [createEmptyPresetRow()],
+    );
+    const waypointRows = normalizeWaypointRows(
+      Array.isArray(state.admin.waypointForm.rows) && state.admin.waypointForm.rows.length
+        ? state.admin.waypointForm.rows
+        : [createEmptyWaypointRow()],
+    );
+    const rpcRows = normalizeRpcRegistryRows(
+      Array.isArray(state.admin.rpcRegistryForm.rows) && state.admin.rpcRegistryForm.rows.length
+        ? state.admin.rpcRegistryForm.rows
+        : [createEmptyRpcRegistryRow()],
+    );
     const presetCodeOptions = collectPresetAirportCodes()
       .map((code) => `<option value="${escapeAttr(code)}"></option>`)
+      .join("");
+    const waypointCodeOptions = getWaypointCodesForSuggestions()
+      .map((code) => `<option value="${escapeAttr(code)}"></option>`)
+      .join("");
+    const rpcCodeOptions = getRpcRegistryOptions()
+      .map((entry) => `<option value="${escapeAttr(entry.registration)}"></option>`)
       .join("");
     const airportCodeOptions = state.admin.airports
       .map((airport) => `<option value="${escapeAttr(airport.code)}"></option>`)
       .join("");
+    const presetLockEnabled = Boolean(state.admin.presetForm.locked);
     const additionalInfoPanel = String(state.admin.additionalInfoPanel || "");
     const additionalInfoRows = normalizeAdditionalInfoTable(
       state.admin.additionalInfoDraft,
@@ -991,6 +1201,8 @@
     const panelButtons = [
       { id: "dashboard", label: "Dashboard" },
       { id: "presets", label: "Presets" },
+      { id: "coordinates", label: "Coordinates" },
+      { id: "rpc-reg", label: "RP-C Reg" },
       { id: "airports", label: "Airport Info" },
       { id: "announcements", label: "Announcements" },
       { id: "additional-info", label: "Additional Info" },
@@ -1019,7 +1231,9 @@
             <div class="admin-panel-wrap">
           <div class="manual-section${panel === "presets" ? "" : " hidden"}">
             <h3>Route Presets</h3><br>
+            <p class="setup-caption">Route coordinates drive TC and distance automatically. Unlock the row values only when you need to override the GPS-derived defaults.</p>
             <datalist id="admin-preset-code-list">${presetCodeOptions}</datalist>
+            <datalist id="admin-preset-route-list">${waypointCodeOptions}</datalist>
             <div class="admin-grid two-col">
               <label class="setup-field">
                 <span>Departure</span>
@@ -1030,24 +1244,34 @@
                 <input id="admin-preset-destination" list="admin-preset-code-list" value="${escapeAttr(state.admin.presetForm.destination)}" />
               </label>
             </div>
+            <div class="admin-toggle-line admin-preset-lock-line">
+              <button class="action admin-mini-btn${presetLockEnabled ? " active" : ""}" id="admin-preset-lock" type="button">${presetLockEnabled ? "Locked" : "Unlocked"}</button>
+              <span>
+                <span class="admin-toggle-line-label">TC and DIST are GPS obtained</span>
+                <span class="admin-info-inline"><span class="admin-info-badge">i</span><span class="admin-info-text">You do not need to enter them manually unless you unlock editing.</span></span>
+              </span>
+            </div>
             <div class="preset-status ${presetLookup.active ? (presetLookup.exists ? "available" : "missing") : ""}">${presetLookup.active ? (presetLookup.exists ? "preset avbl" : "preset unavbl") : ""}</div>
             <section class="admin-preset-table">
-              <div class="admin-preset-head">
+              <div class="admin-preset-head admin-preset-head-extended">
                 <div><button class="mini-plus inline admin-head-plus" id="admin-preset-add-row" type="button" aria-label="Add preset row">+</button>ROUTE</div>
-                <div>TC</div>
                 <div>COORDS</div>
+                <div>TC</div>
+                <div>DIST</div>
                 <div></div>
               </div>
               <div class="admin-preset-body">
                 ${presetRows.map((row, index) => {
                   const rowHasContent = String(row.route || "").trim() !== ""
+                    || String(row.coord || "").trim() !== ""
                     || String(row.tc || "").trim() !== ""
-                    || String(row.coord || "").trim() !== "";
+                    || String(row.distance || "").trim() !== "";
                   return `
-                    <div class="admin-preset-row">
-                      <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" />
-                      <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" />
+                    <div class="admin-preset-row admin-preset-row-extended">
+                      <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" list="admin-preset-route-list" />
                       <input data-admin-preset-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
+                      <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" ${presetLockEnabled ? "readonly" : ""} placeholder="000" />
+                      <input data-admin-preset-row="${index}:distance" value="${escapeAttr(row.distance)}" ${presetLockEnabled ? "readonly" : ""} placeholder="0.0" />
                       <button class="action admin-mini-btn${rowHasContent ? " active" : ""}" data-admin-preset-remove="${index}" type="button" aria-label="Remove preset row" ${rowHasContent ? "" : "disabled"}>-</button>
                     </div>
                   `;
@@ -1057,6 +1281,86 @@
             <div class="entry-actions">
               <button class="action primary" id="admin-preset-save">Save</button>
               <button class="action" id="admin-preset-delete"${presetLookup.exists ? "" : " disabled"}>Delete</button>
+            </div>
+          </div>
+          <div class="manual-section${panel === "coordinates" ? "" : " hidden"}">
+            <h3>Coordinates</h3><br>
+            <p class="setup-caption">These coordinates are used for distance, TC, and other navigational calculations.</p>
+            <datalist id="admin-waypoint-code-list">${waypointCodeOptions}</datalist>
+            <section class="admin-preset-table admin-waypoint-table">
+              <div class="admin-preset-head admin-preset-head-waypoint">
+                <div><button class="mini-plus inline admin-head-plus" id="admin-waypoint-add-row" type="button" aria-label="Add waypoint row">+</button>WAYPOINT</div>
+                <div>COORDS</div>
+                <div></div>
+              </div>
+              <div class="admin-preset-body">
+                ${waypointRows.map((row, index) => {
+                  const rowHasContent = String(row.name || "").trim() !== "" || String(row.coord || "").trim() !== "";
+                  return `
+                    <div class="admin-preset-row admin-waypoint-row">
+                      <div class="admin-code-input-wrap">
+                        <input data-admin-waypoint-row="${index}:name" value="${escapeAttr(row.name)}" list="admin-waypoint-code-list" />
+                        <details class="admin-code-picker">
+                          <summary class="admin-code-picker-summary" aria-label="Pick waypoint">▾</summary>
+                          <div class="admin-code-picker-menu">
+                            ${renderAdminWaypointPickerMenu()}
+                          </div>
+                        </details>
+                      </div>
+                      <input data-admin-waypoint-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
+                      <button class="action admin-mini-btn${rowHasContent ? " active" : ""}" data-admin-waypoint-remove="${index}" type="button" aria-label="Remove waypoint row" ${rowHasContent ? "" : "disabled"}>-</button>
+                    </div>
+                  `;
+                }).join("")}
+              </div>
+            </section>
+            <div class="entry-actions">
+              <button class="action primary" id="admin-waypoint-save">Save</button>
+            </div>
+          </div>
+          <div class="manual-section${panel === "rpc-reg" ? "" : " hidden"}">
+            <h3>RP-C Reg</h3><br>
+            <p class="setup-caption">Manage RP-C registrations, aircraft type, climb and cruise CAS, and GPH defaults here.</p>
+            <datalist id="admin-rpc-code-list">${rpcCodeOptions}</datalist>
+            <section class="admin-preset-table admin-rpc-table">
+              <div class="admin-preset-head admin-preset-head-rpc">
+                <div><button class="mini-plus inline admin-head-plus" id="admin-rpc-add-row" type="button" aria-label="Add RP-C row">+</button>REGISTRATION</div>
+                <div>AIRCRAFT TYPE</div>
+                <div>CAS CLIMB</div>
+                <div>CAS CRUISE</div>
+                <div>GPH</div>
+                <div></div>
+              </div>
+              <div class="admin-preset-body">
+                ${rpcRows.map((row, index) => {
+                  const rowHasContent = String(row.registration || "").trim() !== ""
+                    || String(row.aircraftType || "").trim() !== ""
+                    || String(row.casClimb || "").trim() !== ""
+                    || String(row.casCruise || "").trim() !== ""
+                    || String(row.gph || "").trim() !== "";
+                  return `
+                    <div class="admin-preset-row admin-rpc-row">
+                      <div class="admin-code-input-wrap">
+                        <input data-admin-rpc-row="${index}:registration" value="${escapeAttr(row.registration)}" list="admin-rpc-code-list" />
+                        <details class="admin-code-picker">
+                          <summary class="admin-code-picker-summary" aria-label="Pick RP-C">▾</summary>
+                          <div class="admin-code-picker-menu">
+                            ${renderAdminRpcPickerMenu()}
+                          </div>
+                        </details>
+                      </div>
+                      <input data-admin-rpc-row="${index}:aircraftType" value="${escapeAttr(row.aircraftType)}" placeholder="Aircraft type" />
+                      <input data-admin-rpc-row="${index}:casClimb" value="${escapeAttr(row.casClimb)}" placeholder="Climb CAS" />
+                      <input data-admin-rpc-row="${index}:casCruise" value="${escapeAttr(row.casCruise)}" placeholder="Cruise CAS" />
+                      <input data-admin-rpc-row="${index}:gph" value="${escapeAttr(row.gph)}" placeholder="GPH" />
+                      <button class="action admin-mini-btn${rowHasContent ? " active" : ""}" data-admin-rpc-remove="${index}" type="button" aria-label="Remove RP-C row" ${rowHasContent ? "" : "disabled"}>-</button>
+                    </div>
+                  `;
+                }).join("")}
+              </div>
+            </section>
+            <div class="entry-actions">
+              <button class="action primary" id="admin-rpc-save">Save</button>
             </div>
           </div>
           <div class="manual-section${panel === "airports" ? "" : " hidden"}">
@@ -1214,8 +1518,8 @@
             <h3>Dashboard</h3><br>
             <div class="admin-dashboard-grid">
               <article class="admin-dashboard-card">
-                <h4>Monthly visitors</h4>
-                <p>${escapeHtml(String(state.meta.monthlyVisitors || 0))}</p>
+                <h4>Loaded waypoints</h4>
+                <p>${escapeHtml(String((state.admin.waypoints || []).length))}</p>
               </article>
               <article class="admin-dashboard-card">
                 <h4>Route presets</h4>
@@ -1326,9 +1630,9 @@
           <div class="sheet ipad-kiosk-sheet${phoneMode ? " kiosk-phone-sheet" : ""}">
             ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-static-part kiosk-phone-header-panel"><p class="kiosk-part-label">Info</p>${headerSection}</section>` : headerSection}
             ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-scroll-part kiosk-phone-route-scroll"><p class="kiosk-part-label">Route</p>${renderRouteTable()}</section>` : renderRouteTable()}
-            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-static-part kiosk-phone-toc-panel">${renderTocTod()}</section>` : renderTocTod()}
+            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-scroll-part kiosk-phone-toc-panel"><p class="kiosk-part-label">TOC / TOD</p>${renderTocTod()}</section>` : renderTocTod()}
             ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-scroll-part kiosk-phone-airport-scroll"><p class="kiosk-part-label">Airport Info</p>${renderLocationTable()}</section>` : renderLocationTable()}
-            ${phoneMode ? "" : renderAtisSection()}
+            ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-scroll-part kiosk-phone-atis-scroll"><p class="kiosk-part-label">ATIS</p>${renderAtisSection()}</section>` : renderAtisSection()}
           </div>
         </section>
         <section class="kiosk-whereami-wrap">
@@ -1346,6 +1650,7 @@
         ${renderKioskRouteEstimateModal()}
         ${renderKioskWhereAmIModal()}
         ${renderKioskTimerAlertModal()}
+        ${renderActivateGpsPermissionPromptModal()}
       </main>
     `;
   }
@@ -1607,6 +1912,7 @@
         <section class="bug-report-modal cockpit-info-modal" role="dialog" aria-modal="true" aria-label="Cockpit mode information">
           <div class="bug-report-head">
             <h3>Cockpit Mode</h3>
+            <button class="action bug-report-close" id="activate-info-close" type="button">Close</button>
           </div>
           <div class="cockpit-info-copy">
             <p class="cockpit-info-intro">You are about to enter Cockpit Mode.</p>
@@ -1623,6 +1929,27 @@
           </div>
           <div class="bug-report-actions">
             <button class="action primary" id="activate-info-continue" type="button">Continue</button>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderActivateGpsPermissionPromptModal() {
+    if (!state.meta.gpsPermissionPromptOpen) return "";
+    return `
+      <div class="bug-report-overlay" id="activate-gps-prompt-overlay">
+        <section class="bug-report-modal cockpit-info-modal" role="dialog" aria-modal="true" aria-label="Continue without GPS">
+          <div class="bug-report-head">
+            <h3>Continue without GPS?</h3>
+          </div>
+          <div class="cockpit-info-copy">
+            <p class="cockpit-info-intro">Navlog could not get GPS permission.</p>
+            <p class="cockpit-info-recommend">Choose yes to continue in GPS off mode, or no to ask iOS again immediately.</p>
+          </div>
+          <div class="bug-report-actions">
+            <button class="action" id="activate-gps-no" type="button">NO</button>
+            <button class="action primary" id="activate-gps-yes" type="button">YES</button>
           </div>
         </section>
       </div>
@@ -1833,7 +2160,7 @@
     const routeCellMarkup = `
         <div class="${legFieldClass(leg, "route", `route route-cell ${routeCellExtra}`.trim())}">
         <div class="route-main">
-          <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" />
+          <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" list="route-waypoint-catalog" />
           ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
           ${
             isFirstRoute
@@ -2351,16 +2678,7 @@
           if (dateProxy) dateProxy.value = normalizeDateInputValue(state.navlog.header.date);
         }
         if (field === "rpCNo") {
-          const mappedAircraft = getMappedAircraftFromRpc(event.target.value);
-          if (mappedAircraft) {
-            state.navlog.header.aircraft = mappedAircraft;
-            const aircraftInput = document.querySelector('[data-header="aircraft"]');
-            if (aircraftInput) aircraftInput.value = mappedAircraft;
-          }
-          applyDefaultCasForAircraft(mappedAircraft);
-          syncAircraftFuelDefaults();
-          computeRouteMath();
-          updateComputedCells();
+          applyRpcAutofillFromHeader(event.target.value);
         }
         if (field === "aircraft") {
           syncAircraftFuelDefaults();
@@ -2374,16 +2692,7 @@
           if (dateProxy) dateProxy.value = normalizeDateInputValue(state.navlog.header.date);
         }
         if (field === "rpCNo") {
-          const mappedAircraft = getMappedAircraftFromRpc(event.target.value);
-          if (mappedAircraft) {
-            state.navlog.header.aircraft = mappedAircraft;
-            const aircraftInput = document.querySelector('[data-header="aircraft"]');
-            if (aircraftInput) aircraftInput.value = mappedAircraft;
-          }
-          applyDefaultCasForAircraft(mappedAircraft);
-          syncAircraftFuelDefaults();
-          computeRouteMath();
-          updateComputedCells();
+          applyRpcAutofillFromHeader(event.target.value);
         }
         if (field === "aircraft") {
           syncAircraftFuelDefaults();
@@ -2771,6 +3080,12 @@
       }
     });
 
+    document.querySelectorAll("[data-leg-field], [data-radio-field], [data-footer], [data-header]").forEach((input) => {
+      if (input.tagName !== "INPUT" && input.tagName !== "TEXTAREA") return;
+      if (String(input.getAttribute("data-header") || "") === "date" || input.hasAttribute("data-date-picker")) return;
+      wireKioskDelayedKeyboard(input);
+    });
+
     if (phoneMode) {
       document.querySelectorAll("[data-kiosk-speed-mode]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -2827,6 +3142,7 @@
     wireKioskWhereAmIControls();
     wireKioskEventTimerControls();
     wireKioskTimerAlertControls();
+    wireKioskGpsPermissionPromptControls();
     syncKioskEventTimerDisplay();
     wireKioskScratchPadToggle();
     bindKioskDoubleTapGuard();
@@ -2903,8 +3219,12 @@
     let timer = null;
     let rafId = 0;
     let startedAt = 0;
+    let startX = 0;
+    let startY = 0;
+    let pointerId = null;
     let committed = false;
     const holdMs = 2000;
+    const maxMovePx = 18;
 
     const setProgress = (value) => {
       if (!cell) return;
@@ -2939,8 +3259,16 @@
         timer = null;
       }
       startedAt = 0;
+      pointerId = null;
       stopProgress();
       input.classList.remove("at-hold-armed");
+    };
+
+    const maybeCancelOnMove = (clientX, clientY) => {
+      if (!startedAt || committed) return;
+      const dx = Math.abs((Number(clientX) || 0) - startX);
+      const dy = Math.abs((Number(clientY) || 0) - startY);
+      if (dx > maxMovePx || dy > maxMovePx) clear();
     };
 
     const commit = () => {
@@ -2969,10 +3297,20 @@
       if (!input.readOnly) input.blur();
     };
 
-    const start = () => {
+    const start = (event) => {
       if (timer) clearTimeout(timer);
       committed = false;
       startedAt = Date.now();
+      startX = Number(event && event.clientX) || 0;
+      startY = Number(event && event.clientY) || 0;
+      pointerId = Number.isFinite(Number(event && event.pointerId)) ? Number(event.pointerId) : null;
+      if (pointerId != null && typeof input.setPointerCapture === "function") {
+        try {
+          input.setPointerCapture(pointerId);
+        } catch {
+          // ignore capture failures
+        }
+      }
       setProgress(0.001);
       input.classList.add("at-hold-armed");
       timer = setTimeout(() => {
@@ -2990,14 +3328,23 @@
     input.addEventListener("contextmenu", (event) => event.preventDefault());
 
     if (window.PointerEvent) {
-      input.addEventListener("pointerdown", start);
+      input.addEventListener("pointerdown", (event) => start(event));
+      input.addEventListener("pointermove", (event) => maybeCancelOnMove(event.clientX, event.clientY));
       input.addEventListener("pointerup", end);
       input.addEventListener("pointercancel", end);
     } else {
-      input.addEventListener("touchstart", start, { passive: true });
+      input.addEventListener("touchstart", (event) => {
+        const touch = event.touches && event.touches[0];
+        start(touch || {});
+      }, { passive: true });
+      input.addEventListener("touchmove", (event) => {
+        const touch = event.touches && event.touches[0];
+        maybeCancelOnMove(touch ? touch.clientX : 0, touch ? touch.clientY : 0);
+      }, { passive: true });
       input.addEventListener("touchend", end);
       input.addEventListener("touchcancel", end);
-      input.addEventListener("mousedown", start);
+      input.addEventListener("mousedown", (event) => start(event));
+      input.addEventListener("mousemove", (event) => maybeCancelOnMove(event.clientX, event.clientY));
       input.addEventListener("mouseup", end);
       input.addEventListener("mouseleave", end);
     }
@@ -3247,7 +3594,7 @@
     if (!live) return "";
     const unitLabel = getKioskDistanceUnitLabel();
     const distanceText = formatDistanceDisplayWithRounding(live.distanceNm, false);
-    return `${distanceText} ${unitLabel} ${live.direction}`;
+    return `${distanceText} ${unitLabel}`;
   }
 
   function syncKioskRouteEstimateLiveDistanceDisplay() {
@@ -3325,7 +3672,7 @@
     let started = false;
     let committed = false;
     const holdMs = 2000;
-    const maxMovePx = 14;
+    const maxMovePx = 24;
 
     const setProgress = (value) => {
       if (!cell) return;
@@ -3374,13 +3721,20 @@
       }
     };
 
-    const begin = (clientX, clientY) => {
+    const begin = (clientX, clientY, event) => {
       clear();
       committed = false;
       startX = Number(clientX) || 0;
       startY = Number(clientY) || 0;
       startedAt = Date.now();
       started = true;
+      if (window.PointerEvent && typeof input.setPointerCapture === "function" && Number.isFinite(Number(event && event.pointerId))) {
+        try {
+          input.setPointerCapture(Number(event.pointerId));
+        } catch {
+          // ignore capture failures
+        }
+      }
       if (cell) {
         cell.classList.add("route-hold-armed");
         cell.classList.add("at-hold-cell");
@@ -3403,7 +3757,7 @@
     };
 
     if (window.PointerEvent) {
-      input.addEventListener("pointerdown", (event) => begin(event.clientX, event.clientY));
+      input.addEventListener("pointerdown", (event) => begin(event.clientX, event.clientY, event));
       input.addEventListener("pointermove", (event) => maybeCancelOnMove(event.clientX, event.clientY));
       input.addEventListener("pointerup", clear);
       input.addEventListener("pointercancel", clear);
@@ -3692,6 +4046,35 @@
       render();
     });
     computeAndStoreKioskWhereAmI();
+  }
+
+  function wireKioskGpsPermissionPromptControls() {
+    const overlay = document.getElementById("activate-gps-prompt-overlay");
+    if (!overlay) return;
+    const yesButton = document.getElementById("activate-gps-yes");
+    const noButton = document.getElementById("activate-gps-no");
+    if (yesButton) {
+      yesButton.addEventListener("click", () => {
+        state.meta.gpsPermissionPromptOpen = false;
+        state.meta.activateGpsEnabled = false;
+        persistKioskPayload({ activateGpsEnabled: false });
+        stopKioskGpsTracking();
+        render();
+      });
+    }
+    if (noButton) {
+      noButton.addEventListener("click", () => {
+        state.meta.gpsPermissionPromptOpen = false;
+        render();
+        retryKioskGpsPermissionRequest();
+      });
+    }
+    overlay.addEventListener("click", (event) => {
+      if (event.target !== overlay) return;
+      state.meta.gpsPermissionPromptOpen = false;
+      render();
+      retryKioskGpsPermissionRequest();
+    });
   }
 
   function wireKioskEventTimerControls() {
@@ -4005,6 +4388,7 @@
   function handleKioskGpsSuccess(position) {
     if (!position || !position.coords) return;
     if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
+    state.meta.gpsPermissionPromptOpen = false;
     const coords = position.coords;
     const timestampMs = Number(position.timestamp || Date.now());
     const lat = Number(coords.latitude);
@@ -4056,6 +4440,7 @@
       state.meta.kioskGps.supported = false;
       state.meta.kioskGps.tracking = false;
       state.meta.kioskGps.error = "GPS unavailable.";
+      state.meta.gpsPermissionPromptOpen = false;
       updateKioskGpsDom();
       return;
     }
@@ -4076,27 +4461,18 @@
       permissionDenied
       && state.view === "ipad-kiosk"
       && isActivateGpsEnabled()
-      && !gpsPermissionDecisionPending
+      && !state.meta.gpsPermissionPromptOpen
     ) {
-      gpsPermissionDecisionPending = true;
-      const continueWithoutGps = window.confirm("Continue without GPS?");
-      if (continueWithoutGps) {
-        state.meta.activateGpsEnabled = false;
-        persistKioskPayload({ activateGpsEnabled: false });
-        stopKioskGpsTracking();
-        gpsPermissionDecisionPending = false;
-        render();
-        return;
-      }
-      gpsPermissionDecisionPending = false;
+      state.meta.gpsPermissionPromptOpen = true;
       stopKioskGpsTracking();
-      if (state.view === "ipad-kiosk" && isActivateGpsEnabled()) retryKioskGpsPermissionRequest();
+      render();
       return;
     }
     if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
     state.meta.kioskGps.supported = Boolean(navigator.geolocation);
     state.meta.kioskGps.tracking = false;
     state.meta.kioskGps.error = error && error.message ? String(error.message) : "GPS unavailable.";
+    state.meta.gpsPermissionPromptOpen = false;
     updateKioskGpsDom();
   }
 
@@ -4601,7 +4977,7 @@
       createBlankLeg(state.navlog.setup.destination),
     ];
     autofillAllCoordinateDistances();
-    applyDefaultCasForAircraft(getMappedAircraftFromRpc(state.navlog.header.rpCNo));
+    applyRpcAutofillFromHeader(state.navlog.header.rpCNo);
   }
 
   function getPresetLegs(departure, destination) {
@@ -5150,11 +5526,52 @@
       field.addEventListener("change", onPresetPairChange);
     });
 
+    const presetLockButton = document.getElementById("admin-preset-lock");
+    if (presetLockButton) {
+      presetLockButton.addEventListener("click", () => {
+        readPresetFormFromInputs();
+        state.admin.presetForm.locked = !state.admin.presetForm.locked;
+        state.admin.presetForm.rows.forEach((row) => {
+          row._manual = row._manual || {};
+          if (state.admin.presetForm.locked) {
+            row._manual.tc = false;
+            row._manual.distance = false;
+          } else {
+            row._manual.tc = String(row.tc || "").trim() !== "";
+            row._manual.distance = String(row.distance || "").trim() !== "";
+          }
+        });
+        syncAdminPresetRowAutofill();
+        render();
+      });
+    }
+
     const presetRowInputs = Array.from(document.querySelectorAll("[data-admin-preset-row]"));
     presetRowInputs.forEach((node) => {
       node.addEventListener("input", () => {
+        const key = String(node.getAttribute("data-admin-preset-row") || "");
+        const [, field] = key.split(":");
+        if (!state.admin.presetForm.locked && (field === "tc" || field === "distance")) {
+          const [indexText] = key.split(":");
+          const index = Number(indexText);
+          const row = Number.isFinite(index) && index >= 0 ? state.admin.presetForm.rows[index] : null;
+          if (row) {
+            row._manual = row._manual || {};
+            row._manual[field] = String(node.value || "").trim() !== "";
+          }
+        }
+        if (field === "coord") {
+          const [indexText] = key.split(":");
+          const index = Number(indexText);
+          const row = Number.isFinite(index) && index >= 0 ? state.admin.presetForm.rows[index] : null;
+          if (row) {
+            row._manual = row._manual || {};
+            row._manual.coord = String(node.value || "").trim() !== "";
+          }
+        }
         readPresetFormFromInputs();
         syncAdminPresetRemoveButtons();
+        syncAdminPresetFormUi();
       });
     });
 
@@ -5196,6 +5613,104 @@
       presetDeleteButton.addEventListener("click", async () => {
         readPresetFormFromInputs();
         await deletePresetFromAdmin();
+      });
+    }
+
+    const waypointRowInputs = Array.from(document.querySelectorAll("[data-admin-waypoint-row]"));
+    waypointRowInputs.forEach((node) => {
+      node.addEventListener("input", () => {
+        readWaypointFormFromInputs();
+        syncAdminWaypointRemoveButtons();
+        syncAdminWaypointFormUi();
+      });
+    });
+    document.querySelectorAll("[data-admin-waypoint-pick]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const value = String(button.getAttribute("data-admin-waypoint-pick") || "");
+        const row = button.closest(".admin-waypoint-row");
+        const nameInput = row ? row.querySelector('[data-admin-waypoint-row$=":name"]') : null;
+        const picker = button.closest("details");
+        if (nameInput) nameInput.value = value;
+        if (picker) picker.open = false;
+        readWaypointFormFromInputs();
+        syncAdminWaypointFormUi();
+      });
+    });
+    const waypointAddRowButton = document.getElementById("admin-waypoint-add-row");
+    if (waypointAddRowButton) {
+      waypointAddRowButton.addEventListener("click", () => {
+        readWaypointFormFromInputs();
+        state.admin.waypointForm.rows.push(createEmptyWaypointRow());
+        render();
+      });
+    }
+    document.querySelectorAll("[data-admin-waypoint-remove]").forEach((button) => {
+      button.addEventListener("click", () => {
+        readWaypointFormFromInputs();
+        const index = Number(button.getAttribute("data-admin-waypoint-remove") || "");
+        if (!Number.isFinite(index) || index < 0 || index >= state.admin.waypointForm.rows.length) return;
+        if (state.admin.waypointForm.rows.length === 1) {
+          state.admin.waypointForm.rows = [createEmptyWaypointRow()];
+        } else {
+          state.admin.waypointForm.rows.splice(index, 1);
+        }
+        render();
+      });
+    });
+    const waypointSaveButton = document.getElementById("admin-waypoint-save");
+    if (waypointSaveButton) {
+      waypointSaveButton.addEventListener("click", async () => {
+        readWaypointFormFromInputs();
+        await saveWaypointsFromAdmin();
+      });
+    }
+
+    const rpcRowInputs = Array.from(document.querySelectorAll("[data-admin-rpc-row]"));
+    rpcRowInputs.forEach((node) => {
+      node.addEventListener("input", () => {
+        readRpcRegistryFromInputs();
+        syncAdminRpcRemoveButtons();
+        syncAdminRpcFormUi();
+      });
+    });
+    document.querySelectorAll("[data-admin-rpc-pick]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const value = String(button.getAttribute("data-admin-rpc-pick") || "");
+        const row = button.closest(".admin-rpc-row");
+        const registrationInput = row ? row.querySelector('[data-admin-rpc-row$=":registration"]') : null;
+        const picker = button.closest("details");
+        if (registrationInput) registrationInput.value = value;
+        if (picker) picker.open = false;
+        readRpcRegistryFromInputs();
+        syncAdminRpcFormUi();
+      });
+    });
+    const rpcAddRowButton = document.getElementById("admin-rpc-add-row");
+    if (rpcAddRowButton) {
+      rpcAddRowButton.addEventListener("click", () => {
+        readRpcRegistryFromInputs();
+        state.admin.rpcRegistryForm.rows.push(createEmptyRpcRegistryRow());
+        render();
+      });
+    }
+    document.querySelectorAll("[data-admin-rpc-remove]").forEach((button) => {
+      button.addEventListener("click", () => {
+        readRpcRegistryFromInputs();
+        const index = Number(button.getAttribute("data-admin-rpc-remove") || "");
+        if (!Number.isFinite(index) || index < 0 || index >= state.admin.rpcRegistryForm.rows.length) return;
+        if (state.admin.rpcRegistryForm.rows.length === 1) {
+          state.admin.rpcRegistryForm.rows = [createEmptyRpcRegistryRow()];
+        } else {
+          state.admin.rpcRegistryForm.rows.splice(index, 1);
+        }
+        render();
+      });
+    });
+    const rpcSaveButton = document.getElementById("admin-rpc-save");
+    if (rpcSaveButton) {
+      rpcSaveButton.addEventListener("click", async () => {
+        readRpcRegistryFromInputs();
+        await saveRpcRegistryFromAdmin();
       });
     }
 
@@ -5510,6 +6025,11 @@
     state.admin.session = null;
     state.admin.selectedPresetId = "";
     state.admin.selectedAirportCode = "";
+    state.admin.selectedWaypointName = "";
+    state.admin.selectedRpcRegistration = "";
+    state.admin.presetForm = createEmptyPresetForm();
+    state.admin.waypointForm = createEmptyWaypointForm();
+    state.admin.rpcRegistryForm = createEmptyRpcRegistryForm();
     state.admin.notice = "Signed out.";
     state.admin.error = "";
     state.view = "admin-login";
@@ -5526,10 +6046,12 @@
     state.admin.error = "";
     state.admin.notice = "";
     try {
-      let [presetResult, airportResult, contentResult] = await Promise.all([
-        supabaseClient.from("route_presets").select("*").order("name", { ascending: true }),
-        supabaseClient.from("airports").select("*").order("code", { ascending: true }),
-        supabaseClient.from("content_pages").select("*"),
+      let [presetResult, airportResult, contentResult, waypointResult, rpcResult] = await Promise.all([
+        supabaseClient.from("route_presets").select("*").order("name", { ascending: true }).catch((error) => ({ error, data: [] })),
+        supabaseClient.from("airports").select("*").order("code", { ascending: true }).catch((error) => ({ error, data: [] })),
+        supabaseClient.from("content_pages").select("*").catch((error) => ({ error, data: [] })),
+        supabaseClient.from("waypoints").select("*").order("name", { ascending: true }).catch((error) => ({ error, data: [] })),
+        supabaseClient.from("rpc_registry").select("*").order("registration", { ascending: true }).catch((error) => ({ error, data: [] })),
       ]);
       if (presetResult.error) throw presetResult.error;
       if (airportResult.error) throw airportResult.error;
@@ -5552,12 +6074,29 @@
         fss: row.fss,
         remarks: row.remarks,
       }));
+      state.admin.waypoints = (waypointResult.data || []).map((row) => cloneWaypointRecord({
+        id: row.id,
+        name: row.name,
+        coord: row.coord,
+      }));
+      state.admin.rpcRegistry = (rpcResult.data || []).map((row) => cloneRpcRegistryRecord({
+        id: row.id,
+        registration: row.registration,
+        aircraftType: row.aircraft_type,
+        casClimb: row.cas_climb,
+        casCruise: row.cas_cruise,
+        gph: row.gph,
+      }));
+      state.admin.waypointForm.rows = waypointRowsFromRecords(state.admin.waypoints);
+      state.admin.rpcRegistryForm.rows = rpcRowsFromRecords(state.admin.rpcRegistry);
       const contentMap = {};
       (contentResult.data || []).forEach((row) => {
         contentMap[String(row.key || "").toLowerCase()] = String(row.body_html || "");
       });
       state.catalog.routePresets = state.admin.presets.map((preset) => clonePreset(preset));
       state.catalog.airports = state.admin.airports.map((airport) => ({ ...airport }));
+      state.catalog.waypoints = state.admin.waypoints.map((waypoint) => ({ ...waypoint }));
+      state.catalog.rpcRegistry = state.admin.rpcRegistry.map((record) => ({ ...record }));
       state.catalog.content.manualHtml = contentMap.manual || "";
       state.catalog.content.privacyHtml = contentMap.privacy || "";
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
@@ -5646,7 +6185,9 @@
   function readPresetFormFromInputs() {
     const departureInput = document.getElementById("admin-preset-departure");
     const destinationInput = document.getElementById("admin-preset-destination");
+    const lockInput = document.getElementById("admin-preset-lock");
     const rowInputs = Array.from(document.querySelectorAll("[data-admin-preset-row]"));
+    const previousRows = Array.isArray(state.admin.presetForm.rows) ? state.admin.presetForm.rows : [];
     const rows = [];
     rowInputs.forEach((node) => {
       const key = String(node.getAttribute("data-admin-preset-row") || "");
@@ -5655,12 +6196,26 @@
       if (!Number.isFinite(index) || index < 0 || !field) return;
       if (!rows[index]) rows[index] = createEmptyPresetRow();
       rows[index][field] = String(node.value || "");
+      rows[index]._manual = {
+        ...(previousRows[index] && previousRows[index]._manual ? previousRows[index]._manual : createEmptyPresetRow()._manual),
+      };
     });
     state.admin.presetForm = {
       departure: normalizeCode(departureInput ? departureInput.value : state.admin.presetForm.departure),
       destination: normalizeCode(destinationInput ? destinationInput.value : state.admin.presetForm.destination),
+      locked: Boolean(lockInput ? lockInput.checked : state.admin.presetForm.locked),
       rows: normalizePresetRows(rows.length ? rows : state.admin.presetForm.rows),
     };
+    state.admin.presetForm.rows.forEach((row, index) => {
+      row._manual = {
+        ...(previousRows[index] && previousRows[index]._manual ? previousRows[index]._manual : createEmptyPresetRow()._manual),
+      };
+      if (state.admin.presetForm.locked) {
+        row._manual.tc = false;
+        row._manual.distance = false;
+      }
+    });
+    syncAdminPresetRowAutofill();
   }
 
   function normalizePresetRows(rows) {
@@ -5668,8 +6223,14 @@
     const normalized = source
       .map((row) => ({
         route: String(row && row.route != null ? row.route : ""),
-        tc: String(row && row.tc != null ? row.tc : ""),
         coord: String(row && row.coord != null ? row.coord : ""),
+        tc: String(row && row.tc != null ? row.tc : ""),
+        distance: String(row && row.distance != null ? row.distance : ""),
+        _manual: {
+          coord: Boolean(row && row._manual && row._manual.coord),
+          tc: Boolean(row && row._manual && row._manual.tc),
+          distance: Boolean(row && row._manual && row._manual.distance),
+        },
       }));
     return normalized.length ? normalized : [createEmptyPresetRow()];
   }
@@ -5684,8 +6245,9 @@
         row
         && (
           String(row.route || "").trim() !== ""
-          || String(row.tc || "").trim() !== ""
           || String(row.coord || "").trim() !== ""
+          || String(row.tc || "").trim() !== ""
+          || String(row.distance || "").trim() !== ""
         )
       );
       button.disabled = !hasContent;
@@ -5693,13 +6255,56 @@
     });
   }
 
+  function syncAdminPresetRowAutofill() {
+    const rows = normalizePresetRows(state.admin.presetForm.rows);
+    rows.forEach((row, index) => {
+      const route = normalizeCode(row.route);
+      if (!route) return;
+      const known = getWaypointData(route);
+      if (known && known.hasCoords && !row._manual.coord) {
+        row.coord = known.coordText;
+      }
+      const derived = computeAdminPresetRowDerivedValues(rows, index);
+      if (!state.admin.presetForm.locked) {
+        if (!row._manual.tc && derived.tc != null) row.tc = formatHeadingDisplay(derived.tc);
+        if (!row._manual.distance && derived.distance != null) row.distance = formatDistanceDisplay(derived.distance);
+      } else {
+        if (!row._manual.tc && derived.tc != null) row.tc = formatHeadingDisplay(derived.tc);
+        if (!row._manual.distance && derived.distance != null) row.distance = formatDistanceDisplay(derived.distance);
+      }
+    });
+    state.admin.presetForm.rows = rows;
+  }
+
+  function computeAdminPresetRowDerivedValues(rows, index) {
+    const currentIndex = Number(index);
+    if (!Number.isFinite(currentIndex) || currentIndex <= 0 || currentIndex >= rows.length) return { tc: null, distance: null };
+    const previousRow = rows[currentIndex - 1];
+    const currentRow = rows[currentIndex];
+    const fromCoord = parseWaypointCoordinate(previousRow && previousRow.coord);
+    const toCoord = parseWaypointCoordinate(currentRow && currentRow.coord);
+    if (!fromCoord || !toCoord) return { tc: null, distance: null };
+    const distanceNm = computeGreatCircleDistanceNm(fromCoord.lat, fromCoord.lon, toCoord.lat, toCoord.lon);
+    const tc = computeInitialTrueBearing(fromCoord.lat, fromCoord.lon, toCoord.lat, toCoord.lon);
+    return {
+      tc: Number.isFinite(tc) ? roundHalfUp(tc) : null,
+      distance: Number.isFinite(distanceNm) ? distanceNm : null,
+    };
+  }
+
+  function formatHeadingDisplay(value) {
+    if (value == null || !Number.isFinite(value)) return "";
+    return String(roundHalfUp(normalizeAngle(value))).padStart(3, "0");
+  }
+
   function presetRowsFromLegs(legs) {
     if (!Array.isArray(legs) || legs.length === 0) return [createEmptyPresetRow()];
     return normalizePresetRows(
       legs.map((leg) => ({
         route: leg && leg.route != null ? leg.route : "",
-        tc: leg && leg.tc != null ? leg.tc : "",
         coord: leg && (leg.coord ?? leg.coordinates ?? leg.latlon) != null ? (leg.coord ?? leg.coordinates ?? leg.latlon) : "",
+        tc: leg && leg.tc != null ? leg.tc : "",
+        distance: leg && leg.distance != null ? leg.distance : "",
       })),
     );
   }
@@ -5709,17 +6314,43 @@
     const legs = [];
     source.forEach((row) => {
       const route = String(row && row.route != null ? row.route : "").trim();
-      const tcRaw = String(row && row.tc != null ? row.tc : "").trim();
       const coordRaw = String(row && row.coord != null ? row.coord : "").trim();
-      if (!route && !tcRaw && !coordRaw) return;
+      const tcRaw = String(row && row.tc != null ? row.tc : "").trim();
+      const distanceRaw = String(row && row.distance != null ? row.distance : "").trim();
+      if (!route && !tcRaw && !coordRaw && !distanceRaw) return;
       const leg = {};
       if (route) leg.route = route;
       const tc = num(tcRaw);
       if (tc != null) leg.tc = roundHalfUp(tc);
+      const distance = parseDistanceInput(distanceRaw);
+      if (distance != null) leg.distance = roundHalfUp(distance);
       if (coordRaw) leg.coord = coordRaw;
       legs.push(leg);
     });
     return legs;
+  }
+
+  function waypointRowsFromRecords(records) {
+    const source = Array.isArray(records) ? records : [];
+    return normalizeWaypointRows(
+      source.map((record) => ({
+        name: record && record.name != null ? record.name : "",
+        coord: record && record.coord != null ? record.coord : "",
+      })),
+    );
+  }
+
+  function rpcRowsFromRecords(records) {
+    const source = Array.isArray(records) ? records : [];
+    return normalizeRpcRegistryRows(
+      source.map((record) => ({
+        registration: record && record.registration != null ? record.registration : "",
+        aircraftType: record && record.aircraftType != null ? record.aircraftType : "",
+        casClimb: record && record.casClimb != null ? record.casClimb : "",
+        casCruise: record && record.casCruise != null ? record.casCruise : "",
+        gph: record && record.gph != null ? record.gph : "",
+      })),
+    );
   }
 
   function readAirportFormFromInputs() {
@@ -5740,6 +6371,91 @@
     });
   }
 
+  function readWaypointFormFromInputs() {
+    const rowInputs = Array.from(document.querySelectorAll("[data-admin-waypoint-row]"));
+    const rows = [];
+    rowInputs.forEach((node) => {
+      const key = String(node.getAttribute("data-admin-waypoint-row") || "");
+      const [indexText, field] = key.split(":");
+      const index = Number(indexText);
+      if (!Number.isFinite(index) || index < 0 || !field) return;
+      if (!rows[index]) rows[index] = createEmptyWaypointRow();
+      rows[index][field] = String(node.value || "");
+    });
+    state.admin.waypointForm = {
+      rows: normalizeWaypointRows(rows.length ? rows : state.admin.waypointForm.rows),
+    };
+    syncAdminWaypointAutofill();
+  }
+
+  function normalizeWaypointRows(rows) {
+    const source = Array.isArray(rows) ? rows : [];
+    const normalized = source.map((row) => ({
+      name: String(row && row.name != null ? row.name : ""),
+      coord: String(row && row.coord != null ? row.coord : ""),
+    }));
+    return normalized.length ? normalized : [createEmptyWaypointRow()];
+  }
+
+  function syncAdminWaypointAutofill() {
+    const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
+    rows.forEach((row) => {
+      const route = normalizeCode(row.name);
+      if (!route) return;
+      const known = getWaypointData(route);
+      if (known && known.hasCoords && !String(row.coord || "").trim()) {
+        row.coord = known.coordText;
+      }
+    });
+    state.admin.waypointForm.rows = rows;
+  }
+
+  function readRpcRegistryFromInputs() {
+    const registrationInput = document.getElementById("admin-rpc-registration");
+    const rowInputs = Array.from(document.querySelectorAll("[data-admin-rpc-row]"));
+    const rows = [];
+    rowInputs.forEach((node) => {
+      const key = String(node.getAttribute("data-admin-rpc-row") || "");
+      const [indexText, field] = key.split(":");
+      const index = Number(indexText);
+      if (!Number.isFinite(index) || index < 0 || !field) return;
+      if (!rows[index]) rows[index] = createEmptyRpcRegistryRow();
+      rows[index][field] = String(node.value || "");
+    });
+    state.admin.rpcRegistryForm = {
+      registration: normalizeCode(registrationInput ? registrationInput.value : state.admin.rpcRegistryForm.registration),
+      rows: normalizeRpcRegistryRows(rows.length ? rows : state.admin.rpcRegistryForm.rows),
+    };
+    syncAdminRpcAutofill();
+  }
+
+  function normalizeRpcRegistryRows(rows) {
+    const source = Array.isArray(rows) ? rows : [];
+    const normalized = source.map((row) => ({
+      registration: String(row && row.registration != null ? row.registration : ""),
+      aircraftType: String(row && row.aircraftType != null ? row.aircraftType : ""),
+      casClimb: String(row && row.casClimb != null ? row.casClimb : ""),
+      casCruise: String(row && row.casCruise != null ? row.casCruise : ""),
+      gph: String(row && row.gph != null ? row.gph : ""),
+    }));
+    return normalized.length ? normalized : [createEmptyRpcRegistryRow()];
+  }
+
+  function syncAdminRpcAutofill() {
+    const rows = normalizeRpcRegistryRows(state.admin.rpcRegistryForm.rows);
+    rows.forEach((row) => {
+      const registration = normalizeCode(row.registration);
+      if (!registration) return;
+      const known = getRpcRegistryRecord(registration);
+      if (!known) return;
+      if (!String(row.aircraftType || "").trim() && known.aircraftType) row.aircraftType = known.aircraftType;
+      if (!String(row.casClimb || "").trim() && known.casClimb) row.casClimb = known.casClimb;
+      if (!String(row.casCruise || "").trim() && known.casCruise) row.casCruise = known.casCruise;
+      if (!String(row.gph || "").trim() && known.gph) row.gph = known.gph;
+    });
+    state.admin.rpcRegistryForm.rows = rows;
+  }
+
   function selectPresetForEditing(presetId) {
     state.admin.selectedPresetId = String(presetId || "");
     const selected = state.admin.presets.find((preset) => preset.id === state.admin.selectedPresetId);
@@ -5750,7 +6466,49 @@
     state.admin.presetForm = {
       departure: normalizeCode(selected.departure),
       destination: normalizeCode(selected.destination),
+      locked: Boolean(state.admin.presetForm.locked),
       rows: presetRowsFromLegs(selected.legs),
+    };
+    syncAdminPresetRowAutofill();
+  }
+
+  function selectWaypointForEditing(name) {
+    state.admin.selectedWaypointName = normalizeCode(name);
+    const selected = state.admin.waypoints.find((waypoint) => normalizeCode(waypoint.name) === state.admin.selectedWaypointName);
+    if (!selected) {
+      state.admin.waypointForm = {
+        rows: normalizeWaypointRows([{
+          name: state.admin.selectedWaypointName,
+          coord: "",
+        }]),
+      };
+      return;
+    }
+    state.admin.waypointForm = {
+      rows: normalizeWaypointRows([{
+        name: selected.name,
+        coord: selected.coord,
+      }]),
+    };
+  }
+
+  function selectRpcForEditing(registration) {
+    state.admin.selectedRpcRegistration = normalizeCode(registration);
+    const selected = state.admin.rpcRegistry.find((record) => normalizeCode(record.registration) === state.admin.selectedRpcRegistration);
+    if (!selected) {
+      state.admin.rpcRegistryForm = {
+        rows: normalizeRpcRegistryRows([{
+          registration: state.admin.selectedRpcRegistration,
+          aircraftType: "",
+          casClimb: "",
+          casCruise: "",
+          gph: "",
+        }]),
+      };
+      return;
+    }
+    state.admin.rpcRegistryForm = {
+      rows: normalizeRpcRegistryRows([selected]),
     };
   }
 
@@ -5778,6 +6536,7 @@
       const hadSelection = Boolean(state.admin.selectedPresetId);
       state.admin.selectedPresetId = "";
       state.admin.presetForm.rows = hadSelection ? [createEmptyPresetRow()] : normalizePresetRows(state.admin.presetForm.rows);
+      syncAdminPresetRowAutofill();
       return;
     }
     selectPresetForEditing(match.id);
@@ -5869,6 +6628,103 @@
       render();
     } catch (error) {
       state.admin.error = error && error.message ? error.message : "Could not save preset.";
+      render();
+    }
+  }
+
+  async function saveWaypointsFromAdmin() {
+    const ok = await connectSupabaseClient(false);
+    if (!ok) {
+      render();
+      return;
+    }
+    const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
+    const payloadRows = rows
+      .map((row) => normalizeWaypointRecord({ name: row.name, coord: row.coord }))
+      .filter((row) => row.name);
+    if (!payloadRows.length) {
+      state.admin.error = "Add at least one waypoint row before saving.";
+      state.admin.notice = "";
+      render();
+      return;
+    }
+    state.admin.error = "";
+    state.admin.notice = "";
+    try {
+      const upserts = payloadRows.map((row) => supabaseClient.from("waypoints").upsert({
+        id: row.id || row.name,
+        name: row.name,
+        coord: row.coord,
+      }, { onConflict: "name" }));
+      const results = await Promise.all(upserts);
+      const failed = results.find((result) => result.error);
+      if (failed) throw failed.error;
+      const keepNames = new Set(payloadRows.map((row) => row.name));
+      const staleRows = (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : []).filter((row) => row && !keepNames.has(normalizeCode(row.name)));
+      if (staleRows.length) {
+        const deletes = staleRows.map((row) => supabaseClient.from("waypoints").delete().eq("name", normalizeCode(row.name)));
+        const deleteResults = await Promise.all(deletes);
+        const deleteFailed = deleteResults.find((result) => result.error);
+        if (deleteFailed) throw deleteFailed.error;
+      }
+      await loadAdminData();
+      state.admin.notice = "Waypoints saved.";
+      render();
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Could not save waypoints.";
+      render();
+    }
+  }
+
+  async function saveRpcRegistryFromAdmin() {
+    const ok = await connectSupabaseClient(false);
+    if (!ok) {
+      render();
+      return;
+    }
+    const rows = normalizeRpcRegistryRows(state.admin.rpcRegistryForm.rows);
+    const payloadRows = rows
+      .map((row) => normalizeRpcRegistryRecord({
+        registration: row.registration,
+        aircraftType: row.aircraftType,
+        casClimb: row.casClimb,
+        casCruise: row.casCruise,
+        gph: row.gph,
+      }))
+      .filter((row) => row.registration);
+    if (!payloadRows.length) {
+      state.admin.error = "Add at least one RP-C row before saving.";
+      state.admin.notice = "";
+      render();
+      return;
+    }
+    state.admin.error = "";
+    state.admin.notice = "";
+    try {
+      const upserts = payloadRows.map((row) => supabaseClient.from("rpc_registry").upsert({
+        id: row.id || row.registration,
+        registration: row.registration,
+        aircraft_type: row.aircraftType,
+        cas_climb: row.casClimb,
+        cas_cruise: row.casCruise,
+        gph: row.gph,
+      }, { onConflict: "registration" }));
+      const results = await Promise.all(upserts);
+      const failed = results.find((result) => result.error);
+      if (failed) throw failed.error;
+      const keepRegs = new Set(payloadRows.map((row) => row.registration));
+      const staleRows = (Array.isArray(state.admin.rpcRegistry) ? state.admin.rpcRegistry : []).filter((row) => row && !keepRegs.has(normalizeCode(row.registration)));
+      if (staleRows.length) {
+        const deletes = staleRows.map((row) => supabaseClient.from("rpc_registry").delete().eq("registration", normalizeCode(row.registration)));
+        const deleteResults = await Promise.all(deletes);
+        const deleteFailed = deleteResults.find((result) => result.error);
+        if (deleteFailed) throw deleteFailed.error;
+      }
+      await loadAdminData();
+      state.admin.notice = "RP-C registry saved.";
+      render();
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Could not save RP-C registry.";
       render();
     }
   }
@@ -6114,6 +6970,107 @@
       const exists = Boolean(code && state.admin.airports.some((airport) => airport.code === code || airport.id === code));
       deleteButton.disabled = !exists;
     }
+  }
+
+  function syncAdminPresetFormUi() {
+    const preset = state.admin.presetForm || createEmptyPresetForm();
+    const setValue = (selector, value) => {
+      const node = document.querySelector(selector);
+      if (!node) return;
+      const next = String(value || "");
+      if (node.value !== next) node.value = next;
+    };
+    const rows = normalizePresetRows(preset.rows);
+    rows.forEach((row, index) => {
+      setValue(`[data-admin-preset-row="${index}:route"]`, row.route);
+      setValue(`[data-admin-preset-row="${index}:coord"]`, row.coord);
+      setValue(`[data-admin-preset-row="${index}:tc"]`, row.tc);
+      setValue(`[data-admin-preset-row="${index}:distance"]`, row.distance);
+      const removeButton = document.querySelector(`[data-admin-preset-remove="${index}"]`);
+      if (removeButton) {
+        const hasContent = Boolean(String(row.route || "").trim() || String(row.coord || "").trim() || String(row.tc || "").trim() || String(row.distance || "").trim());
+        removeButton.disabled = !hasContent;
+        removeButton.classList.toggle("active", hasContent);
+      }
+    });
+    const lockButton = document.getElementById("admin-preset-lock");
+    if (lockButton) {
+      lockButton.textContent = preset.locked ? "Locked" : "Unlocked";
+      lockButton.classList.toggle("active", Boolean(preset.locked));
+    }
+  }
+
+  function syncAdminWaypointFormUi() {
+    const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
+    rows.forEach((row, index) => {
+      const nameNode = document.querySelector(`[data-admin-waypoint-row="${index}:name"]`);
+      const coordNode = document.querySelector(`[data-admin-waypoint-row="${index}:coord"]`);
+      if (nameNode && nameNode.value !== String(row.name || "")) nameNode.value = String(row.name || "");
+      if (coordNode && coordNode.value !== String(row.coord || "")) coordNode.value = String(row.coord || "");
+      const removeButton = document.querySelector(`[data-admin-waypoint-remove="${index}"]`);
+      if (removeButton) {
+        const hasContent = Boolean(String(row.name || "").trim() || String(row.coord || "").trim());
+        removeButton.disabled = !hasContent;
+        removeButton.classList.toggle("active", hasContent);
+      }
+    });
+  }
+
+  function syncAdminWaypointRemoveButtons() {
+    document.querySelectorAll("[data-admin-waypoint-remove]").forEach((button) => {
+      const index = Number(button.getAttribute("data-admin-waypoint-remove") || "");
+      const row = Number.isFinite(index) && index >= 0 ? state.admin.waypointForm.rows[index] : null;
+      const hasContent = Boolean(row && (String(row.name || "").trim() !== "" || String(row.coord || "").trim() !== ""));
+      button.disabled = !hasContent;
+      button.classList.toggle("active", hasContent);
+    });
+  }
+
+  function syncAdminRpcFormUi() {
+    const rows = normalizeRpcRegistryRows(state.admin.rpcRegistryForm.rows);
+    rows.forEach((row, index) => {
+      const registrationNode = document.querySelector(`[data-admin-rpc-row="${index}:registration"]`);
+      const aircraftNode = document.querySelector(`[data-admin-rpc-row="${index}:aircraftType"]`);
+      const climbNode = document.querySelector(`[data-admin-rpc-row="${index}:casClimb"]`);
+      const cruiseNode = document.querySelector(`[data-admin-rpc-row="${index}:casCruise"]`);
+      const gphNode = document.querySelector(`[data-admin-rpc-row="${index}:gph"]`);
+      if (registrationNode && registrationNode.value !== String(row.registration || "")) registrationNode.value = String(row.registration || "");
+      if (aircraftNode && aircraftNode.value !== String(row.aircraftType || "")) aircraftNode.value = String(row.aircraftType || "");
+      if (climbNode && climbNode.value !== String(row.casClimb || "")) climbNode.value = String(row.casClimb || "");
+      if (cruiseNode && cruiseNode.value !== String(row.casCruise || "")) cruiseNode.value = String(row.casCruise || "");
+      if (gphNode && gphNode.value !== String(row.gph || "")) gphNode.value = String(row.gph || "");
+      const removeButton = document.querySelector(`[data-admin-rpc-remove="${index}"]`);
+      if (removeButton) {
+        const hasContent = Boolean(
+          String(row.registration || "").trim()
+          || String(row.aircraftType || "").trim()
+          || String(row.casClimb || "").trim()
+          || String(row.casCruise || "").trim()
+          || String(row.gph || "").trim()
+        );
+        removeButton.disabled = !hasContent;
+        removeButton.classList.toggle("active", hasContent);
+      }
+    });
+  }
+
+  function syncAdminRpcRemoveButtons() {
+    document.querySelectorAll("[data-admin-rpc-remove]").forEach((button) => {
+      const index = Number(button.getAttribute("data-admin-rpc-remove") || "");
+      const row = Number.isFinite(index) && index >= 0 ? state.admin.rpcRegistryForm.rows[index] : null;
+      const hasContent = Boolean(
+        row
+        && (
+          String(row.registration || "").trim() !== ""
+          || String(row.aircraftType || "").trim() !== ""
+          || String(row.casClimb || "").trim() !== ""
+          || String(row.casCruise || "").trim() !== ""
+          || String(row.gph || "").trim() !== ""
+        )
+      );
+      button.disabled = !hasContent;
+      button.classList.toggle("active", hasContent);
+    });
   }
 
   function isAnnouncementActive(item, nowMs) {
@@ -7227,8 +8184,26 @@
   }
 
   function getMappedAircraftFromRpc(rpcValue) {
+    const record = getRpcRegistryRecord(rpcValue);
+    if (record && record.aircraftType) return String(record.aircraftType || "").trim();
     const key = String(rpcValue || "").trim();
-    return key ? RPC_TO_AIRCRAFT[key] : "";
+    return key ? String(RPC_TO_AIRCRAFT[key] || "") : "";
+  }
+
+  function applyRpcAutofillFromHeader(rpcValue) {
+    const record = getRpcRegistryRecord(rpcValue);
+    const aircraft = record && record.aircraftType ? String(record.aircraftType || "").trim() : "";
+    const fuel = record && record.gph ? String(record.gph || "").trim() : "";
+    const aircraftInput = document.querySelector('[data-header="aircraft"]');
+    const fuelInput = document.querySelector('[data-header="gphPph"]');
+    state.navlog.header.aircraft = aircraft;
+    state.navlog.header.gphPph = fuel;
+    if (aircraftInput) aircraftInput.value = aircraft;
+    if (fuelInput) fuelInput.value = fuel;
+    applyDefaultCasForAircraft(record || null);
+    syncAircraftFuelDefaults();
+    computeRouteMath();
+    updateComputedCells();
   }
 
   function setLegCasDefault(index, casValue) {
@@ -7241,30 +8216,51 @@
     delete leg._derived.cas;
   }
 
-  function applyDefaultCasForAircraft(aircraftType) {
-    const mappedType = String(aircraftType || "").trim();
-    if (mappedType !== "C152") return;
+  function applyDefaultCasForAircraft(registrationRecordOrType) {
     if (!Array.isArray(state.navlog.legs) || state.navlog.legs.length === 0) return;
-
-    setLegCasDefault(0, "");
-    if (state.navlog.legs.length > 1) setLegCasDefault(1, "70");
-    for (let index = 2; index < state.navlog.legs.length; index += 1) {
-      setLegCasDefault(index, "85");
+    const record = typeof registrationRecordOrType === "object" && registrationRecordOrType
+      ? normalizeRpcRegistryRecord(registrationRecordOrType)
+      : getRpcRegistryRecord(registrationRecordOrType) || normalizeRpcRegistryRecord({ aircraftType: registrationRecordOrType });
+    const climbCas = String(record.casClimb || "").trim();
+    const cruiseCas = String(record.casCruise || "").trim();
+    const aircraftType = String(record.aircraftType || "").trim();
+    if (!aircraftType && !climbCas && !cruiseCas) {
+      state.navlog.legs.forEach((leg) => {
+        if (!leg) return;
+        leg.cas = "";
+        leg._manual = leg._manual || {};
+        leg._manual.cas = false;
+        leg._derived = leg._derived || {};
+        delete leg._derived.cas;
+      });
+      return;
     }
+
+    state.navlog.legs.forEach((leg, index) => {
+      if (!leg) return;
+      if (index === 0) {
+        leg.cas = "";
+        leg._manual = leg._manual || {};
+        leg._manual.cas = false;
+        leg._derived = leg._derived || {};
+        delete leg._derived.cas;
+        return;
+      }
+      const nextCas = index === 1 ? climbCas : cruiseCas;
+      leg.cas = String(nextCas || "");
+      leg._manual = leg._manual || {};
+      leg._manual.cas = String(nextCas || "").trim() !== "";
+      leg._derived = leg._derived || {};
+      delete leg._derived.cas;
+    });
   }
 
   function syncAircraftFuelDefaults() {
-    const aircraft = normalizeAircraft(state.navlog.header.aircraft);
+    const rpcRecord = getRpcRegistryRecord(state.navlog.header.rpCNo);
     const fuelInput = document.querySelector('[data-header="gphPph"]');
-    if (aircraft === "C152") {
-      state.navlog.header.gphPph = "6";
-      if (fuelInput) fuelInput.value = "6";
-      return;
-    }
-    if (state.navlog.header.gphPph === "6") {
-      state.navlog.header.gphPph = "";
-      if (fuelInput) fuelInput.value = "";
-    }
+    const nextFuel = rpcRecord && String(rpcRecord.gph || "").trim() ? String(rpcRecord.gph).trim() : "";
+    state.navlog.header.gphPph = nextFuel;
+    if (fuelInput) fuelInput.value = nextFuel;
   }
 
   function roundHalfUp(value) {
@@ -7690,6 +8686,8 @@
       const payload = {
         routePresets: (state.catalog.routePresets || []).map((preset) => clonePreset(preset)),
         airports: (state.catalog.airports || []).map((airport) => ({ ...airport })),
+        waypoints: (state.catalog.waypoints || []).map((waypoint) => cloneWaypointRecord(waypoint)),
+        rpcRegistry: (state.catalog.rpcRegistry || []).map((record) => cloneRpcRegistryRecord(record)),
         content: {
           manualHtml: String(state.catalog.content.manualHtml || ""),
           privacyHtml: String(state.catalog.content.privacyHtml || ""),
@@ -7720,6 +8718,12 @@
       if (Array.isArray(parsed.airports) && parsed.airports.length) {
         state.catalog.airports = parsed.airports.map((airport) => normalizeAirportRecord(airport));
       }
+      if (Array.isArray(parsed.waypoints) && parsed.waypoints.length) {
+        state.catalog.waypoints = parsed.waypoints.map((waypoint) => cloneWaypointRecord(waypoint));
+      }
+      if (Array.isArray(parsed.rpcRegistry) && parsed.rpcRegistry.length) {
+        state.catalog.rpcRegistry = parsed.rpcRegistry.map((record) => cloneRpcRegistryRecord(record));
+      }
       if (parsed.content && typeof parsed.content === "object") {
         const content = parsed.content;
         if (typeof content.manualHtml === "string") state.catalog.content.manualHtml = content.manualHtml;
@@ -7745,10 +8749,12 @@
     if (!ok || !supabaseClient) return;
     loadingPublicCatalog = true;
     try {
-      const [presetResult, airportResult, contentResult] = await Promise.all([
-        supabaseClient.from("route_presets").select("*").order("name", { ascending: true }),
-        supabaseClient.from("airports").select("*").order("code", { ascending: true }),
-        supabaseClient.from("content_pages").select("*"),
+      const [presetResult, airportResult, contentResult, waypointResult, rpcResult] = await Promise.all([
+        supabaseClient.from("route_presets").select("*").order("name", { ascending: true }).catch((error) => ({ error, data: [] })),
+        supabaseClient.from("airports").select("*").order("code", { ascending: true }).catch((error) => ({ error, data: [] })),
+        supabaseClient.from("content_pages").select("*").catch((error) => ({ error, data: [] })),
+        supabaseClient.from("waypoints").select("*").order("name", { ascending: true }).catch((error) => ({ error, data: [] })),
+        supabaseClient.from("rpc_registry").select("*").order("registration", { ascending: true }).catch((error) => ({ error, data: [] })),
       ]);
       if (presetResult.error || airportResult.error || contentResult.error) return;
 
@@ -7769,6 +8775,19 @@
         fss: row.fss,
         remarks: row.remarks,
       }));
+      const dbWaypoints = (waypointResult.data || []).map((row) => cloneWaypointRecord({
+        id: row.id,
+        name: row.name,
+        coord: row.coord,
+      }));
+      const dbRpcRegistry = (rpcResult.data || []).map((row) => cloneRpcRegistryRecord({
+        id: row.id,
+        registration: row.registration,
+        aircraftType: row.aircraft_type,
+        casClimb: row.cas_climb,
+        casCruise: row.cas_cruise,
+        gph: row.gph,
+      }));
       const contentMap = {};
       (contentResult.data || []).forEach((row) => {
         contentMap[String(row.key || "").toLowerCase()] = String(row.body_html || "");
@@ -7776,6 +8795,8 @@
 
       state.catalog.routePresets = dbPresets.map((preset) => clonePreset(preset));
       state.catalog.airports = dbAirports.map((airport) => ({ ...airport }));
+      state.catalog.waypoints = dbWaypoints.map((waypoint) => ({ ...waypoint }));
+      state.catalog.rpcRegistry = dbRpcRegistry.map((record) => ({ ...record }));
       if (typeof contentMap.manual === "string") state.catalog.content.manualHtml = contentMap.manual;
       if (typeof contentMap.privacy === "string") state.catalog.content.privacyHtml = contentMap.privacy;
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
@@ -7822,6 +8843,7 @@
       state.view = "ipad-kiosk";
       state.meta.routeProgressMarkerSnapshot = null;
       restoreKioskPayload();
+      applyRpcAutofillFromHeader(state.navlog.header.rpCNo);
       state.navlog.tocTod.tocEditing = false;
       state.navlog.tocTod.todEditing = false;
       normalizeActivateRows(false);
@@ -7874,53 +8896,6 @@
   }
 
   function installReloadProtection() {
-    if (window.__navlogReloadProtectionBound === "1") return;
-    const reloadMessage = "Please verify you have internet available before reloading. You may not be able to use Navlog further if you reload without internet.";
-    const beforeUnloadHandler = (event) => {
-      event.preventDefault();
-      event.returnValue = reloadMessage;
-      return reloadMessage;
-    };
-    window.addEventListener("keydown", (event) => {
-      const key = String(event.key || "");
-      const isRefreshKey = key === "F5" || ((event.ctrlKey || event.metaKey) && key.toLowerCase() === "r");
-      if (!isRefreshKey) return;
-      event.preventDefault();
-      window.alert(reloadMessage);
-    });
-    window.addEventListener("beforeunload", beforeUnloadHandler);
-    window.onbeforeunload = beforeUnloadHandler;
-    let pullStartY = 0;
-    let pullTracking = false;
-    let pullAlerted = false;
-    window.addEventListener("touchstart", (event) => {
-      const touch = event.touches && event.touches[0];
-      if (!touch) return;
-      pullStartY = touch.clientY;
-      pullTracking = window.scrollY <= 0;
-      pullAlerted = false;
-    }, { passive: true });
-    window.addEventListener("touchmove", (event) => {
-      if (!pullTracking) return;
-      const touch = event.touches && event.touches[0];
-      if (!touch) return;
-      const pullingDown = touch.clientY > (pullStartY + 10);
-      if (!pullingDown || window.scrollY > 0) return;
-      event.preventDefault();
-      if (!pullAlerted) {
-        pullAlerted = true;
-        window.alert(reloadMessage);
-      }
-    }, { passive: false });
-    window.addEventListener("touchend", () => {
-      pullTracking = false;
-      pullAlerted = false;
-    }, { passive: true });
-    window.addEventListener("touchcancel", () => {
-      pullTracking = false;
-      pullAlerted = false;
-    }, { passive: true });
-    window.__navlogReloadProtectionBound = "1";
   }
 
   registerOfflineServiceWorker();

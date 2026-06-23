@@ -14,6 +14,23 @@ create table if not exists public.route_presets (
 create index if not exists route_presets_dep_dest_idx
   on public.route_presets (departure, destination);
 
+create table if not exists public.waypoints (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  coord text not null default '',
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.rpc_registry (
+  id uuid primary key default gen_random_uuid(),
+  registration text not null unique,
+  aircraft_type text not null default '',
+  cas_climb text not null default '',
+  cas_cruise text not null default '',
+  gph text not null default '',
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.airports (
   code text primary key,
   id text not null,
@@ -52,6 +69,16 @@ create trigger airports_touch_updated_at
 before update on public.airports
 for each row execute function public.touch_updated_at();
 
+drop trigger if exists waypoints_touch_updated_at on public.waypoints;
+create trigger waypoints_touch_updated_at
+before update on public.waypoints
+for each row execute function public.touch_updated_at();
+
+drop trigger if exists rpc_registry_touch_updated_at on public.rpc_registry;
+create trigger rpc_registry_touch_updated_at
+before update on public.rpc_registry
+for each row execute function public.touch_updated_at();
+
 drop trigger if exists content_pages_touch_updated_at on public.content_pages;
 create trigger content_pages_touch_updated_at
 before update on public.content_pages
@@ -59,6 +86,8 @@ for each row execute function public.touch_updated_at();
 
 alter table public.route_presets enable row level security;
 alter table public.airports enable row level security;
+alter table public.waypoints enable row level security;
+alter table public.rpc_registry enable row level security;
 alter table public.content_pages enable row level security;
 
 drop policy if exists route_presets_public_read on public.route_presets;
@@ -71,6 +100,20 @@ using (true);
 drop policy if exists airports_public_read on public.airports;
 create policy airports_public_read
 on public.airports
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists waypoints_public_read on public.waypoints;
+create policy waypoints_public_read
+on public.waypoints
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists rpc_registry_public_read on public.rpc_registry;
+create policy rpc_registry_public_read
+on public.rpc_registry
 for select
 to anon, authenticated
 using (true);
@@ -96,6 +139,22 @@ with check (true);
 drop policy if exists airports_admin_write on public.airports;
 create policy airports_admin_write
 on public.airports
+for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists waypoints_admin_write on public.waypoints;
+create policy waypoints_admin_write
+on public.waypoints
+for all
+to authenticated
+using (true)
+with check (true);
+
+drop policy if exists rpc_registry_admin_write on public.rpc_registry;
+create policy rpc_registry_admin_write
+on public.rpc_registry
 for all
 to authenticated
 using (true)
