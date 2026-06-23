@@ -5965,6 +5965,14 @@
     }
   }
 
+  async function runSupabaseQuery(query) {
+    try {
+      return await query;
+    } catch (error) {
+      return { data: [], error };
+    }
+  }
+
   async function signInAdmin() {
     const ok = await connectSupabaseClient(false);
     if (!ok) {
@@ -6047,11 +6055,11 @@
     state.admin.notice = "";
     try {
       let [presetResult, airportResult, contentResult, waypointResult, rpcResult] = await Promise.all([
-        supabaseClient.from("route_presets").select("*").order("name", { ascending: true }).catch((error) => ({ error, data: [] })),
-        supabaseClient.from("airports").select("*").order("code", { ascending: true }).catch((error) => ({ error, data: [] })),
-        supabaseClient.from("content_pages").select("*").catch((error) => ({ error, data: [] })),
-        supabaseClient.from("waypoints").select("*").order("name", { ascending: true }).catch((error) => ({ error, data: [] })),
-        supabaseClient.from("rpc_registry").select("*").order("registration", { ascending: true }).catch((error) => ({ error, data: [] })),
+        runSupabaseQuery(supabaseClient.from("route_presets").select("*").order("name", { ascending: true })),
+        runSupabaseQuery(supabaseClient.from("airports").select("*").order("code", { ascending: true })),
+        runSupabaseQuery(supabaseClient.from("content_pages").select("*")),
+        runSupabaseQuery(supabaseClient.from("waypoints").select("*").order("name", { ascending: true })),
+        runSupabaseQuery(supabaseClient.from("rpc_registry").select("*").order("registration", { ascending: true })),
       ]);
       if (presetResult.error) throw presetResult.error;
       if (airportResult.error) throw airportResult.error;
@@ -8750,11 +8758,11 @@
     loadingPublicCatalog = true;
     try {
       const [presetResult, airportResult, contentResult, waypointResult, rpcResult] = await Promise.all([
-        supabaseClient.from("route_presets").select("*").order("name", { ascending: true }).catch((error) => ({ error, data: [] })),
-        supabaseClient.from("airports").select("*").order("code", { ascending: true }).catch((error) => ({ error, data: [] })),
-        supabaseClient.from("content_pages").select("*").catch((error) => ({ error, data: [] })),
-        supabaseClient.from("waypoints").select("*").order("name", { ascending: true }).catch((error) => ({ error, data: [] })),
-        supabaseClient.from("rpc_registry").select("*").order("registration", { ascending: true }).catch((error) => ({ error, data: [] })),
+        runSupabaseQuery(supabaseClient.from("route_presets").select("*").order("name", { ascending: true })),
+        runSupabaseQuery(supabaseClient.from("airports").select("*").order("code", { ascending: true })),
+        runSupabaseQuery(supabaseClient.from("content_pages").select("*")),
+        runSupabaseQuery(supabaseClient.from("waypoints").select("*").order("name", { ascending: true })),
+        runSupabaseQuery(supabaseClient.from("rpc_registry").select("*").order("registration", { ascending: true })),
       ]);
       if (presetResult.error || airportResult.error || contentResult.error) return;
 
