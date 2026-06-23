@@ -33,23 +33,6 @@ on conflict (code) do update set
   fss = excluded.fss,
   remarks = excluded.remarks;
 
--- RP-C registration defaults
-insert into public.aircraft_registrations (rpc, aircraft_type, cas_climb, cas_cruise, gph)
-values
-  ('832','C152','70','85','6'),
-  ('840','C152','70','85','6'),
-  ('860','C152','70','85','6'),
-  ('831','C152','70','85','6'),
-  ('8749','C152','70','85','6'),
-  ('8596','C152','70','85','6'),
-  ('8152','C152','70','85','6'),
-  ('8804','C152','70','85','6'),
-  ('8747','C152','70','85','6'),
-  ('3288','C172','','',''),
-  ('833','C172','','',''),
-  ('8734','Seneca','','','')
-on conflict (rpc) do nothing;
-
 -- Route presets (insert only if DEP/ARR pair not already present)
 with seed (name, departure, destination, legs_json) as (
   values

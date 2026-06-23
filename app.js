@@ -1,17 +1,17 @@
 ﻿(function () {
-  const DEFAULT_RPC_REGISTRATIONS = {
-    "832": { rpc: "832", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    "840": { rpc: "840", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    "860": { rpc: "860", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    "831": { rpc: "831", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    "8749": { rpc: "8749", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    "8596": { rpc: "8596", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    "8152": { rpc: "8152", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    "8804": { rpc: "8804", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    "8747": { rpc: "8747", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    "3288": { rpc: "3288", aircraftType: "C172", casClimb: "", casCruise: "", gph: "" },
-    "833": { rpc: "833", aircraftType: "C172", casClimb: "", casCruise: "", gph: "" },
-    "8734": { rpc: "8734", aircraftType: "Seneca", casClimb: "", casCruise: "", gph: "" },
+  const RPC_TO_AIRCRAFT = {
+    "832": "C152",
+    "840": "C152",
+    "860": "C152",
+    "831": "C152",
+    "8749": "C152",
+    "8596": "C152",
+    "8152": "C152",
+    "8804": "C152",
+    "8747": "C152",
+    "3288": "C172",
+    "833": "C172",
+    "8734": "Seneca",
   };
   const SUPABASE_URL_KEY = "navlog_supabase_url";
   const SUPABASE_ANON_KEY = "navlog_supabase_anon_key";
@@ -24,6 +24,8 @@
   const NAVLOG_PUBLIC_CATALOG_CACHE_KEY = "navlog_public_catalog_cache_v1";
   const NAVLOG_ACCESS_KEY_UNLOCK = "navlog_access_unlocked_v1";
   const NAVLOG_WELCOME_BEHAVIOUR_SEEN = "navlog_welcome_behaviour_seen_v1";
+  const NAVLOG_MONTHLY_VISITOR_KEY = "navlog_monthly_visitor_marker";
+  const NAVLOG_MONTHLY_VISITOR_COUNT_KEY = "navlog_monthly_visitor_count";
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
   const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
   const ADDITIONAL_INFO_DEFAULT_ROWS = 19;
@@ -43,8 +45,6 @@
     catalog: {
       airports: [],
       routePresets: [],
-      waypoints: [],
-      rpcRegistrations: buildDefaultRpcRegistrations(),
       content: {
         manualHtml: "",
         privacyHtml: "",
@@ -72,16 +72,10 @@
       session: null,
       presets: [],
       airports: [],
-      waypoints: [],
-      rpcRegistrations: buildDefaultRpcRegistrations(),
       selectedPresetId: "",
       selectedAirportCode: "",
-      selectedWaypointCode: "",
-      selectedRpc: "",
       presetForm: createEmptyPresetForm(),
       airportForm: createEmptyAirportForm(),
-      waypointForm: createEmptyWaypointForm(),
-      rpcForm: createEmptyRpcRegistrationForm(),
       manualHtmlDraft: "",
       privacyHtmlDraft: "",
       manualDraftBaselineText: "",
@@ -118,8 +112,8 @@
       kioskEventTimer: createEmptyKioskEventTimerState(),
       kioskTimerAlerts: createEmptyKioskTimerAlertState(),
       kioskGps: createEmptyKioskGpsState(),
-      kioskGpsContinuePromptOpen: false,
       routeProgressMarkerSnapshot: null,
+      monthlyVisitors: 0,
     },
   };
   const TRIG_TOLERANCE = 1e-6;
@@ -300,7 +294,6 @@
     return {
       departure: "",
       destination: "",
-      navValuesUnlocked: false,
       rows: [createEmptyPresetRow()],
     };
   }
@@ -309,26 +302,7 @@
     return {
       route: "",
       tc: "",
-      distance: "",
       coord: "",
-      navManual: false,
-    };
-  }
-
-  function createEmptyWaypointForm() {
-    return {
-      code: "",
-      coord: "",
-    };
-  }
-
-  function createEmptyRpcRegistrationForm() {
-    return {
-      rpc: "",
-      aircraftType: "",
-      casClimb: "",
-      casCruise: "",
-      gph: "",
     };
   }
 
@@ -468,43 +442,6 @@
     };
   }
 
-  function normalizeWaypointRecord(waypoint) {
-    return {
-      code: normalizeCode(waypoint && (waypoint.code ?? waypoint.id ?? waypoint.route)),
-      coord: String(waypoint && (waypoint.coord ?? waypoint.coordinates ?? waypoint.latlon ?? waypoint.coordinate ?? "") || "").trim(),
-    };
-  }
-
-  function normalizeRpcKey(value) {
-    return String(value || "").trim().toUpperCase().replace(/^RP-?C\s*/i, "");
-  }
-
-  function normalizeRpcRegistration(registration) {
-    return {
-      rpc: normalizeRpcKey(registration && (registration.rpc ?? registration.rpCNo ?? registration.registration)),
-      aircraftType: String(registration && (registration.aircraftType ?? registration.aircraft_type ?? registration.aircraft ?? "") || "").trim(),
-      casClimb: String(registration && (registration.casClimb ?? registration.cas_climb ?? "") || "").trim(),
-      casCruise: String(registration && (registration.casCruise ?? registration.cas_cruise ?? "") || "").trim(),
-      gph: String(registration && (registration.gph ?? registration.gphPph ?? registration.gph_pph ?? "") || "").trim(),
-    };
-  }
-
-  function buildDefaultRpcRegistrations() {
-    return Object.values(DEFAULT_RPC_REGISTRATIONS).map((registration) => normalizeRpcRegistration(registration));
-  }
-
-  function mergeRpcRegistrations(customRegistrations) {
-    const byRpc = new Map();
-    buildDefaultRpcRegistrations().forEach((registration) => {
-      if (registration.rpc) byRpc.set(registration.rpc, registration);
-    });
-    (Array.isArray(customRegistrations) ? customRegistrations : []).forEach((registration) => {
-      const normalized = normalizeRpcRegistration(registration);
-      if (normalized.rpc) byRpc.set(normalized.rpc, normalized);
-    });
-    return Array.from(byRpc.values()).sort((a, b) => a.rpc.localeCompare(b.rpc, undefined, { numeric: true }));
-  }
-
   function parseHemisphericCoordinateToken(rawToken, kind) {
     const text = String(rawToken || "").trim().toUpperCase();
     if (!text) return null;
@@ -589,72 +526,29 @@
     return null;
   }
 
-  function getLegCoordinateText(leg) {
-    return String(
-      (leg && (leg.coord ?? leg.coordinates ?? leg.latlon ?? leg.coordinate ?? "")) || "",
-    ).trim();
-  }
-
-  function buildWaypointRouteCatalog() {
+  function buildWaypointCoordinateCatalog() {
     const catalog = new Map();
-    const ensureRoute = (code) => {
-      const normalized = normalizeCode(code);
-      if (!normalized) return null;
-      if (!catalog.has(normalized)) {
-        catalog.set(normalized, {
-          code: normalized,
-          coordText: "",
-          lat: null,
-          lon: null,
-          hasCoordinate: false,
-        });
-      }
-      return catalog.get(normalized);
-    };
-    const applyCoordinate = (code, coordText) => {
-      const entry = ensureRoute(code);
-      if (!entry) return;
-      const raw = String(coordText || "").trim();
-      if (!raw) return;
-      const parsed = parseWaypointCoordinate(raw);
-      if (!parsed) return;
-      entry.coordText = raw;
-      entry.lat = parsed.lat;
-      entry.lon = parsed.lon;
-      entry.hasCoordinate = true;
-    };
-
-    (Array.isArray(state.catalog.airports) ? state.catalog.airports : []).forEach((airport) => {
-      ensureRoute(airport && (airport.code || airport.id));
-    });
-
     const presets = Array.isArray(state.catalog.routePresets) ? state.catalog.routePresets : [];
     presets.forEach((preset) => {
-      ensureRoute(preset && preset.departure);
-      ensureRoute(preset && preset.destination);
       const legs = Array.isArray(preset && preset.legs) ? preset.legs : [];
       legs.forEach((leg) => {
         const routeCode = normalizeCode(leg && leg.route);
         if (!routeCode) return;
-        ensureRoute(routeCode);
-        applyCoordinate(routeCode, getLegCoordinateText(leg));
+        const coordRaw = String(
+          (leg && (leg.coord ?? leg.coordinates ?? leg.latlon ?? leg.coordinate ?? "")) || "",
+        ).trim();
+        if (!coordRaw) return;
+        const parsed = parseWaypointCoordinate(coordRaw);
+        if (!parsed) return;
+        if (!catalog.has(routeCode)) {
+          catalog.set(routeCode, {
+            code: routeCode,
+            lat: parsed.lat,
+            lon: parsed.lon,
+            coordText: coordRaw,
+          });
+        }
       });
-    });
-
-    (Array.isArray(state.catalog.waypoints) ? state.catalog.waypoints : []).forEach((waypoint) => {
-      const normalized = normalizeWaypointRecord(waypoint);
-      ensureRoute(normalized.code);
-      applyCoordinate(normalized.code, normalized.coord);
-    });
-
-    return catalog;
-  }
-
-  function buildWaypointCoordinateCatalog() {
-    const catalog = new Map();
-    buildWaypointRouteCatalog().forEach((entry, code) => {
-      if (!entry || !entry.hasCoordinate) return;
-      catalog.set(code, entry);
     });
     return catalog;
   }
@@ -667,13 +561,8 @@
   }
 
   function getWaypointCodesForSuggestions() {
-    const catalog = buildWaypointRouteCatalog();
+    const catalog = buildWaypointCoordinateCatalog();
     return Array.from(catalog.keys()).sort();
-  }
-
-  function getWaypointRouteEntriesForPicker() {
-    return Array.from(buildWaypointRouteCatalog().values())
-      .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   }
 
   function shouldTreatDistanceAsAutofill(leg) {
@@ -682,56 +571,23 @@
     return leg._distanceAutofillFromCoords === true;
   }
 
-  function shouldTreatTcAsAutofill(leg) {
-    if (!leg || !leg._manual) return true;
-    if (!leg._manual.tc) return true;
-    return leg._tcAutofillFromCoords === true;
-  }
-
   function autofillDistanceBetweenWaypoints(distanceLegIndex) {
     const legIndex = Number(distanceLegIndex);
     if (!Number.isFinite(legIndex) || legIndex <= 0 || legIndex >= state.navlog.legs.length) return false;
     const targetLeg = state.navlog.legs[legIndex];
-    if (!targetLeg) return false;
+    if (!targetLeg || !shouldTreatDistanceAsAutofill(targetLeg)) return false;
     const fromRoute = state.navlog.legs[legIndex - 1] ? state.navlog.legs[legIndex - 1].route : "";
     const toRoute = targetLeg.route;
     const fromCoord = getWaypointCoordinate(fromRoute);
     const toCoord = getWaypointCoordinate(toRoute);
-    if (!fromCoord || !toCoord) {
-      let cleared = false;
-      targetLeg._manual = targetLeg._manual || {};
-      if (targetLeg._distanceAutofillFromCoords === true) {
-        targetLeg.distance = "";
-        targetLeg._manual.distance = false;
-        targetLeg._distanceAutofillFromCoords = false;
-        cleared = true;
-      }
-      if (targetLeg._tcAutofillFromCoords === true) {
-        targetLeg.tc = "";
-        targetLeg._manual.tc = false;
-        targetLeg._tcAutofillFromCoords = false;
-        cleared = true;
-      }
-      return cleared;
-    }
+    if (!fromCoord || !toCoord) return false;
     const distanceNm = computeGreatCircleDistanceNm(fromCoord.lat, fromCoord.lon, toCoord.lat, toCoord.lon);
-    const trueCourse = computeInitialTrueBearing(fromCoord.lat, fromCoord.lon, toCoord.lat, toCoord.lon);
-    let changed = false;
-    if (Number.isFinite(distanceNm) && distanceNm > 0 && shouldTreatDistanceAsAutofill(targetLeg)) {
-      targetLeg.distance = formatDistanceDisplay(distanceNm);
-      targetLeg._manual = targetLeg._manual || {};
-      targetLeg._manual.distance = true;
-      targetLeg._distanceAutofillFromCoords = true;
-      changed = true;
-    }
-    if (Number.isFinite(trueCourse) && shouldTreatTcAsAutofill(targetLeg)) {
-      targetLeg.tc = maybeHeadingDegrees(trueCourse);
-      targetLeg._manual = targetLeg._manual || {};
-      targetLeg._manual.tc = true;
-      targetLeg._tcAutofillFromCoords = true;
-      changed = true;
-    }
-    return changed;
+    if (!Number.isFinite(distanceNm) || distanceNm <= 0) return false;
+    targetLeg.distance = formatDistanceDisplay(distanceNm);
+    targetLeg._manual = targetLeg._manual || {};
+    targetLeg._manual.distance = true;
+    targetLeg._distanceAutofillFromCoords = true;
+    return true;
   }
 
   function applyCoordinateDistanceAutofillAroundRoute(routeIndex) {
@@ -1117,29 +973,9 @@
     const panel = String(state.admin.panel || "dashboard");
     const presetLookup = getPresetLookupState();
     const airportLookup = getAirportLookupState();
-    const waypointLookup = getWaypointLookupState();
-    const rpcLookup = getRpcLookupState();
-    const presetNavUnlocked = Boolean(state.admin.presetForm.navValuesUnlocked);
-    const presetRows = deriveAdminPresetRows(
-      Array.isArray(state.admin.presetForm.rows) && state.admin.presetForm.rows.length
-        ? state.admin.presetForm.rows
-        : [createEmptyPresetRow()],
-      presetNavUnlocked,
-    );
-    const routeEntries = getWaypointRouteEntriesForPicker();
-    const routeCodeOptions = routeEntries
-      .map((entry) => '<option value="' + escapeAttr(entry.code) + '"></option>')
-      .join("");
-    const routePickerOptions = routeEntries
-      .map((entry) => '<option class="' + (entry.hasCoordinate ? "" : "missing-coord") + '" value="' + escapeAttr(entry.code) + '">' + escapeHtml(entry.code) + (entry.hasCoordinate ? "" : " - coords missing") + '</option>')
-      .join("");
-    const rpcEntries = getRpcRegistrationEntriesForPicker();
-    const rpcCodeOptions = rpcEntries
-      .map((entry) => '<option value="' + escapeAttr(entry.rpc) + '"></option>')
-      .join("");
-    const rpcPickerOptions = rpcEntries
-      .map((entry) => '<option class="' + (entry.hasRegistration ? "" : "missing-coord") + '" value="' + escapeAttr(entry.rpc) + '">' + escapeHtml(entry.rpc) + (entry.hasRegistration ? "" : " - config missing") + '</option>')
-      .join("");
+    const presetRows = Array.isArray(state.admin.presetForm.rows) && state.admin.presetForm.rows.length
+      ? state.admin.presetForm.rows
+      : [createEmptyPresetRow()];
     const presetCodeOptions = collectPresetAirportCodes()
       .map((code) => `<option value="${escapeAttr(code)}"></option>`)
       .join("");
@@ -1155,8 +991,6 @@
     const panelButtons = [
       { id: "dashboard", label: "Dashboard" },
       { id: "presets", label: "Presets" },
-      { id: "coordinates", label: "Coordinates" },
-      { id: "rpc-reg", label: "RP-C Reg" },
       { id: "airports", label: "Airport Info" },
       { id: "announcements", label: "Announcements" },
       { id: "additional-info", label: "Additional Info" },
@@ -1184,21 +1018,8 @@
             </aside>
             <div class="admin-panel-wrap">
           <div class="manual-section${panel === "presets" ? "" : " hidden"}">
-            <div class="admin-panel-title-row">
-              <div>
-                <h3>Route Presets</h3>
-                <p class="setup-caption">Enter route names and coordinates. TC and distance are calculated from waypoint coordinates.</p>
-              </div>
-              <button class="action admin-nav-lock${presetNavUnlocked ? " unlocked" : ""}" id="admin-preset-nav-lock" type="button" aria-pressed="${presetNavUnlocked ? "true" : "false"}">
-                ${presetNavUnlocked ? "🔓 Manual TC/DIS" : "🔒 GPS TC/DIS"}
-              </button>
-            </div>
-            <span class="admin-info-line">
-              <span class="settings-info-badge">i</span>
-              <span>Distance and TC are GPS-obtained; you do not have to enter them manually.</span>
-            </span>
+            <h3>Route Presets</h3><br>
             <datalist id="admin-preset-code-list">${presetCodeOptions}</datalist>
-            <datalist id="admin-route-code-list">${routeCodeOptions}</datalist>
             <div class="admin-grid two-col">
               <label class="setup-field">
                 <span>Departure</span>
@@ -1213,23 +1034,20 @@
             <section class="admin-preset-table">
               <div class="admin-preset-head">
                 <div><button class="mini-plus inline admin-head-plus" id="admin-preset-add-row" type="button" aria-label="Add preset row">+</button>ROUTE</div>
-                <div>COORDS</div>
                 <div>TC</div>
-                <div>DISTANCE</div>
+                <div>COORDS</div>
                 <div></div>
               </div>
               <div class="admin-preset-body">
                 ${presetRows.map((row, index) => {
                   const rowHasContent = String(row.route || "").trim() !== ""
                     || String(row.tc || "").trim() !== ""
-                    || String(row.distance || "").trim() !== ""
                     || String(row.coord || "").trim() !== "";
                   return `
                     <div class="admin-preset-row">
-                      <input data-admin-preset-row="${index}:route" list="admin-route-code-list" value="${escapeAttr(row.route)}" />
+                      <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" />
+                      <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" />
                       <input data-admin-preset-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
-                      <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" ${presetNavUnlocked ? "" : "readonly"} />
-                      <input data-admin-preset-row="${index}:distance" value="${escapeAttr(row.distance)}" ${presetNavUnlocked ? "" : "readonly"} />
                       <button class="action admin-mini-btn${rowHasContent ? " active" : ""}" data-admin-preset-remove="${index}" type="button" aria-label="Remove preset row" ${rowHasContent ? "" : "disabled"}>-</button>
                     </div>
                   `;
@@ -1239,74 +1057,6 @@
             <div class="entry-actions">
               <button class="action primary" id="admin-preset-save">Save</button>
               <button class="action" id="admin-preset-delete"${presetLookup.exists ? "" : " disabled"}>Delete</button>
-            </div>
-          </div>
-          <div class="manual-section${panel === "coordinates" ? "" : " hidden"}">
-            <h3>Coordinates</h3>
-            <p class="setup-caption">These coordinates are used for distance, TC, and other navigational calculations.</p>
-            <datalist id="admin-waypoint-code-list">${routeCodeOptions}</datalist>
-            <div class="admin-lookup-row">
-              <label class="setup-field">
-                <span>Waypoint name</span>
-                <input id="admin-waypoint-code" list="admin-waypoint-code-list" value="${escapeAttr(state.admin.waypointForm.code)}" autocomplete="off" />
-              </label>
-              <label class="setup-field admin-picker-field">
-                <span>Known waypoints</span>
-                <select id="admin-waypoint-picker">
-                  <option value="">Pick a waypoint</option>
-                  ${routePickerOptions}
-                </select>
-              </label>
-            </div>
-            <label class="setup-field admin-title-gap">
-              <span>Coordinates</span>
-              <input id="admin-waypoint-coord" value="${escapeAttr(state.admin.waypointForm.coord)}" placeholder="+/-lat, +/-long" />
-            </label>
-            <div class="preset-status ${waypointLookup.active ? (waypointLookup.exists ? "available" : "missing") : ""}">${waypointLookup.active ? (waypointLookup.exists ? "coordinates avbl" : "coordinates unavbl") : ""}</div>
-            <div class="entry-actions">
-              <button class="action primary" id="admin-waypoint-save">Save</button>
-              <button class="action" id="admin-waypoint-delete"${waypointLookup.databaseRecord ? "" : " disabled"}>Delete</button>
-            </div>
-          </div>
-          <div class="manual-section${panel === "rpc-reg" ? "" : " hidden"}">
-            <h3>RP-C Reg</h3>
-            <p class="setup-caption">Look up a registration and manage its aircraft performance defaults.</p>
-            <datalist id="admin-rpc-code-list">${rpcCodeOptions}</datalist>
-            <div class="admin-lookup-row">
-              <label class="setup-field">
-                <span>RP-C registration</span>
-                <input id="admin-rpc-code" list="admin-rpc-code-list" value="${escapeAttr(state.admin.rpcForm.rpc)}" autocomplete="off" />
-              </label>
-              <label class="setup-field admin-picker-field">
-                <span>Known registrations</span>
-                <select id="admin-rpc-picker">
-                  <option value="">Pick a registration</option>
-                  ${rpcPickerOptions}
-                </select>
-              </label>
-            </div>
-            <div class="preset-status ${rpcLookup.active ? (rpcLookup.exists ? "available" : "missing") : ""}">${rpcLookup.active ? (rpcLookup.exists ? "registration avbl" : "registration unavbl") : ""}</div>
-            <div class="admin-grid admin-grid-four admin-title-gap">
-              <label class="setup-field">
-                <span>Aircraft Type</span>
-                <input id="admin-rpc-aircraft" value="${escapeAttr(state.admin.rpcForm.aircraftType)}" />
-              </label>
-              <label class="setup-field">
-                <span>CAS Climb</span>
-                <input id="admin-rpc-cas-climb" value="${escapeAttr(state.admin.rpcForm.casClimb)}" inputmode="decimal" />
-              </label>
-              <label class="setup-field">
-                <span>CAS Cruise</span>
-                <input id="admin-rpc-cas-cruise" value="${escapeAttr(state.admin.rpcForm.casCruise)}" inputmode="decimal" />
-              </label>
-              <label class="setup-field">
-                <span>GPH</span>
-                <input id="admin-rpc-gph" value="${escapeAttr(state.admin.rpcForm.gph)}" inputmode="decimal" />
-              </label>
-            </div>
-            <div class="entry-actions">
-              <button class="action primary" id="admin-rpc-save">Save</button>
-              <button class="action" id="admin-rpc-delete"${rpcLookup.databaseRecord ? "" : " disabled"}>Delete</button>
             </div>
           </div>
           <div class="manual-section${panel === "airports" ? "" : " hidden"}">
@@ -1464,8 +1214,8 @@
             <h3>Dashboard</h3><br>
             <div class="admin-dashboard-grid">
               <article class="admin-dashboard-card">
-                <h4>Loaded waypoints</h4>
-                <p>${escapeHtml(String(getLoadedWaypointCount()))}</p>
+                <h4>Monthly visitors</h4>
+                <p>${escapeHtml(String(state.meta.monthlyVisitors || 0))}</p>
               </article>
               <article class="admin-dashboard-card">
                 <h4>Route presets</h4>
@@ -1513,7 +1263,6 @@
 
         <section class="sheet-wrap">
           <div class="sheet">
-            <div class="editable-phone-part editable-phone-header-scroll">
             <section class="sheet-header">
               ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
               <div class="header-box dark static planning-box">PREFLIGHT PLANNER</div>
@@ -1523,11 +1272,11 @@
               <div class="header-box static navlog-box">NAVIGATION LOG</div>
               ${renderHeaderInputBox("UTC TIME", `<input data-header="timeUtc" value="${escapeAttr(h.timeUtc)}" />`, "utc-box")}
             </section>
-            </div>
-            <div class="editable-phone-part editable-phone-route-scroll">${renderRouteTable()}</div>
-            <div class="editable-phone-part editable-phone-toc-scroll">${renderTocTod()}</div>
-            <div class="editable-phone-part editable-phone-airport-scroll">${renderLocationTable()}</div>
-            <div class="editable-phone-part editable-phone-atis-scroll">${renderAtisSection()}</div>
+
+            ${renderRouteTable()}
+            ${renderTocTod()}
+            ${renderLocationTable()}
+            ${renderAtisSection()}
           </div>
         </section>
         <section class="activate-wrap">
@@ -1597,7 +1346,6 @@
         ${renderKioskRouteEstimateModal()}
         ${renderKioskWhereAmIModal()}
         ${renderKioskTimerAlertModal()}
-        ${renderKioskGpsContinuePromptModal()}
       </main>
     `;
   }
@@ -1605,13 +1353,15 @@
   function renderKioskPhoneHeaderSummary(header) {
     const rpCNo = String(header && header.rpCNo ? header.rpCNo : "").trim();
     const aircraft = String(header && header.aircraft ? header.aircraft : "").trim();
-    const rpDisplay = rpCNo;
+    const rpDisplay = rpCNo || aircraft
+      ? `RP-C ${rpCNo || "-"}${aircraft ? ` (${aircraft})` : ""}`
+      : "";
     const dateDisplay = normalizeDisplayDate(header && header.date ? header.date : "");
     const utcTimeDisplay = String(header && header.timeUtc ? header.timeUtc : "").trim();
     return `
       <section class="kiosk-phone-header-grid">
         <label class="kiosk-phone-head-card">
-          <span>RP-C${aircraft ? ` (${escapeHtml(aircraft)})` : ""}</span>
+          <span>RP-C</span>
           <input data-header="rpCNo" value="${escapeAttr(rpDisplay)}" readonly />
         </label>
         <label class="kiosk-phone-head-card">
@@ -1691,7 +1441,6 @@
                 <p class="kiosk-estimate-context kiosk-reminder-heading">Reminder setup</p>
               `
               : `
-                <p class="kiosk-estimate-result kiosk-dst-distance" id="kiosk-route-dst-distance">Estimated distance: <strong>${escapeHtml(liveDistanceText || "--")}</strong></p>
                 <div class="kiosk-direction-toggle" id="kiosk-route-estimate-direction">
                   <button type="button" class="kiosk-direction-btn ${model.direction === "inbound" ? "active" : ""}" data-kiosk-direction="inbound">Inbound</button>
                   <button type="button" class="kiosk-direction-btn ${model.direction === "outbound" ? "active" : ""}" data-kiosk-direction="outbound">Outbound</button>
@@ -1815,24 +1564,6 @@
           <p class="kiosk-alert-countdown" id="kiosk-alert-countdown">-00:00</p>
           <div class="kiosk-estimate-actions">
             <button class="action primary" id="kiosk-timer-alert-ack" type="button">Acknowledge</button>
-          </div>
-        </section>
-      </div>
-    `;
-  }
-
-  function renderKioskGpsContinuePromptModal() {
-    if (!state.meta.kioskGpsContinuePromptOpen) return "";
-    return `
-      <div class="bug-report-overlay" id="kiosk-gps-continue-overlay">
-        <section class="bug-report-modal kiosk-estimate-modal" role="dialog" aria-modal="true" aria-label="GPS unavailable">
-          <div class="bug-report-head">
-            <h3>GPS unavailable</h3>
-          </div>
-          <p class="kiosk-estimate-context">Continue without GPS?</p>
-          <div class="kiosk-estimate-actions">
-            <button class="action primary" id="kiosk-gps-continue-yes" type="button">YES</button>
-            <button class="action" id="kiosk-gps-continue-cancel" type="button">NO</button>
           </div>
         </section>
       </div>
@@ -2194,7 +1925,7 @@
     const activeValue = legFieldValue(leg, activeField);
     return `
       <div class="${legFieldClass(leg, activeField, "kiosk-phone-speed-cell")}">
-        <input data-kiosk-speed-display="${index}" data-leg-field="${index}:${activeField}" value="${escapeAttr(activeValue)}" readonly />
+        <input data-kiosk-speed-display="${index}" value="${escapeAttr(activeValue)}" readonly />
       </div>
     `;
   }
@@ -2576,9 +2307,11 @@
     document.getElementById("add-leg").addEventListener("click", () => {
       const newLeg = createBlankLeg("");
       state.navlog.legs.splice(state.navlog.legs.length - 1, 0, newLeg);
-      const registration = getRpcRegistration(state.navlog.header.rpCNo);
-      const insertedIndex = Math.max(1, state.navlog.legs.length - 2);
-      if (registration) setLegCasDefault(insertedIndex, registration.casCruise);
+      const aircraftFromRpc = getMappedAircraftFromRpc(state.navlog.header.rpCNo);
+      if (aircraftFromRpc === "C152") {
+        const insertedIndex = Math.max(1, state.navlog.legs.length - 2);
+        setLegCasDefault(insertedIndex, "85");
+      }
       render();
     });
     document.getElementById("add-radio-row").addEventListener("click", () => {
@@ -2618,7 +2351,14 @@
           if (dateProxy) dateProxy.value = normalizeDateInputValue(state.navlog.header.date);
         }
         if (field === "rpCNo") {
-          applyRpcRegistrationToNavlog(event.target.value);
+          const mappedAircraft = getMappedAircraftFromRpc(event.target.value);
+          if (mappedAircraft) {
+            state.navlog.header.aircraft = mappedAircraft;
+            const aircraftInput = document.querySelector('[data-header="aircraft"]');
+            if (aircraftInput) aircraftInput.value = mappedAircraft;
+          }
+          applyDefaultCasForAircraft(mappedAircraft);
+          syncAircraftFuelDefaults();
           computeRouteMath();
           updateComputedCells();
         }
@@ -2634,7 +2374,14 @@
           if (dateProxy) dateProxy.value = normalizeDateInputValue(state.navlog.header.date);
         }
         if (field === "rpCNo") {
-          applyRpcRegistrationToNavlog(event.target.value);
+          const mappedAircraft = getMappedAircraftFromRpc(event.target.value);
+          if (mappedAircraft) {
+            state.navlog.header.aircraft = mappedAircraft;
+            const aircraftInput = document.querySelector('[data-header="aircraft"]');
+            if (aircraftInput) aircraftInput.value = mappedAircraft;
+          }
+          applyDefaultCasForAircraft(mappedAircraft);
+          syncAircraftFuelDefaults();
           computeRouteMath();
           updateComputedCells();
         }
@@ -2661,7 +2408,6 @@
         leg._manual = leg._manual || {};
         leg._manual[field] = nextValue.trim() !== "";
         if (field === "distance") leg._distanceAutofillFromCoords = false;
-        if (field === "tc") leg._tcAutofillFromCoords = false;
         if (field === "route") applyCoordinateDistanceAutofillAroundRoute(index);
         computeRouteMath({ index, field });
         updateComputedCells({ index, field });
@@ -2945,8 +2691,6 @@
       const legField = String(node.getAttribute("data-leg-field") || "");
       const radioField = String(node.getAttribute("data-radio-field") || "");
       const footerField = String(node.getAttribute("data-footer") || "");
-      const headerField = String(node.getAttribute("data-header") || "");
-      const tocField = String(node.getAttribute("data-toc") || node.getAttribute("data-toc-entry") || "");
       const isTocTodTitle = String(node.getAttribute("data-edit-toc") || "") !== "";
       const isSpeedToggle = Boolean(node.getAttribute("data-kiosk-speed-mode"));
       const isWhereAmIOpenButton = node.id === "kiosk-whereami-open";
@@ -2955,13 +2699,13 @@
         (node.closest && node.closest("#kiosk-route-estimate-overlay"))
         || (node.closest && node.closest("#kiosk-timer-alert-overlay"))
         || (node.closest && node.closest("#kiosk-whereami-overlay"))
-        || (node.closest && node.closest("#kiosk-gps-continue-overlay"))
         || (node.closest && node.closest(".kiosk-event-stack")),
       );
       const allowAt = legField.endsWith(":at");
-      const isDateHeader = headerField === "date" || node.hasAttribute("data-date-picker");
-      const isEditableCell = Boolean(legField || radioField || footerField || headerField || tocField) && !isDateHeader;
-      const keepInteractive = isEditableCell || isKioskUtilityUi || isSpeedToggle || isWhereAmIOpenButton || isTopScratchpadButton;
+      const allowLocation = radioField.endsWith(":location");
+      const allowAtisCode = footerField === "depAtisCode" || footerField === "destinAtisCode";
+      const isDateHeader = String(node.getAttribute("data-header") || "") === "date" || node.hasAttribute("data-date-picker");
+      const keepInteractive = allowAt || allowLocation || allowAtisCode || isKioskUtilityUi || isSpeedToggle || isWhereAmIOpenButton || isTopScratchpadButton;
       if (!keepInteractive && node.tagName === "BUTTON" && !isTocTodTitle) node.style.display = "none";
       if (isTocTodTitle) {
         node.classList.add("kiosk-static-toc");
@@ -2989,52 +2733,42 @@
     const legInputs = document.querySelectorAll("[data-leg-field]");
     legInputs.forEach((input) => {
       const key = String(input.dataset.legField || "");
-      const [indexText, field] = key.split(":");
-      const index = Number(indexText);
       const isAtField = key.endsWith(":at");
-      input.readOnly = true;
-      input.tabIndex = 0;
-      wireKioskDelayedKeyboard(input);
-      if (field === "route") wireKioskRouteEstimateHold(input, index);
-      if (isAtField) wireKioskAtHoldUtc(input);
-      input.addEventListener("input", (event) => {
-        const leg = state.navlog.legs[index];
-        if (!leg) return;
-        let nextValue = event.target.value;
-        if (isDegreeField(field)) {
-          const parsed = num(nextValue);
-          if (parsed != null) {
-            nextValue = String(roundHalfUp(parsed));
-            event.target.value = nextValue;
-          }
-        }
-        leg[field] = nextValue;
-        leg._manual = leg._manual || {};
-        leg._manual[field] = String(nextValue || "").trim() !== "";
-        if (field === "distance") leg._distanceAutofillFromCoords = false;
-        if (field === "tc") leg._tcAutofillFromCoords = false;
-        if (field === "route") applyCoordinateDistanceAutofillAroundRoute(index);
-        computeRouteMath({ index, field });
-        updateComputedCells({ index, field });
-        if (field === "route") syncRouteHints();
-        persistKioskPayload();
-      });
-      input.addEventListener("blur", (event) => {
-        if (!isAtField) return;
-        const leg = state.navlog.legs[index];
-        if (!leg) return;
-        const parsedAtMinutes = parseAtInput(event.target.value);
-        if (parsedAtMinutes == null) return;
-        const normalized = formatMinutesAsHhmm(parsedAtMinutes);
-        event.target.value = normalized;
-        leg.at = normalized;
-        leg._manual = leg._manual || {};
-        leg._manual.at = true;
-        clearFollowingAtFields(index);
-        computeRouteMath({ index, field: "at" });
-        updateComputedCells({ index, field: "at" });
-        persistKioskPayload();
-      });
+      if (!isAtField) {
+        input.readOnly = true;
+        input.tabIndex = -1;
+        const [indexText, field] = key.split(":");
+        if (field === "route") wireKioskRouteEstimateHold(input, Number(indexText));
+      } else {
+        input.addEventListener("input", (event) => {
+          const [indexText] = event.target.dataset.legField.split(":");
+          const index = Number(indexText);
+          const leg = state.navlog.legs[index];
+          leg.at = event.target.value;
+          leg._manual = leg._manual || {};
+          leg._manual.at = String(event.target.value || "").trim() !== "";
+          computeRouteMath({ index, field: "at" });
+          updateComputedCells({ index, field: "at" });
+        });
+        input.addEventListener("blur", (event) => {
+          const [indexText] = event.target.dataset.legField.split(":");
+          const index = Number(indexText);
+          const leg = state.navlog.legs[index];
+          const parsedAtMinutes = parseAtInput(event.target.value);
+          if (parsedAtMinutes == null) return;
+          const normalized = formatMinutesAsHhmm(parsedAtMinutes);
+          event.target.value = normalized;
+          leg.at = normalized;
+          leg._manual = leg._manual || {};
+          leg._manual.at = true;
+          clearFollowingAtFields(index);
+          computeRouteMath({ index, field: "at" });
+          updateComputedCells({ index, field: "at" });
+          persistKioskPayload();
+        });
+        wireKioskDelayedKeyboard(input);
+        wireKioskAtHoldUtc(input);
+      }
     });
 
     if (phoneMode) {
@@ -3053,15 +2787,14 @@
       });
     }
 
-    document.querySelectorAll("[data-radio-field]").forEach((input) => {
+    document.querySelectorAll("[data-radio-field$=':location']").forEach((input) => {
       wireKioskDelayedKeyboard(input);
       input.addEventListener("input", (event) => {
-        const [indexText, field] = event.target.dataset.radioField.split(":");
+        const [indexText] = event.target.dataset.radioField.split(":");
         const index = Number(indexText);
         const value = String(event.target.value || "");
-        if (!state.navlog.radios[index]) return;
-        state.navlog.radios[index][field] = value;
-        if (field === "location" && value.trim() === "") {
+        state.navlog.radios[index].location = value;
+        if (value.trim() === "") {
           state.navlog.radios[index] = {
             ...state.navlog.radios[index],
             cptAtis: "",
@@ -3072,13 +2805,10 @@
             remarks: "",
           };
           render();
-          return;
         }
-        persistKioskPayload();
       });
       input.addEventListener("keydown", (event) => {
-        const [, field] = event.target.dataset.radioField.split(":");
-        if (event.key !== "Enter" || field !== "location") return;
+        if (event.key !== "Enter") return;
         event.preventDefault();
         const [indexText] = event.target.dataset.radioField.split(":");
         autofillAirportRow(Number(indexText), event.target.value);
@@ -3090,35 +2820,6 @@
       input.addEventListener("input", (event) => {
         const key = String(event.target.dataset.footer || "");
         state.navlog[key] = event.target.value;
-        persistKioskPayload();
-      });
-    });
-
-    document.querySelectorAll("[data-header]").forEach((input) => {
-      const field = String(input.dataset.header || "");
-      if (!field || field === "date") return;
-      wireKioskDelayedKeyboard(input);
-      input.addEventListener("input", (event) => {
-        state.navlog.header[field] = event.target.value;
-        if (field === "rpCNo") applyRpcRegistrationToNavlog(event.target.value);
-        if (field === "aircraft") syncAircraftFuelDefaults();
-        computeRouteMath();
-        updateComputedCells();
-        persistKioskPayload();
-      });
-    });
-
-    document.querySelectorAll("[data-toc], [data-toc-entry]").forEach((input) => {
-      wireKioskDelayedKeyboard(input);
-      input.addEventListener("input", (event) => {
-        const field = String(event.target.dataset.toc || event.target.dataset.tocEntry || "");
-        if (!field) return;
-        state.navlog.tocTod[field] = event.target.value;
-        if (field === "tocDistance" || field === "tocTime") state.navlog.tocTod.tocManual = true;
-        if (field === "todDistance" || field === "todTime") state.navlog.tocTod.todManual = true;
-        computeRouteMath();
-        updateComputedCells();
-        persistKioskPayload();
       });
     });
 
@@ -3126,10 +2827,10 @@
     wireKioskWhereAmIControls();
     wireKioskEventTimerControls();
     wireKioskTimerAlertControls();
-    wireKioskGpsContinuePromptControls();
     syncKioskEventTimerDisplay();
     wireKioskScratchPadToggle();
     bindKioskDoubleTapGuard();
+    bindKioskPullToRefreshGuard();
     setupKioskScratchPad();
     requestAnimationFrame(() => {
       if (!phoneMode) fitSheetToViewport(".ipad-kiosk-wrap");
@@ -3589,10 +3290,7 @@
       return;
     }
     const liveDistanceText = computeKioskRouteLiveDistanceText(model);
-    node.textContent = routeLabel;
-    const dstDistanceNode = document.getElementById("kiosk-route-dst-distance");
-    const dstDistanceValue = dstDistanceNode && dstDistanceNode.querySelector("strong");
-    if (dstDistanceValue) dstDistanceValue.textContent = liveDistanceText || "--";
+    node.textContent = liveDistanceText ? `${routeLabel} (${liveDistanceText})` : routeLabel;
   }
 
   function openKioskRouteEstimateModalForLeg(legIndex) {
@@ -3601,8 +3299,6 @@
     const routeLabel = String(leg.route || "").trim() || `Waypoint ${legIndex + 1}`;
     const direction = getKioskRouteTimeDirection(legIndex) || "outbound";
     const defaultGpsSpeed = Number.isFinite(state.meta?.kioskGps?.speedKts) ? formatSpeedDisplayForUnit(state.meta.kioskGps.speedKts, "kts") : "";
-    const defaultGroundspeed = getKioskRouteEstimateDefaultGroundspeed(legIndex, direction);
-    const liveDistance = computeKioskRouteLiveDistanceInfo(legIndex, defaultGroundspeed);
     state.meta.kioskRouteEstimate = {
       ...createEmptyKioskRouteEstimateState(),
       open: true,
@@ -3610,12 +3306,10 @@
       routeLabel,
       routeCode: normalizeCode(leg.route),
       direction,
-      distance: !isActivateGpsEnabled() && liveDistance && Number.isFinite(liveDistance.distanceNm)
-        ? formatDistanceDisplayWithRounding(liveDistance.distanceNm, false)
-        : "10",
+      distance: "10",
       groundspeed: isActivateGpsEnabled()
-        ? (defaultGpsSpeed || defaultGroundspeed)
-        : defaultGroundspeed,
+        ? (defaultGpsSpeed || getKioskRouteEstimateDefaultGroundspeed(legIndex, direction))
+        : getKioskRouteEstimateDefaultGroundspeed(legIndex, direction),
     };
     render();
   }
@@ -3631,7 +3325,7 @@
     let started = false;
     let committed = false;
     const holdMs = 2000;
-    const maxMovePx = 80;
+    const maxMovePx = 14;
 
     const setProgress = (value) => {
       if (!cell) return;
@@ -3709,16 +3403,11 @@
     };
 
     if (window.PointerEvent) {
-      input.addEventListener("pointerdown", (event) => {
-        try {
-          input.setPointerCapture(event.pointerId);
-        } catch {
-        }
-        begin(event.clientX, event.clientY);
-      });
+      input.addEventListener("pointerdown", (event) => begin(event.clientX, event.clientY));
       input.addEventListener("pointermove", (event) => maybeCancelOnMove(event.clientX, event.clientY));
       input.addEventListener("pointerup", clear);
       input.addEventListener("pointercancel", clear);
+      input.addEventListener("pointerleave", clear);
     } else {
       input.addEventListener("touchstart", (event) => {
         const touch = event.touches && event.touches[0];
@@ -4026,33 +3715,6 @@
       state.meta.kioskTimerAlerts = queue;
       render();
     });
-  }
-
-  function wireKioskGpsContinuePromptControls() {
-    const overlay = document.getElementById("kiosk-gps-continue-overlay");
-    if (!overlay) return;
-    const continueButton = document.getElementById("kiosk-gps-continue-yes");
-    const cancelButton = document.getElementById("kiosk-gps-continue-cancel");
-
-    if (continueButton) {
-      continueButton.addEventListener("click", () => {
-        state.meta.kioskGpsContinuePromptOpen = false;
-        gpsPermissionDecisionPending = false;
-        state.meta.activateGpsEnabled = false;
-        persistKioskPayload({ activateGpsEnabled: false });
-        stopKioskGpsTracking();
-        render();
-      });
-    }
-
-    if (cancelButton) {
-      cancelButton.addEventListener("click", () => {
-        state.meta.kioskGpsContinuePromptOpen = false;
-        gpsPermissionDecisionPending = false;
-        overlay.remove();
-        if (state.view === "ipad-kiosk" && isActivateGpsEnabled()) retryKioskGpsPermissionRequest();
-      });
-    }
   }
 
   function syncKioskRouteEstimateDraftFromDom() {
@@ -4383,8 +4045,6 @@
     state.meta.kioskGps.accuracyMeters = Number.isFinite(accuracy) ? accuracy : null;
     state.meta.kioskGps.headingTrue = Number.isFinite(headingTrue) ? headingTrue : state.meta.kioskGps.headingTrue;
     state.meta.kioskGps.speedKts = Number.isFinite(smoothedKts) ? smoothedKts : state.meta.kioskGps.speedKts;
-    state.meta.kioskGpsContinuePromptOpen = false;
-    gpsPermissionDecisionPending = false;
 
     gpsLastPoint = { lat, lon, tsMs: timestampMs };
     updateKioskGpsDom();
@@ -4419,9 +4079,18 @@
       && !gpsPermissionDecisionPending
     ) {
       gpsPermissionDecisionPending = true;
+      const continueWithoutGps = window.confirm("Continue without GPS?");
+      if (continueWithoutGps) {
+        state.meta.activateGpsEnabled = false;
+        persistKioskPayload({ activateGpsEnabled: false });
+        stopKioskGpsTracking();
+        gpsPermissionDecisionPending = false;
+        render();
+        return;
+      }
+      gpsPermissionDecisionPending = false;
       stopKioskGpsTracking();
-      state.meta.kioskGpsContinuePromptOpen = true;
-      render();
+      if (state.view === "ipad-kiosk" && isActivateGpsEnabled()) retryKioskGpsPermissionRequest();
       return;
     }
     if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
@@ -4494,6 +4163,53 @@
       lastY = touch.clientY;
     }, { passive: false });
     page.dataset.doubleTapGuardBound = "1";
+  }
+
+  function bindKioskPullToRefreshGuard() {
+    const page = document.querySelector(".ipad-kiosk-page");
+    if (!page || page.dataset.pullToRefreshGuardBound === "1") return;
+    let startY = 0;
+    let tracking = false;
+    let trackingId = null;
+    const onTouchStart = (event) => {
+      if (state.view !== "ipad-kiosk") return;
+      if (!event.touches || !event.touches.length) return;
+      const first = event.touches[0];
+      startY = first.clientY;
+      trackingId = first.identifier;
+      tracking = window.scrollY <= 0;
+    };
+
+    const onTouchMove = (event) => {
+      if (state.view !== "ipad-kiosk") return;
+      if (!tracking || !event.touches || !event.touches.length) return;
+      let activeTouch = event.touches[0];
+      if (trackingId != null) {
+        for (let index = 0; index < event.touches.length; index += 1) {
+          if (event.touches[index].identifier === trackingId) {
+            activeTouch = event.touches[index];
+            break;
+          }
+        }
+      }
+      const currentY = activeTouch.clientY;
+      const pullingDown = currentY > (startY + 8);
+      if (pullingDown && window.scrollY <= 0) {
+        event.preventDefault();
+      }
+    };
+
+    const onTouchEnd = () => {
+      tracking = false;
+      trackingId = null;
+    };
+
+    page.addEventListener("touchstart", onTouchStart, { passive: true });
+    page.addEventListener("touchmove", onTouchMove, { passive: false });
+    page.addEventListener("touchend", onTouchEnd, { passive: true });
+    page.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    window.addEventListener("touchmove", onTouchMove, { passive: false });
+    page.dataset.pullToRefreshGuardBound = "1";
   }
 
   function wireKioskScratchPadToggle() {
@@ -4885,7 +4601,7 @@
       createBlankLeg(state.navlog.setup.destination),
     ];
     autofillAllCoordinateDistances();
-    applyRpcRegistrationToNavlog(state.navlog.header.rpCNo);
+    applyDefaultCasForAircraft(getMappedAircraftFromRpc(state.navlog.header.rpCNo));
   }
 
   function getPresetLegs(departure, destination) {
@@ -4909,12 +4625,8 @@
     leg._manual = leg._manual || {};
     leg._derived = {};
     leg._errors = {};
-    const coordText = getLegCoordinateText(fields);
-    const navManual = Boolean(fields && fields.navManual);
-    if (coordText) leg.coord = coordText;
     Object.entries(fields).forEach(([field, value]) => {
-      if (field === "cas" || field === "coord" || field === "coordinates" || field === "latlon" || field === "coordinate" || field === "navManual") return;
-      if ((field === "tc" || field === "distance") && coordText && !navManual) return;
+      if (field === "cas" || field === "distance") return;
       leg[field] = String(value);
       leg._manual[field] = true;
     });
@@ -5441,36 +5153,10 @@
     const presetRowInputs = Array.from(document.querySelectorAll("[data-admin-preset-row]"));
     presetRowInputs.forEach((node) => {
       node.addEventListener("input", () => {
-        const key = String(node.getAttribute("data-admin-preset-row") || "");
-        const [indexText, field] = key.split(":");
-        const index = Number(indexText);
-        const previousRoute = Number.isFinite(index) ? normalizeCode(state.admin.presetForm.rows[index]?.route) : "";
         readPresetFormFromInputs();
-        if (field === "route" && Number.isFinite(index)) {
-          const nextRoute = normalizeCode(state.admin.presetForm.rows[index]?.route);
-          const routeEntry = buildWaypointRouteCatalog().get(nextRoute);
-          if (routeEntry && routeEntry.hasCoordinate) {
-            state.admin.presetForm.rows[index].coord = routeEntry.coordText;
-          } else if (nextRoute !== previousRoute) {
-            state.admin.presetForm.rows[index].coord = "";
-          }
-        }
-        syncAdminPresetDerivedNavigationDom();
         syncAdminPresetRemoveButtons();
       });
     });
-
-    const presetNavLockButton = document.getElementById("admin-preset-nav-lock");
-    if (presetNavLockButton) {
-      presetNavLockButton.addEventListener("click", () => {
-        readPresetFormFromInputs();
-        const nextUnlocked = !state.admin.presetForm.navValuesUnlocked;
-        state.admin.presetForm.rows = deriveAdminPresetRows(state.admin.presetForm.rows, false)
-          .map((row) => ({ ...row, navManual: nextUnlocked }));
-        state.admin.presetForm.navValuesUnlocked = nextUnlocked;
-        render();
-      });
-    }
 
     const presetAddRowButton = document.getElementById("admin-preset-add-row");
     if (presetAddRowButton) {
@@ -5510,99 +5196,6 @@
       presetDeleteButton.addEventListener("click", async () => {
         readPresetFormFromInputs();
         await deletePresetFromAdmin();
-      });
-    }
-
-    const waypointCodeInput = document.getElementById("admin-waypoint-code");
-    const waypointPicker = document.getElementById("admin-waypoint-picker");
-    const loadWaypointSelection = (value) => {
-      state.admin.waypointForm.code = normalizeCode(value);
-      loadWaypointByCode();
-      render();
-    };
-    if (waypointCodeInput) {
-      waypointCodeInput.addEventListener("input", () => {
-        const code = normalizeCode(waypointCodeInput.value);
-        const entry = buildWaypointRouteCatalog().get(code);
-        state.admin.waypointForm.code = code;
-        if (entry && entry.hasCoordinate) {
-          state.admin.waypointForm.coord = entry.coordText;
-          const coordInput = document.getElementById("admin-waypoint-coord");
-          if (coordInput) coordInput.value = entry.coordText;
-        }
-      });
-      waypointCodeInput.addEventListener("change", () => loadWaypointSelection(waypointCodeInput.value));
-    }
-    if (waypointPicker) {
-      waypointPicker.addEventListener("change", () => {
-        if (waypointPicker.value) loadWaypointSelection(waypointPicker.value);
-      });
-    }
-    const waypointCoordInput = document.getElementById("admin-waypoint-coord");
-    if (waypointCoordInput) waypointCoordInput.addEventListener("input", readWaypointFormFromInputs);
-    const waypointSaveButton = document.getElementById("admin-waypoint-save");
-    if (waypointSaveButton) {
-      waypointSaveButton.addEventListener("click", async () => {
-        readWaypointFormFromInputs();
-        await saveWaypointFromAdmin();
-      });
-    }
-    const waypointDeleteButton = document.getElementById("admin-waypoint-delete");
-    if (waypointDeleteButton) {
-      waypointDeleteButton.addEventListener("click", async () => {
-        readWaypointFormFromInputs();
-        await deleteWaypointFromAdmin();
-      });
-    }
-
-    const rpcCodeInput = document.getElementById("admin-rpc-code");
-    const rpcPicker = document.getElementById("admin-rpc-picker");
-    const loadRpcSelection = (value) => {
-      state.admin.rpcForm.rpc = normalizeRpcKey(value);
-      loadRpcByCode();
-      render();
-    };
-    if (rpcCodeInput) {
-      rpcCodeInput.addEventListener("input", () => {
-        const rpc = normalizeRpcKey(rpcCodeInput.value);
-        state.admin.rpcForm.rpc = rpc;
-        const registration = getRpcRegistration(rpc);
-        if (!registration) return;
-        state.admin.rpcForm = normalizeRpcRegistration(registration);
-        const fieldMap = {
-          "admin-rpc-aircraft": "aircraftType",
-          "admin-rpc-cas-climb": "casClimb",
-          "admin-rpc-cas-cruise": "casCruise",
-          "admin-rpc-gph": "gph",
-        };
-        Object.entries(fieldMap).forEach(([id, field]) => {
-          const input = document.getElementById(id);
-          if (input) input.value = state.admin.rpcForm[field];
-        });
-      });
-      rpcCodeInput.addEventListener("change", () => loadRpcSelection(rpcCodeInput.value));
-    }
-    if (rpcPicker) {
-      rpcPicker.addEventListener("change", () => {
-        if (rpcPicker.value) loadRpcSelection(rpcPicker.value);
-      });
-    }
-    ["admin-rpc-aircraft", "admin-rpc-cas-climb", "admin-rpc-cas-cruise", "admin-rpc-gph"].forEach((id) => {
-      const input = document.getElementById(id);
-      if (input) input.addEventListener("input", readRpcFormFromInputs);
-    });
-    const rpcSaveButton = document.getElementById("admin-rpc-save");
-    if (rpcSaveButton) {
-      rpcSaveButton.addEventListener("click", async () => {
-        readRpcFormFromInputs();
-        await saveRpcFromAdmin();
-      });
-    }
-    const rpcDeleteButton = document.getElementById("admin-rpc-delete");
-    if (rpcDeleteButton) {
-      rpcDeleteButton.addEventListener("click", async () => {
-        readRpcFormFromInputs();
-        await deleteRpcFromAdmin();
       });
     }
 
@@ -5917,8 +5510,6 @@
     state.admin.session = null;
     state.admin.selectedPresetId = "";
     state.admin.selectedAirportCode = "";
-    state.admin.selectedWaypointCode = "";
-    state.admin.selectedRpc = "";
     state.admin.notice = "Signed out.";
     state.admin.error = "";
     state.view = "admin-login";
@@ -5935,12 +5526,10 @@
     state.admin.error = "";
     state.admin.notice = "";
     try {
-      let [presetResult, airportResult, contentResult, waypointResult, rpcResult] = await Promise.all([
+      let [presetResult, airportResult, contentResult] = await Promise.all([
         supabaseClient.from("route_presets").select("*").order("name", { ascending: true }),
         supabaseClient.from("airports").select("*").order("code", { ascending: true }),
         supabaseClient.from("content_pages").select("*"),
-        supabaseClient.from("waypoints").select("*").order("code", { ascending: true }),
-        supabaseClient.from("aircraft_registrations").select("*").order("rpc", { ascending: true }),
       ]);
       if (presetResult.error) throw presetResult.error;
       if (airportResult.error) throw airportResult.error;
@@ -5963,20 +5552,12 @@
         fss: row.fss,
         remarks: row.remarks,
       }));
-      state.admin.waypoints = waypointResult && !waypointResult.error
-        ? (waypointResult.data || []).map((row) => normalizeWaypointRecord(row))
-        : [];
-      state.admin.rpcRegistrations = rpcResult && !rpcResult.error
-        ? (rpcResult.data || []).map((row) => normalizeRpcRegistration(row))
-        : [];
       const contentMap = {};
       (contentResult.data || []).forEach((row) => {
         contentMap[String(row.key || "").toLowerCase()] = String(row.body_html || "");
       });
       state.catalog.routePresets = state.admin.presets.map((preset) => clonePreset(preset));
       state.catalog.airports = state.admin.airports.map((airport) => ({ ...airport }));
-      state.catalog.waypoints = state.admin.waypoints.map((waypoint) => ({ ...waypoint }));
-      state.catalog.rpcRegistrations = mergeRpcRegistrations(state.admin.rpcRegistrations);
       state.catalog.content.manualHtml = contentMap.manual || "";
       state.catalog.content.privacyHtml = contentMap.privacy || "";
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
@@ -6001,12 +5582,6 @@
 
       if (state.admin.selectedAirportCode) selectAirportForEditing(state.admin.selectedAirportCode);
       else if (state.admin.airportForm.code) loadAirportByCode();
-
-      if (state.admin.selectedWaypointCode) selectWaypointForEditing(state.admin.selectedWaypointCode);
-      else if (state.admin.waypointForm.code) loadWaypointByCode();
-
-      if (state.admin.selectedRpc) selectRpcForEditing(state.admin.selectedRpc);
-      else if (state.admin.rpcForm.rpc) loadRpcByCode();
 
       state.admin.notice = "";
     } catch (error) {
@@ -6084,11 +5659,7 @@
     state.admin.presetForm = {
       departure: normalizeCode(departureInput ? departureInput.value : state.admin.presetForm.departure),
       destination: normalizeCode(destinationInput ? destinationInput.value : state.admin.presetForm.destination),
-      navValuesUnlocked: Boolean(state.admin.presetForm.navValuesUnlocked),
-      rows: normalizePresetRows(rows.length ? rows : state.admin.presetForm.rows).map((row) => ({
-        ...row,
-        navManual: Boolean(state.admin.presetForm.navValuesUnlocked),
-      })),
+      rows: normalizePresetRows(rows.length ? rows : state.admin.presetForm.rows),
     };
   }
 
@@ -6098,55 +5669,9 @@
       .map((row) => ({
         route: String(row && row.route != null ? row.route : ""),
         tc: String(row && row.tc != null ? row.tc : ""),
-        distance: String(row && row.distance != null ? row.distance : ""),
         coord: String(row && row.coord != null ? row.coord : ""),
-        navManual: Boolean(row && row.navManual),
       }));
     return normalized.length ? normalized : [createEmptyPresetRow()];
-  }
-
-  function deriveAdminPresetRows(rows, navValuesUnlocked) {
-    const normalized = normalizePresetRows(rows).map((row) => ({ ...row }));
-    const routeCatalog = buildWaypointRouteCatalog();
-    normalized.forEach((row) => {
-      const known = routeCatalog.get(normalizeCode(row.route));
-      if (!String(row.coord || "").trim() && known && known.hasCoordinate) {
-        row.coord = known.coordText;
-      }
-    });
-    if (navValuesUnlocked) return normalized;
-    normalized.forEach((row, index) => {
-      row.navManual = false;
-      if (index === 0) {
-        row.tc = "";
-        row.distance = "";
-        return;
-      }
-      const fromCoord = parseWaypointCoordinate(normalized[index - 1].coord);
-      const toCoord = parseWaypointCoordinate(row.coord);
-      if (!fromCoord || !toCoord) {
-        row.tc = "";
-        row.distance = "";
-        return;
-      }
-      const trueCourse = computeInitialTrueBearing(fromCoord.lat, fromCoord.lon, toCoord.lat, toCoord.lon);
-      const distanceNm = computeGreatCircleDistanceNm(fromCoord.lat, fromCoord.lon, toCoord.lat, toCoord.lon);
-      row.tc = Number.isFinite(trueCourse) ? maybeHeadingDegrees(trueCourse) : "";
-      row.distance = Number.isFinite(distanceNm) ? formatDistanceDisplayWithRounding(distanceNm, false, "nm") : "";
-    });
-    return normalized;
-  }
-
-  function syncAdminPresetDerivedNavigationDom() {
-    const unlocked = Boolean(state.admin.presetForm.navValuesUnlocked);
-    const rows = deriveAdminPresetRows(state.admin.presetForm.rows, unlocked);
-    state.admin.presetForm.rows = rows;
-    rows.forEach((row, index) => {
-      ["coord", "tc", "distance"].forEach((field) => {
-        const input = document.querySelector(`[data-admin-preset-row="${index}:${field}"]`);
-        if (input && input.value !== String(row[field] || "")) input.value = String(row[field] || "");
-      });
-    });
   }
 
   function syncAdminPresetRemoveButtons() {
@@ -6160,7 +5685,6 @@
         && (
           String(row.route || "").trim() !== ""
           || String(row.tc || "").trim() !== ""
-          || String(row.distance || "").trim() !== ""
           || String(row.coord || "").trim() !== ""
         )
       );
@@ -6171,44 +5695,28 @@
 
   function presetRowsFromLegs(legs) {
     if (!Array.isArray(legs) || legs.length === 0) return [createEmptyPresetRow()];
-    const rows = normalizePresetRows(
+    return normalizePresetRows(
       legs.map((leg) => ({
         route: leg && leg.route != null ? leg.route : "",
         tc: leg && leg.tc != null ? leg.tc : "",
-        distance: leg && leg.distance != null ? leg.distance : "",
-        coord: getLegCoordinateText(leg),
-        navManual: Boolean(
-          leg
-          && (
-            leg.navManual
-            || (!getLegCoordinateText(leg) && (leg.tc != null || leg.distance != null))
-          )
-        ),
+        coord: leg && (leg.coord ?? leg.coordinates ?? leg.latlon) != null ? (leg.coord ?? leg.coordinates ?? leg.latlon) : "",
       })),
     );
-    const navValuesUnlocked = rows.some((row) => row.navManual);
-    return deriveAdminPresetRows(rows, navValuesUnlocked);
   }
 
-  function presetLegsFromRows(rows, navValuesUnlocked) {
+  function presetLegsFromRows(rows) {
     const source = Array.isArray(rows) ? rows : [];
     const legs = [];
     source.forEach((row) => {
       const route = String(row && row.route != null ? row.route : "").trim();
       const tcRaw = String(row && row.tc != null ? row.tc : "").trim();
-      const distanceRaw = String(row && row.distance != null ? row.distance : "").trim();
       const coordRaw = String(row && row.coord != null ? row.coord : "").trim();
-      if (!route && !tcRaw && !distanceRaw && !coordRaw) return;
+      if (!route && !tcRaw && !coordRaw) return;
       const leg = {};
       if (route) leg.route = route;
+      const tc = num(tcRaw);
+      if (tc != null) leg.tc = roundHalfUp(tc);
       if (coordRaw) leg.coord = coordRaw;
-      if (navValuesUnlocked) {
-        const tc = num(tcRaw);
-        const distance = num(distanceRaw);
-        if (tc != null) leg.tc = roundHalfUp(tc);
-        if (distance != null) leg.distance = distance;
-        leg.navManual = true;
-      }
       legs.push(leg);
     });
     return legs;
@@ -6239,13 +5747,10 @@
       state.admin.presetForm = createEmptyPresetForm();
       return;
     }
-    const rows = presetRowsFromLegs(selected.legs);
-    const navValuesUnlocked = rows.some((row) => row.navManual);
     state.admin.presetForm = {
       departure: normalizeCode(selected.departure),
       destination: normalizeCode(selected.destination),
-      navValuesUnlocked,
-      rows: deriveAdminPresetRows(rows, navValuesUnlocked),
+      rows: presetRowsFromLegs(selected.legs),
     };
   }
 
@@ -6319,275 +5824,14 @@
     return { active: true, exists: false, message: "No airport found for this code. Saving will create one." };
   }
 
-  function getLoadedWaypointCount() {
-    return getWaypointRouteEntriesForPicker().filter((entry) => entry.hasCoordinate).length;
-  }
-
-  function findWaypointRecord(code) {
-    const normalized = normalizeCode(code);
-    if (!normalized) return null;
-    return (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : [])
-      .find((waypoint) => normalizeCode(waypoint.code) === normalized) || null;
-  }
-
-  function selectWaypointForEditing(code) {
-    const normalized = normalizeCode(code);
-    state.admin.selectedWaypointCode = normalized;
-    const stored = findWaypointRecord(normalized);
-    const catalogEntry = buildWaypointRouteCatalog().get(normalized);
-    state.admin.waypointForm = {
-      code: normalized,
-      coord: stored ? stored.coord : (catalogEntry && catalogEntry.hasCoordinate ? catalogEntry.coordText : ""),
-    };
-  }
-
-  function loadWaypointByCode() {
-    const code = normalizeCode(state.admin.waypointForm.code);
-    if (!code) {
-      state.admin.selectedWaypointCode = "";
-      state.admin.waypointForm = createEmptyWaypointForm();
-      return;
-    }
-    selectWaypointForEditing(code);
-  }
-
-  function getWaypointLookupState() {
-    const code = normalizeCode(state.admin.waypointForm.code);
-    if (!code) return { active: false, exists: false, databaseRecord: false };
-    const entry = buildWaypointRouteCatalog().get(code);
-    return {
-      active: true,
-      exists: Boolean(entry && entry.hasCoordinate),
-      databaseRecord: Boolean(findWaypointRecord(code)),
-    };
-  }
-
-  function readWaypointFormFromInputs() {
-    const codeInput = document.getElementById("admin-waypoint-code");
-    const coordInput = document.getElementById("admin-waypoint-coord");
-    state.admin.waypointForm = {
-      code: normalizeCode(codeInput ? codeInput.value : state.admin.waypointForm.code),
-      coord: String(coordInput ? coordInput.value : state.admin.waypointForm.coord).trim(),
-    };
-  }
-
-  async function upsertWaypointsFromPresetRows(rows) {
-    if (!supabaseClient) return false;
-    const byCode = new Map();
-    normalizePresetRows(rows).forEach((row) => {
-      const code = normalizeCode(row.route);
-      const coord = String(row.coord || "").trim();
-      if (!code || !parseWaypointCoordinate(coord)) return;
-      byCode.set(code, { code, coord });
-    });
-    const payload = Array.from(byCode.values());
-    if (!payload.length) return true;
-    const { error } = await supabaseClient.from("waypoints").upsert(payload, { onConflict: "code" });
-    return !error;
-  }
-
-  async function saveWaypointFromAdmin() {
-    const ok = await connectSupabaseClient(false);
-    if (!ok) {
-      render();
-      return;
-    }
-    const waypoint = normalizeWaypointRecord(state.admin.waypointForm);
-    if (!waypoint.code) {
-      state.admin.error = "Waypoint name is required.";
-      state.admin.notice = "";
-      render();
-      return;
-    }
-    if (!parseWaypointCoordinate(waypoint.coord)) {
-      state.admin.error = "Enter valid waypoint coordinates.";
-      state.admin.notice = "";
-      render();
-      return;
-    }
-    state.admin.error = "";
-    state.admin.notice = "";
-    try {
-      const { error } = await supabaseClient.from("waypoints").upsert(waypoint, { onConflict: "code" });
-      if (error) throw error;
-      state.admin.selectedWaypointCode = waypoint.code;
-      await loadAdminData();
-      state.admin.notice = "Waypoint coordinates saved.";
-      render();
-    } catch (error) {
-      state.admin.error = error && error.message ? error.message : "Could not save waypoint coordinates.";
-      render();
-    }
-  }
-
-  async function deleteWaypointFromAdmin() {
-    const ok = await connectSupabaseClient(false);
-    const code = normalizeCode(state.admin.waypointForm.code);
-    if (!ok || !code || !findWaypointRecord(code)) {
-      render();
-      return;
-    }
-    if (!window.confirm("Delete these waypoint coordinates?")) return;
-    state.admin.error = "";
-    state.admin.notice = "";
-    try {
-      const { error } = await supabaseClient.from("waypoints").delete().eq("code", code);
-      if (error) throw error;
-      state.admin.selectedWaypointCode = "";
-      state.admin.waypointForm = createEmptyWaypointForm();
-      await loadAdminData();
-      state.admin.notice = "Waypoint coordinates deleted.";
-      render();
-    } catch (error) {
-      state.admin.error = error && error.message ? error.message : "Could not delete waypoint coordinates.";
-      render();
-    }
-  }
-
-  function findRpcDatabaseRecord(rpcValue) {
-    const rpc = normalizeRpcKey(rpcValue);
-    if (!rpc) return null;
-    return (Array.isArray(state.admin.rpcRegistrations) ? state.admin.rpcRegistrations : [])
-      .find((registration) => normalizeRpcKey(registration.rpc) === rpc) || null;
-  }
-
-  function getRpcRegistrationEntriesForPicker() {
-    const databaseByRpc = new Map(
-      (Array.isArray(state.admin.rpcRegistrations) ? state.admin.rpcRegistrations : [])
-        .map((registration) => normalizeRpcRegistration(registration))
-        .filter((registration) => registration.rpc)
-        .map((registration) => [registration.rpc, registration]),
-    );
-    return mergeRpcRegistrations(state.admin.rpcRegistrations).map((registration) => ({
-      ...registration,
-      hasRegistration: Boolean(
-        registration.aircraftType
-        && registration.casClimb
-        && registration.casCruise
-        && registration.gph
-      ),
-      databaseRecord: databaseByRpc.has(registration.rpc),
-    }));
-  }
-
-  function selectRpcForEditing(rpcValue) {
-    const rpc = normalizeRpcKey(rpcValue);
-    state.admin.selectedRpc = rpc;
-    const registration = getRpcRegistration(rpc);
-    state.admin.rpcForm = registration
-      ? normalizeRpcRegistration(registration)
-      : { ...createEmptyRpcRegistrationForm(), rpc };
-  }
-
-  function loadRpcByCode() {
-    const rpc = normalizeRpcKey(state.admin.rpcForm.rpc);
-    if (!rpc) {
-      state.admin.selectedRpc = "";
-      state.admin.rpcForm = createEmptyRpcRegistrationForm();
-      return;
-    }
-    selectRpcForEditing(rpc);
-  }
-
-  function getRpcLookupState() {
-    const rpc = normalizeRpcKey(state.admin.rpcForm.rpc);
-    if (!rpc) return { active: false, exists: false, databaseRecord: false };
-    const registration = getRpcRegistration(rpc);
-    return {
-      active: true,
-      exists: Boolean(registration),
-      databaseRecord: Boolean(findRpcDatabaseRecord(rpc)),
-    };
-  }
-
-  function readRpcFormFromInputs() {
-    const read = (id) => {
-      const input = document.getElementById(id);
-      return String(input ? input.value : "");
-    };
-    state.admin.rpcForm = normalizeRpcRegistration({
-      rpc: read("admin-rpc-code"),
-      aircraftType: read("admin-rpc-aircraft"),
-      casClimb: read("admin-rpc-cas-climb"),
-      casCruise: read("admin-rpc-cas-cruise"),
-      gph: read("admin-rpc-gph"),
-    });
-  }
-
-  async function saveRpcFromAdmin() {
-    const ok = await connectSupabaseClient(false);
-    if (!ok) {
-      render();
-      return;
-    }
-    const registration = normalizeRpcRegistration(state.admin.rpcForm);
-    if (!registration.rpc) {
-      state.admin.error = "RP-C registration is required.";
-      state.admin.notice = "";
-      render();
-      return;
-    }
-    if (!registration.aircraftType) {
-      state.admin.error = "Aircraft type is required.";
-      state.admin.notice = "";
-      render();
-      return;
-    }
-    const payload = {
-      rpc: registration.rpc,
-      aircraft_type: registration.aircraftType,
-      cas_climb: registration.casClimb,
-      cas_cruise: registration.casCruise,
-      gph: registration.gph,
-    };
-    state.admin.error = "";
-    state.admin.notice = "";
-    try {
-      const { error } = await supabaseClient.from("aircraft_registrations").upsert(payload, { onConflict: "rpc" });
-      if (error) throw error;
-      state.admin.selectedRpc = registration.rpc;
-      await loadAdminData();
-      state.admin.notice = "RP-C registration saved.";
-      render();
-    } catch (error) {
-      state.admin.error = error && error.message ? error.message : "Could not save RP-C registration.";
-      render();
-    }
-  }
-
-  async function deleteRpcFromAdmin() {
-    const ok = await connectSupabaseClient(false);
-    const rpc = normalizeRpcKey(state.admin.rpcForm.rpc);
-    if (!ok || !rpc || !findRpcDatabaseRecord(rpc)) {
-      render();
-      return;
-    }
-    if (!window.confirm("Delete this RP-C registration override?")) return;
-    state.admin.error = "";
-    state.admin.notice = "";
-    try {
-      const { error } = await supabaseClient.from("aircraft_registrations").delete().eq("rpc", rpc);
-      if (error) throw error;
-      state.admin.selectedRpc = "";
-      state.admin.rpcForm = createEmptyRpcRegistrationForm();
-      await loadAdminData();
-      state.admin.notice = "RP-C registration override deleted.";
-      render();
-    } catch (error) {
-      state.admin.error = error && error.message ? error.message : "Could not delete RP-C registration.";
-      render();
-    }
-  }
-
   async function savePresetFromAdmin() {
     const ok = await connectSupabaseClient(false);
     if (!ok) {
       render();
       return;
     }
-    const navValuesUnlocked = Boolean(state.admin.presetForm.navValuesUnlocked);
-    const rows = deriveAdminPresetRows(state.admin.presetForm.rows, navValuesUnlocked);
-    const parsedLegs = presetLegsFromRows(rows, navValuesUnlocked);
+    const rows = normalizePresetRows(state.admin.presetForm.rows);
+    const parsedLegs = presetLegsFromRows(rows);
     const payload = {
       name: `${state.admin.presetForm.departure} to ${state.admin.presetForm.destination}`,
       departure: normalizeCode(state.admin.presetForm.departure),
@@ -6601,7 +5845,7 @@
       return;
     }
     if (!parsedLegs.length) {
-      state.admin.error = "Add at least one route before saving.";
+      state.admin.error = "Add at least one ROUTE/TC/DIS row before saving.";
       state.admin.notice = "";
       render();
       return;
@@ -6618,9 +5862,8 @@
         result = await supabaseClient.from("route_presets").insert(payload).select().single();
       }
       if (result.error) throw result.error;
-      await upsertWaypointsFromPresetRows(rows);
       if (result.data && result.data.id) state.admin.selectedPresetId = String(result.data.id);
-      state.admin.presetForm.rows = deriveAdminPresetRows(rows, navValuesUnlocked);
+      state.admin.presetForm.rows = presetRowsFromLegs(parsedLegs);
       await loadAdminData();
       state.admin.notice = "Preset saved.";
       render();
@@ -7983,16 +7226,9 @@
     return [...headerValues, ...legValues, ...radioValues, ...tocTodValues, ...footerValues].some((value) => String(value || "").trim() !== "");
   }
 
-  function getRpcRegistration(rpcValue) {
-    const rpc = normalizeRpcKey(rpcValue);
-    if (!rpc) return null;
-    return mergeRpcRegistrations(state.catalog.rpcRegistrations)
-      .find((registration) => registration.rpc === rpc) || null;
-  }
-
   function getMappedAircraftFromRpc(rpcValue) {
-    const registration = getRpcRegistration(rpcValue);
-    return registration ? registration.aircraftType : "";
+    const key = String(rpcValue || "").trim();
+    return key ? RPC_TO_AIRCRAFT[key] : "";
   }
 
   function setLegCasDefault(index, casValue) {
@@ -8005,35 +7241,21 @@
     delete leg._derived.cas;
   }
 
-  function applyRpcCasDefaults(registration) {
+  function applyDefaultCasForAircraft(aircraftType) {
+    const mappedType = String(aircraftType || "").trim();
+    if (mappedType !== "C152") return;
     if (!Array.isArray(state.navlog.legs) || state.navlog.legs.length === 0) return;
-    setLegCasDefault(0, "");
-    if (state.navlog.legs.length > 1) setLegCasDefault(1, registration ? registration.casClimb : "");
-    for (let index = 2; index < state.navlog.legs.length; index += 1) {
-      setLegCasDefault(index, registration ? registration.casCruise : "");
-    }
-  }
 
-  function applyRpcRegistrationToNavlog(rpcValue) {
-    const registration = getRpcRegistration(rpcValue);
-    state.navlog.header.aircraft = registration ? registration.aircraftType : "";
-    state.navlog.header.gphPph = registration ? registration.gph : "";
-    applyRpcCasDefaults(registration);
-    const aircraftInput = document.querySelector('[data-header="aircraft"]');
-    const fuelInput = document.querySelector('[data-header="gphPph"]');
-    if (aircraftInput) aircraftInput.value = state.navlog.header.aircraft;
-    if (fuelInput) fuelInput.value = state.navlog.header.gphPph;
+    setLegCasDefault(0, "");
+    if (state.navlog.legs.length > 1) setLegCasDefault(1, "70");
+    for (let index = 2; index < state.navlog.legs.length; index += 1) {
+      setLegCasDefault(index, "85");
+    }
   }
 
   function syncAircraftFuelDefaults() {
     const aircraft = normalizeAircraft(state.navlog.header.aircraft);
     const fuelInput = document.querySelector('[data-header="gphPph"]');
-    const registration = getRpcRegistration(state.navlog.header.rpCNo);
-    if (registration && normalizeAircraft(registration.aircraftType) === aircraft) {
-      state.navlog.header.gphPph = registration.gph;
-      if (fuelInput) fuelInput.value = registration.gph;
-      return;
-    }
     if (aircraft === "C152") {
       state.navlog.header.gphPph = "6";
       if (fuelInput) fuelInput.value = "6";
@@ -8468,8 +7690,6 @@
       const payload = {
         routePresets: (state.catalog.routePresets || []).map((preset) => clonePreset(preset)),
         airports: (state.catalog.airports || []).map((airport) => ({ ...airport })),
-        waypoints: (state.catalog.waypoints || []).map((waypoint) => ({ ...normalizeWaypointRecord(waypoint) })),
-        rpcRegistrations: mergeRpcRegistrations(state.catalog.rpcRegistrations),
         content: {
           manualHtml: String(state.catalog.content.manualHtml || ""),
           privacyHtml: String(state.catalog.content.privacyHtml || ""),
@@ -8500,12 +7720,6 @@
       if (Array.isArray(parsed.airports) && parsed.airports.length) {
         state.catalog.airports = parsed.airports.map((airport) => normalizeAirportRecord(airport));
       }
-      if (Array.isArray(parsed.waypoints)) {
-        state.catalog.waypoints = parsed.waypoints.map((waypoint) => normalizeWaypointRecord(waypoint));
-      }
-      if (Array.isArray(parsed.rpcRegistrations)) {
-        state.catalog.rpcRegistrations = mergeRpcRegistrations(parsed.rpcRegistrations);
-      }
       if (parsed.content && typeof parsed.content === "object") {
         const content = parsed.content;
         if (typeof content.manualHtml === "string") state.catalog.content.manualHtml = content.manualHtml;
@@ -8531,12 +7745,10 @@
     if (!ok || !supabaseClient) return;
     loadingPublicCatalog = true;
     try {
-      const [presetResult, airportResult, contentResult, waypointResult, rpcResult] = await Promise.all([
+      const [presetResult, airportResult, contentResult] = await Promise.all([
         supabaseClient.from("route_presets").select("*").order("name", { ascending: true }),
         supabaseClient.from("airports").select("*").order("code", { ascending: true }),
         supabaseClient.from("content_pages").select("*"),
-        supabaseClient.from("waypoints").select("*").order("code", { ascending: true }),
-        supabaseClient.from("aircraft_registrations").select("*").order("rpc", { ascending: true }),
       ]);
       if (presetResult.error || airportResult.error || contentResult.error) return;
 
@@ -8564,12 +7776,6 @@
 
       state.catalog.routePresets = dbPresets.map((preset) => clonePreset(preset));
       state.catalog.airports = dbAirports.map((airport) => ({ ...airport }));
-      state.catalog.waypoints = waypointResult && !waypointResult.error
-        ? (waypointResult.data || []).map((row) => normalizeWaypointRecord(row))
-        : state.catalog.waypoints;
-      state.catalog.rpcRegistrations = rpcResult && !rpcResult.error
-        ? mergeRpcRegistrations((rpcResult.data || []).map((row) => normalizeRpcRegistration(row)))
-        : mergeRpcRegistrations(state.catalog.rpcRegistrations);
       if (typeof contentMap.manual === "string") state.catalog.content.manualHtml = contentMap.manual;
       if (typeof contentMap.privacy === "string") state.catalog.content.privacyHtml = contentMap.privacy;
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
@@ -8580,6 +7786,33 @@
     } finally {
       loadingPublicCatalog = false;
     }
+  }
+
+  function touchMonthlyVisitorCounter() {
+    const now = new Date();
+    const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+    let marker = "";
+    let count = 0;
+    try {
+      marker = String(window.localStorage.getItem(NAVLOG_MONTHLY_VISITOR_KEY) || "");
+      count = Number(window.localStorage.getItem(NAVLOG_MONTHLY_VISITOR_COUNT_KEY) || 0);
+    } catch {
+      marker = "";
+      count = 0;
+    }
+    if (!Number.isFinite(count) || count < 0) count = 0;
+    if (marker !== monthKey) {
+      marker = monthKey;
+      count = 0;
+    }
+    count = Math.max(0, Math.floor(count)) + 1;
+    try {
+      window.localStorage.setItem(NAVLOG_MONTHLY_VISITOR_KEY, marker);
+      window.localStorage.setItem(NAVLOG_MONTHLY_VISITOR_COUNT_KEY, String(count));
+    } catch {
+      // ignore storage errors
+    }
+    state.meta.monthlyVisitors = count;
   }
 
   async function initializeApp() {
@@ -8604,6 +7837,7 @@
       state.view = "setup";
     }
     restorePublicCatalogCache();
+    touchMonthlyVisitorCounter();
     await loadPublicCatalogFromSupabase();
     warmOfflineRuntimeAssets();
     evaluateAnnouncementsPrompt();
@@ -8639,7 +7873,58 @@
     });
   }
 
+  function installReloadProtection() {
+    if (window.__navlogReloadProtectionBound === "1") return;
+    const reloadMessage = "Please verify you have internet available before reloading. You may not be able to use Navlog further if you reload without internet.";
+    const beforeUnloadHandler = (event) => {
+      event.preventDefault();
+      event.returnValue = reloadMessage;
+      return reloadMessage;
+    };
+    window.addEventListener("keydown", (event) => {
+      const key = String(event.key || "");
+      const isRefreshKey = key === "F5" || ((event.ctrlKey || event.metaKey) && key.toLowerCase() === "r");
+      if (!isRefreshKey) return;
+      event.preventDefault();
+      window.alert(reloadMessage);
+    });
+    window.addEventListener("beforeunload", beforeUnloadHandler);
+    window.onbeforeunload = beforeUnloadHandler;
+    let pullStartY = 0;
+    let pullTracking = false;
+    let pullAlerted = false;
+    window.addEventListener("touchstart", (event) => {
+      const touch = event.touches && event.touches[0];
+      if (!touch) return;
+      pullStartY = touch.clientY;
+      pullTracking = window.scrollY <= 0;
+      pullAlerted = false;
+    }, { passive: true });
+    window.addEventListener("touchmove", (event) => {
+      if (!pullTracking) return;
+      const touch = event.touches && event.touches[0];
+      if (!touch) return;
+      const pullingDown = touch.clientY > (pullStartY + 10);
+      if (!pullingDown || window.scrollY > 0) return;
+      event.preventDefault();
+      if (!pullAlerted) {
+        pullAlerted = true;
+        window.alert(reloadMessage);
+      }
+    }, { passive: false });
+    window.addEventListener("touchend", () => {
+      pullTracking = false;
+      pullAlerted = false;
+    }, { passive: true });
+    window.addEventListener("touchcancel", () => {
+      pullTracking = false;
+      pullAlerted = false;
+    }, { passive: true });
+    window.__navlogReloadProtectionBound = "1";
+  }
+
   registerOfflineServiceWorker();
+  installReloadProtection();
   initializeApp();
 })();
 

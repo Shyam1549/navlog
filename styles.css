@@ -205,8 +205,7 @@ body.kiosk-mode .time-head {
 .setup-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 16px; align-items: end; }
 .setup-field { display: grid; gap: 8px; }
 .setup-field span { color: var(--muted); text-transform: uppercase; font-size: 0.84rem; }
-.setup-field input,
-.setup-field select {
+.setup-field input {
   width: 100%;
   min-height: 52px;
   border: 2px solid rgba(46, 41, 35, 0.18);
@@ -423,53 +422,6 @@ body.kiosk-mode .time-head {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.admin-grid.admin-grid-four {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.admin-panel-title-row,
-.admin-lookup-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 12px;
-}
-
-.admin-panel-title-row h3 {
-  margin-bottom: 0;
-}
-
-.admin-nav-lock {
-  min-width: 154px;
-  white-space: nowrap;
-}
-
-.admin-nav-lock.unlocked {
-  border-color: #b33a2b;
-  color: #8b2118;
-}
-
-.admin-info-line {
-  margin-top: 10px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.admin-info-line span:last-child {
-  text-transform: none;
-}
-
-.admin-picker-field {
-  min-width: 230px;
-}
-
-select option.missing-coord {
-  color: #b32525;
-}
-
 .admin-remember {
   margin-top: 4px;
   display: inline-flex;
@@ -583,7 +535,7 @@ select option.missing-coord {
 .admin-preset-head,
 .admin-preset-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.45fr) minmax(0, 0.72fr) minmax(0, 0.85fr) 42px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.8fr) minmax(0, 1.45fr) 42px;
 }
 
 .admin-airport-head,
@@ -3189,10 +3141,6 @@ body.kiosk-phone-mode .route-progress-dot {
   padding: 12px 10px;
 }
 
-.editable-phone-part {
-  display: contents;
-}
-
 input:focus,
 select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
@@ -3325,7 +3273,7 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
   .admin-preset-head,
   .admin-preset-row {
-    min-width: 720px;
+    min-width: 470px;
   }
 
   .admin-airport-head,
@@ -3464,71 +3412,8 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     padding: 10px;
   }
 
-  body:not(.kiosk-mode) .sheet-wrap {
-    overflow-x: hidden;
-    padding-bottom: 0;
-  }
-
-  body:not(.kiosk-mode) .sheet {
-    width: 100%;
-    min-width: 0;
-    padding: 8px;
-  }
-
-  body:not(.kiosk-mode) .editable-phone-part {
-    display: block;
-    width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    -webkit-overflow-scrolling: touch;
-    margin-bottom: 12px;
-  }
-
-  body:not(.kiosk-mode) .editable-phone-part:last-child {
-    margin-bottom: 0;
-  }
-
-  body:not(.kiosk-mode) .editable-phone-header-scroll .sheet-header {
-    min-width: 1000px;
-    border-bottom: 2px solid var(--line);
-  }
-
-  body:not(.kiosk-mode) .editable-phone-route-scroll .nav-table {
-    min-width: 1000px;
-  }
-
-  body.iphone-navlog-vd-mode:not(.kiosk-mode) .editable-phone-route-scroll .nav-table {
-    min-width: 1220px;
-  }
-
-  body:not(.kiosk-mode) .editable-phone-toc-scroll .toc-tod {
-    min-width: 680px;
-    margin: 0;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  body:not(.kiosk-mode) .editable-phone-airport-scroll .radio-block {
-    min-width: 1000px;
-  }
-
-  body:not(.kiosk-mode) .editable-phone-atis-scroll .atis-block {
-    min-width: 720px;
-    margin-top: 0;
-    grid-template-columns: 1fr 1fr;
-  }
-
-  body:not(.kiosk-mode) .editable-phone-atis-scroll .atis-cell {
-    border-right: 2px solid var(--line);
-    border-bottom: 0;
-  }
-
-  body:not(.kiosk-mode) .editable-phone-atis-scroll .atis-cell:last-child {
-    border-right: 0;
-  }
-
   body.iphone-navlog-vd-mode .sheet {
-    min-width: 0;
+    min-width: 1220px;
   }
 
   body.iphone-navlog-vd-mode .nav-head-grid.nav-head-grid-vd,
@@ -3592,16 +3477,6 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
   .admin-grid.two-col {
     grid-template-columns: 1fr;
-  }
-
-  .admin-grid.admin-grid-four,
-  .admin-panel-title-row,
-  .admin-lookup-row {
-    grid-template-columns: 1fr;
-  }
-
-  .admin-picker-field {
-    min-width: 0;
   }
 
   .admin-dashboard-grid {
@@ -3679,7 +3554,8 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   font-size: 1.08em !important;
 }
 .pdf-export input::placeholder { color: transparent !important; }
-.pdf-export .head-format-note { display: none !important; }
+.pdf-export .head-format-note,
+.pdf-export .toc-unit { display: none !important; }
 .pdf-export .cas-head { color: transparent !important; }
 .pdf-export input[data-leg-field$=":cas"] {
   color: transparent !important;

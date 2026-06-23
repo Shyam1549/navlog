@@ -32,21 +32,6 @@ create table if not exists public.content_pages (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.waypoints (
-  code text primary key,
-  coord text not null default '',
-  updated_at timestamptz not null default now()
-);
-
-create table if not exists public.aircraft_registrations (
-  rpc text primary key,
-  aircraft_type text not null default '',
-  cas_climb text not null default '',
-  cas_cruise text not null default '',
-  gph text not null default '',
-  updated_at timestamptz not null default now()
-);
-
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
@@ -72,21 +57,9 @@ create trigger content_pages_touch_updated_at
 before update on public.content_pages
 for each row execute function public.touch_updated_at();
 
-drop trigger if exists waypoints_touch_updated_at on public.waypoints;
-create trigger waypoints_touch_updated_at
-before update on public.waypoints
-for each row execute function public.touch_updated_at();
-
-drop trigger if exists aircraft_registrations_touch_updated_at on public.aircraft_registrations;
-create trigger aircraft_registrations_touch_updated_at
-before update on public.aircraft_registrations
-for each row execute function public.touch_updated_at();
-
 alter table public.route_presets enable row level security;
 alter table public.airports enable row level security;
 alter table public.content_pages enable row level security;
-alter table public.waypoints enable row level security;
-alter table public.aircraft_registrations enable row level security;
 
 drop policy if exists route_presets_public_read on public.route_presets;
 create policy route_presets_public_read
@@ -105,20 +78,6 @@ using (true);
 drop policy if exists content_pages_public_read on public.content_pages;
 create policy content_pages_public_read
 on public.content_pages
-for select
-to anon, authenticated
-using (true);
-
-drop policy if exists waypoints_public_read on public.waypoints;
-create policy waypoints_public_read
-on public.waypoints
-for select
-to anon, authenticated
-using (true);
-
-drop policy if exists aircraft_registrations_public_read on public.aircraft_registrations;
-create policy aircraft_registrations_public_read
-on public.aircraft_registrations
 for select
 to anon, authenticated
 using (true);
@@ -150,18 +109,3 @@ to authenticated
 using (true)
 with check (true);
 
-drop policy if exists waypoints_admin_write on public.waypoints;
-create policy waypoints_admin_write
-on public.waypoints
-for all
-to authenticated
-using (true)
-with check (true);
-
-drop policy if exists aircraft_registrations_admin_write on public.aircraft_registrations;
-create policy aircraft_registrations_admin_write
-on public.aircraft_registrations
-for all
-to authenticated
-using (true)
-with check (true);
