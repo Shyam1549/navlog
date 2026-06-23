@@ -1,4 +1,4 @@
-const CACHE_NAME = "navlog-offline-v1";
+const CACHE_NAME = "navlog-offline-v2";
 const SHELL_ASSETS = [
   "./",
   "./index.html",

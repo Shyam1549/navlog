@@ -21,7 +21,7 @@
   const ANNOUNCEMENT_SEEN_KEY = "navlog_announcement_seen_signature";
   const NAVLOG_KIOSK_PAYLOAD_KEY = "navlog_kiosk_payload_v1";
   const NAVLOG_KIOSK_PAD_KEY = "navlog_kiosk_pad_v1";
-  const NAVLOG_PUBLIC_CATALOG_CACHE_KEY = "navlog_public_catalog_cache_v1";
+  const NAVLOG_PUBLIC_CATALOG_CACHE_KEY = "navlog_public_catalog_cache_v2";
   const NAVLOG_ACCESS_KEY_UNLOCK = "navlog_access_unlocked_v1";
   const NAVLOG_WELCOME_BEHAVIOUR_SEEN = "navlog_welcome_behaviour_seen_v1";
   const NAVLOG_MONTHLY_VISITOR_KEY = "navlog_monthly_visitor_marker";
@@ -8900,7 +8900,19 @@
 
   registerOfflineServiceWorker();
   installReloadProtection();
-  initializeApp();
+  initializeApp().catch((error) => {
+    console.error(error);
+    app.innerHTML = `
+      <div class="ui-scale">
+        <main class="entry-page">
+          <section class="setup-card">
+            <h3>Navlog could not start</h3>
+            <p class="setup-caption">${escapeHtml(error && error.message ? error.message : "An unexpected startup error occurred.")}</p>
+          </section>
+        </main>
+      </div>
+    `;
+  });
 })();
 
 
