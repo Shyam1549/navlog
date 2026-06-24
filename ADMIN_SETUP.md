@@ -27,12 +27,14 @@
 - Waypoint coordinates
 - RP-C registry
 - Airport records
+- Airport chart PDFs
 - User manual HTML
 - Privacy policy HTML
 
 ## Notes
-- Public app reads presets/airports/manual/privacy from Supabase when URL/key are configured.
-- Preset, waypoint, RP-C registry, airport, manual, and privacy content are DB-backed now.
+- Public app reads presets, airports, charts, manual, and privacy content from Supabase when URL/key are configured.
+- Preset, waypoint, RP-C registry, airport, chart, manual, and privacy content are DB-backed now.
+- The schema creates the public `airport-charts` Storage bucket used by the Charts admin tab.
 - `supabase-seed.sql` loads the previous default airports, route presets, RP-C registry defaults, manual, and privacy content into Supabase.
 - Current SQL allows any authenticated Supabase user to write admin data.
   - For production, limit writes to trusted admin users only.

@@ -16,6 +16,7 @@
   const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
   const ADDITIONAL_INFO_DEFAULT_ROWS = 19;
   const ADDITIONAL_INFO_DEFAULT_COLS = 9;
+  const AIRPORT_CHARTS_BUCKET = "airport-charts";
 
   const app = document.getElementById("app");
   const state = {
@@ -33,6 +34,7 @@
       routePresets: [],
       waypoints: [],
       rpcRegistry: [],
+      charts: [],
       content: {
         manualHtml: "",
         privacyHtml: "",
@@ -62,6 +64,7 @@
       airports: [],
       waypoints: [],
       rpcRegistry: [],
+      charts: [],
       selectedPresetId: "",
       selectedAirportCode: "",
       selectedWaypointName: "",
@@ -91,6 +94,7 @@
       additionalInfoPanel: "",
       additionalInfoDraft: [],
       additionalInfoSaveStatus: "",
+      chartUploadStatus: "",
     },
     meta: {
       hasOpenedSheet: false,
@@ -98,6 +102,8 @@
       lastNonDocView: "setup",
       docBackView: "",
       additionalInfoPanel: "",
+      chartAirportQuery: "",
+      chartSearchSubmitted: false,
       navlogUnlocked: readStoredValue(NAVLOG_ACCESS_KEY_UNLOCK) === "1",
       accessError: "",
       showWelcomeBehaviourNotice: false,
@@ -476,6 +482,10 @@
     return normalizeRpcRegistryRecord(record);
   }
 
+  function cloneAirportChartRecord(record) {
+    return normalizeAirportChartRecord(record);
+  }
+
   function normalizeWaypointRecord(record) {
     const name = normalizeCode(record && (record.name ?? record.code ?? record.route));
     return {
@@ -495,6 +505,22 @@
       casCruise: String(record && (record.casCruise ?? record.cas_cruise ?? "") || ""),
       gph: String(record && (record.gph ?? record.gph_pph ?? "") || ""),
     };
+  }
+
+  function normalizeAirportChartRecord(record) {
+    return {
+      id: String(record && record.id != null ? record.id : ""),
+      airportCode: normalizeCode(record && (record.airportCode ?? record.airport_code ?? record.code)),
+      name: String(record && (record.name ?? record.chart_name) != null ? (record.name ?? record.chart_name) : "").trim(),
+      storagePath: String(record && (record.storagePath ?? record.storage_path) != null ? (record.storagePath ?? record.storage_path) : "").trim(),
+    };
+  }
+
+  function getAirportChartPublicUrl(record) {
+    const chart = normalizeAirportChartRecord(record);
+    if (!supabaseClient || !chart.storagePath) return "";
+    const result = supabaseClient.storage.from(AIRPORT_CHARTS_BUCKET).getPublicUrl(chart.storagePath);
+    return String(result && result.data && result.data.publicUrl ? result.data.publicUrl : "");
   }
 
   function normalizeAirportRecord(airport) {
@@ -1142,6 +1168,15 @@
     const sourceCols = getAdditionalInfoColumnCount(state.catalog.content.additionalInfoTable);
     const table = normalizeAdditionalInfoTable(state.catalog.content.additionalInfoTable, sourceRows, sourceCols);
     const viewPanel = String(state.meta.additionalInfoPanel || "");
+    const chartQuery = normalizeCode(state.meta.chartAirportQuery);
+    const chartSearchSubmitted = Boolean(state.meta.chartSearchSubmitted);
+    const matchingCharts = (Array.isArray(state.catalog.charts) ? state.catalog.charts : [])
+      .map((chart) => normalizeAirportChartRecord(chart))
+      .filter((chart) => chart.airportCode === chartQuery && chart.storagePath);
+    const chartAirportOptions = Array.from(new Set((state.catalog.charts || []).map((chart) => normalizeCode(chart.airportCode)).filter(Boolean)))
+      .sort()
+      .map((code) => `<option value="${escapeAttr(code)}"></option>`)
+      .join("");
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -1155,6 +1190,7 @@
         <section class="additional-info-page">
           <div class="additional-info-menu-links${viewPanel ? " hidden" : ""}">
             <button class="additional-info-link" data-additional-info-panel="aircraft" type="button">Aircraft Information</button>
+            <button class="additional-info-link" data-additional-info-panel="charts" type="button">Charts</button>
           </div>
           <div class="${viewPanel === "aircraft" ? "" : "hidden"}">
             <h3 class="additional-info-subtitle">Aircraft Information</h3>
@@ -1164,6 +1200,39 @@
                   ${table.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}
                 </tbody>
               </table>
+            </div>
+          </div>
+          <div class="${viewPanel === "charts" ? "" : "hidden"}">
+            <h3 class="additional-info-subtitle">Charts</h3>
+            <section class="chart-search-card">
+              <datalist id="chart-airport-code-list">${chartAirportOptions}</datalist>
+              <label class="setup-field chart-search-field">
+                <span>Airport code</span>
+                <input id="chart-airport-search" list="chart-airport-code-list" value="${escapeAttr(chartQuery)}" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+              </label>
+              <button class="action primary" id="chart-airport-search-button" type="button">Search</button>
+            </section>
+            <div class="chart-results" aria-live="polite">
+              ${
+                !chartSearchSubmitted
+                  ? '<p class="chart-search-message">Enter an airport code to view available charts.</p>'
+                  : !chartQuery
+                    ? '<p class="chart-search-message error">Enter an airport code.</p>'
+                    : !matchingCharts.length
+                      ? `<p class="chart-search-message error">No charts are available for ${escapeHtml(chartQuery)}.</p>`
+                      : matchingCharts.map((chart) => {
+                        const publicUrl = getAirportChartPublicUrl(chart);
+                        return `
+                          <article class="chart-result-card">
+                            <div>
+                              <span>${escapeHtml(chart.airportCode)}</span>
+                              <strong>${escapeHtml(chart.name || "Airport chart")}</strong>
+                            </div>
+                            ${publicUrl ? `<a class="action primary" href="${escapeAttr(publicUrl)}" target="_blank" rel="noopener">Open PDF</a>` : ""}
+                          </article>
+                        `;
+                      }).join("")
+              }
             </div>
           </div>
         </section>
@@ -1251,9 +1320,16 @@
     const rpcCodeOptions = getRpcRegistryOptions()
       .map((entry) => `<option value="${escapeAttr(entry.registration)}"></option>`)
       .join("");
+    const existingRpcRecords = (Array.isArray(state.admin.rpcRegistry) ? state.admin.rpcRegistry : [])
+      .map((record) => normalizeRpcRegistryRecord(record))
+      .filter((record) => record.registration)
+      .sort((left, right) => left.registration.localeCompare(right.registration));
     const airportCodeOptions = state.admin.airports
       .map((airport) => `<option value="${escapeAttr(airport.code)}"></option>`)
       .join("");
+    const adminCharts = (Array.isArray(state.admin.charts) ? state.admin.charts : [])
+      .map((chart) => normalizeAirportChartRecord(chart))
+      .sort((left, right) => left.airportCode.localeCompare(right.airportCode) || left.name.localeCompare(right.name));
     const presetLockEnabled = Boolean(state.admin.presetForm.locked);
     const additionalInfoPanel = String(state.admin.additionalInfoPanel || "");
     const additionalInfoRows = normalizeAdditionalInfoTable(
@@ -1267,6 +1343,7 @@
       { id: "coordinates", label: "Coordinates" },
       { id: "rpc-reg", label: "RP-C Reg" },
       { id: "airports", label: "Airport Info" },
+      { id: "charts", label: "Charts" },
       { id: "announcements", label: "Announcements" },
       { id: "additional-info", label: "Additional Info" },
       { id: "manual", label: "User Manual" },
@@ -1411,6 +1488,17 @@
               <button class="action primary" id="admin-rpc-save">Save</button>
               <button class="action" id="admin-rpc-delete">Delete</button>
             </div>
+            <section class="admin-record-picker">
+              <h4>Existing registrations</h4>
+              <div class="admin-record-picker-grid">
+                ${existingRpcRecords.length ? existingRpcRecords.map((record) => `
+                  <button class="admin-record-picker-item${normalizeCode(state.admin.selectedRpcRegistration) === record.registration ? " active" : ""}" data-admin-rpc-select="${escapeAttr(record.registration)}" type="button">
+                    <strong>${escapeHtml(record.registration)}</strong>
+                    <span>${escapeHtml(record.aircraftType || "Unspecified aircraft")}</span>
+                  </button>
+                `).join("") : '<p class="setup-caption">No registrations saved yet.</p>'}
+              </div>
+            </section>
           </div>
           <div class="manual-section${panel === "airports" ? "" : " hidden"}">
             <h3>Airport Information</h3><br>
@@ -1440,6 +1528,47 @@
               <button class="action primary" id="admin-airport-save">Save</button>
               <button class="action" id="admin-airport-delete"${airportLookup.exists ? "" : " disabled"}>Delete</button>
             </div>
+          </div>
+          <div class="manual-section${panel === "charts" ? "" : " hidden"}">
+            <h3>Airport Charts</h3>
+            <p class="setup-caption">Upload named PDF charts and assign them to an airport code.</p>
+            <section class="admin-chart-upload-card">
+              <div class="admin-grid two-col">
+                <label class="setup-field">
+                  <span>Airport code</span>
+                  <input id="admin-chart-airport-code" list="admin-airport-code-list" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+                </label>
+                <label class="setup-field">
+                  <span>Chart name</span>
+                  <input id="admin-chart-name" autocomplete="off" />
+                </label>
+              </div>
+              <label class="setup-field admin-chart-file-field">
+                <span>PDF document</span>
+                <input id="admin-chart-file" type="file" accept="application/pdf,.pdf" />
+              </label>
+              <div class="entry-actions">
+                <button class="action primary" id="admin-chart-upload" type="button">Upload chart</button>
+                <span class="admin-subtle-status">${escapeHtml(state.admin.chartUploadStatus)}</span>
+              </div>
+            </section>
+            <section class="admin-chart-list">
+              ${adminCharts.length ? adminCharts.map((chart) => {
+                const publicUrl = getAirportChartPublicUrl(chart);
+                return `
+                  <article class="admin-chart-item">
+                    <div>
+                      <span>${escapeHtml(chart.airportCode)}</span>
+                      <strong>${escapeHtml(chart.name || "Airport chart")}</strong>
+                    </div>
+                    <div class="admin-chart-item-actions">
+                      ${publicUrl ? `<a class="action" href="${escapeAttr(publicUrl)}" target="_blank" rel="noopener">Open</a>` : ""}
+                      <button class="action" data-admin-chart-delete="${escapeAttr(chart.id)}" type="button">Delete</button>
+                    </div>
+                  </article>
+                `;
+              }).join("") : '<p class="setup-caption">No charts uploaded yet.</p>'}
+            </section>
           </div>
           <div class="manual-section${panel === "announcements" ? "" : " hidden"}">
             <div class="admin-announcement-title-row">
@@ -2457,6 +2586,76 @@
     `;
   }
 
+  function refreshTocTodDom(focusField = "") {
+    const current = document.querySelector(".toc-tod");
+    if (!current) return;
+    const holder = document.createElement("div");
+    holder.innerHTML = renderTocTod().trim();
+    const replacement = holder.firstElementChild;
+    if (!replacement) return;
+    current.replaceWith(replacement);
+    wireTocTodControls(replacement);
+    applyEditableNumericKeyboardDefaults();
+    if (focusField) {
+      requestAnimationFrame(() => {
+        const input = replacement.querySelector(`[data-toc-entry="${focusField}"]`);
+        if (input) input.focus();
+      });
+    }
+  }
+
+  function wireTocTodControls(root = document) {
+    const commitTocEntry = (input, field) => {
+      if (!input || input.dataset.tocCommitted === "1") return;
+      input.dataset.tocCommitted = "1";
+      const value = String(input.value || "").trim();
+      state.navlog.tocTod[field] = value;
+      if (field === "roc") {
+        state.navlog.tocTod.tocEditing = false;
+        state.navlog.tocTod.tocManual = false;
+      }
+      if (field === "rod") {
+        state.navlog.tocTod.todEditing = false;
+        state.navlog.tocTod.todManual = false;
+      }
+      computeRouteMath();
+      updateComputedCells();
+      refreshTocTodDom();
+    };
+
+    root.querySelectorAll("[data-toc-entry]").forEach((input) => {
+      input.addEventListener("input", (event) => {
+        const field = event.target.dataset.tocEntry;
+        state.navlog.tocTod[field] = event.target.value;
+      });
+      input.addEventListener("change", (event) => {
+        commitTocEntry(event.target, event.target.dataset.tocEntry);
+      });
+      input.addEventListener("blur", (event) => {
+        commitTocEntry(event.target, event.target.dataset.tocEntry);
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        commitTocEntry(event.target, event.target.dataset.tocEntry);
+      });
+    });
+
+    root.querySelectorAll("[data-edit-toc]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (button.dataset.editToc === "toc") {
+          state.navlog.tocTod.tocEditing = true;
+          state.navlog.tocTod.tocManual = false;
+          refreshTocTodDom("roc");
+          return;
+        }
+        state.navlog.tocTod.todEditing = true;
+        state.navlog.tocTod.todManual = false;
+        refreshTocTodDom("rod");
+      });
+    });
+  }
+
   function renderLocationTable() {
     const airportOptions = state.catalog.airports
       .map((airport) => `<option value="${escapeAttr(airport.code)}"></option>`)
@@ -2849,50 +3048,7 @@
       }
     }
 
-    const commitTocEntry = (input, field) => {
-      const value = String(input.value || "").trim();
-      state.navlog.tocTod[field] = value;
-      if (field === "roc") state.navlog.tocTod.tocEditing = false;
-      if (field === "rod") state.navlog.tocTod.todEditing = false;
-      if (field === "roc") state.navlog.tocTod.tocManual = false;
-      if (field === "rod") state.navlog.tocTod.todManual = false;
-      computeRouteMath();
-      render();
-    };
-    document.querySelectorAll("[data-toc-entry]").forEach((input) => {
-      input.addEventListener("input", (event) => {
-        const field = event.target.dataset.tocEntry;
-        state.navlog.tocTod[field] = event.target.value;
-      });
-      input.addEventListener("change", (event) => {
-        const field = event.target.dataset.tocEntry;
-        commitTocEntry(event.target, field);
-      });
-      input.addEventListener("blur", (event) => {
-        const field = event.target.dataset.tocEntry;
-        commitTocEntry(event.target, field);
-      });
-      input.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter") return;
-        event.preventDefault();
-        const field = event.target.dataset.tocEntry;
-        commitTocEntry(event.target, field);
-      });
-    });
-
-    document.querySelectorAll("[data-edit-toc]").forEach((button) => {
-      button.addEventListener("click", () => {
-        if (button.dataset.editToc === "toc") {
-          state.navlog.tocTod.tocEditing = true;
-          state.navlog.tocTod.tocManual = false;
-        }
-        if (button.dataset.editToc === "tod") {
-          state.navlog.tocTod.todEditing = true;
-          state.navlog.tocTod.todManual = false;
-        }
-        render();
-      });
-    });
+    wireTocTodControls();
 
     document.querySelectorAll("[data-toc]").forEach((input) => {
       input.addEventListener("input", (event) => {
@@ -4057,19 +4213,19 @@
     const addAboveButton = document.getElementById("kiosk-route-estimate-add-above");
     if (addAboveButton) {
       addAboveButton.addEventListener("click", () => {
-        insertKioskRouteRowRelativeTo(model.legIndex, "above");
+        insertKioskRouteRowRelativeTo(state.meta.kioskRouteEstimate.legIndex, "above");
       });
     }
     const addBelowButton = document.getElementById("kiosk-route-estimate-add-below");
     if (addBelowButton) {
       addBelowButton.addEventListener("click", () => {
-        insertKioskRouteRowRelativeTo(model.legIndex, "below");
+        insertKioskRouteRowRelativeTo(state.meta.kioskRouteEstimate.legIndex, "below");
       });
     }
     const removeRouteButton = document.getElementById("kiosk-route-estimate-remove-route");
     if (removeRouteButton) {
       removeRouteButton.addEventListener("click", () => {
-        removeKioskRouteRowAt(model.legIndex);
+        removeKioskRouteRowAt(state.meta.kioskRouteEstimate.legIndex);
       });
     }
     syncKioskRouteEstimateLiveDistanceDisplay();
@@ -5572,6 +5728,25 @@
         render();
       });
     });
+    const chartSearchInput = document.getElementById("chart-airport-search");
+    const chartSearchButton = document.getElementById("chart-airport-search-button");
+    const submitChartSearch = () => {
+      state.meta.chartAirportQuery = normalizeCode(chartSearchInput ? chartSearchInput.value : state.meta.chartAirportQuery);
+      state.meta.chartSearchSubmitted = true;
+      render();
+    };
+    if (chartSearchInput) {
+      chartSearchInput.addEventListener("input", () => {
+        state.meta.chartAirportQuery = chartSearchInput.value;
+        state.meta.chartSearchSubmitted = false;
+      });
+      chartSearchInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        submitChartSearch();
+      });
+    }
+    if (chartSearchButton) chartSearchButton.addEventListener("click", submitChartSearch);
   }
 
   function wireUtcAdminTrigger() {
@@ -5782,6 +5957,12 @@
         await deleteRpcRowFromAdmin();
       });
     }
+    document.querySelectorAll("[data-admin-rpc-select]").forEach((button) => {
+      button.addEventListener("click", () => {
+        selectRpcForEditing(button.getAttribute("data-admin-rpc-select"));
+        render();
+      });
+    });
 
     const airportCodeInput = document.getElementById("admin-airport-code");
     if (airportCodeInput) {
@@ -5816,6 +5997,18 @@
         await deleteAirportFromAdmin();
       });
     }
+
+    const chartUploadButton = document.getElementById("admin-chart-upload");
+    if (chartUploadButton) {
+      chartUploadButton.addEventListener("click", async () => {
+        await uploadAirportChartFromAdmin();
+      });
+    }
+    document.querySelectorAll("[data-admin-chart-delete]").forEach((button) => {
+      button.addEventListener("click", async () => {
+        await deleteAirportChartFromAdmin(button.getAttribute("data-admin-chart-delete"));
+      });
+    });
 
     const manualSaveButton = document.getElementById("admin-manual-save");
     if (manualSaveButton) {
@@ -6123,12 +6316,13 @@
     state.admin.error = "";
     state.admin.notice = "";
     try {
-      let [presetResult, airportResult, contentResult, waypointResult, rpcResult] = await Promise.all([
+      let [presetResult, airportResult, contentResult, waypointResult, rpcResult, chartResult] = await Promise.all([
         runSupabaseQuery(supabaseClient.from("route_presets").select("*").order("name", { ascending: true })),
         runSupabaseQuery(supabaseClient.from("airports").select("*").order("code", { ascending: true })),
         runSupabaseQuery(supabaseClient.from("content_pages").select("*")),
         runSupabaseQuery(supabaseClient.from("waypoints").select("*").order("name", { ascending: true })),
         runSupabaseQuery(supabaseClient.from("rpc_registry").select("*").order("registration", { ascending: true })),
+        runSupabaseQuery(supabaseClient.from("airport_charts").select("*").order("airport_code", { ascending: true }).order("name", { ascending: true })),
       ]);
       if (presetResult.error) throw presetResult.error;
       if (airportResult.error) throw airportResult.error;
@@ -6164,6 +6358,8 @@
         casCruise: row.cas_cruise,
         gph: row.gph,
       }));
+      state.admin.charts = chartResult.error ? [] : (chartResult.data || []).map((row) => cloneAirportChartRecord(row));
+      if (chartResult.error) state.admin.chartUploadStatus = "Run the updated Supabase schema to enable charts.";
       if (state.admin.selectedWaypointName) selectWaypointForEditing(state.admin.selectedWaypointName);
       else state.admin.waypointForm = createEmptyWaypointForm();
       if (state.admin.selectedRpcRegistration) selectRpcForEditing(state.admin.selectedRpcRegistration);
@@ -6176,6 +6372,7 @@
       state.catalog.airports = state.admin.airports.map((airport) => ({ ...airport }));
       state.catalog.waypoints = state.admin.waypoints.map((waypoint) => ({ ...waypoint }));
       state.catalog.rpcRegistry = state.admin.rpcRegistry.map((record) => ({ ...record }));
+      state.catalog.charts = state.admin.charts.map((record) => ({ ...record }));
       state.catalog.content.manualHtml = contentMap.manual || "";
       state.catalog.content.privacyHtml = contentMap.privacy || "";
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
@@ -6955,6 +7152,96 @@
       render();
     } catch (error) {
       state.admin.error = error && error.message ? error.message : "Could not delete airport.";
+      render();
+    }
+  }
+
+  function sanitizeChartFileName(value) {
+    const cleaned = String(value || "chart.pdf")
+      .trim()
+      .replace(/[^a-z0-9._-]+/gi, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    return cleaned || "chart.pdf";
+  }
+
+  async function uploadAirportChartFromAdmin() {
+    const ok = await connectSupabaseClient(false);
+    if (!ok || !supabaseClient) {
+      render();
+      return;
+    }
+    const airportInput = document.getElementById("admin-chart-airport-code");
+    const nameInput = document.getElementById("admin-chart-name");
+    const fileInput = document.getElementById("admin-chart-file");
+    const uploadButton = document.getElementById("admin-chart-upload");
+    const airportCode = normalizeCode(airportInput ? airportInput.value : "");
+    const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+    const fallbackName = file ? String(file.name || "").replace(/\.pdf$/i, "").trim() : "";
+    const chartName = String(nameInput ? nameInput.value : "").trim() || fallbackName;
+    const isPdf = Boolean(file && (file.type === "application/pdf" || /\.pdf$/i.test(file.name || "")));
+    if (!airportCode || !chartName || !isPdf) {
+      state.admin.chartUploadStatus = !airportCode
+        ? "Enter an airport code."
+        : !chartName
+          ? "Enter a chart name."
+          : "Choose a PDF document.";
+      render();
+      return;
+    }
+    const storagePath = `${airportCode}/${Date.now()}-${sanitizeChartFileName(file.name)}`;
+    if (uploadButton) {
+      uploadButton.disabled = true;
+      uploadButton.textContent = "Uploading...";
+    }
+    state.admin.chartUploadStatus = "Uploading chart...";
+    try {
+      const uploadResult = await supabaseClient.storage.from(AIRPORT_CHARTS_BUCKET).upload(storagePath, file, {
+        cacheControl: "3600",
+        contentType: "application/pdf",
+        upsert: false,
+      });
+      if (uploadResult.error) throw uploadResult.error;
+      const insertResult = await supabaseClient.from("airport_charts").insert({
+        airport_code: airportCode,
+        name: chartName,
+        storage_path: storagePath,
+      });
+      if (insertResult.error) {
+        await supabaseClient.storage.from(AIRPORT_CHARTS_BUCKET).remove([storagePath]);
+        throw insertResult.error;
+      }
+      await loadAdminData();
+      state.admin.chartUploadStatus = "Chart uploaded.";
+      render();
+    } catch (error) {
+      state.admin.chartUploadStatus = error && error.message ? error.message : "Could not upload chart.";
+      render();
+    }
+  }
+
+  async function deleteAirportChartFromAdmin(chartId) {
+    const chart = (Array.isArray(state.admin.charts) ? state.admin.charts : [])
+      .map((record) => normalizeAirportChartRecord(record))
+      .find((record) => record.id === String(chartId || ""));
+    if (!chart || !window.confirm(`Delete ${chart.name || "this chart"}?`)) return;
+    const ok = await connectSupabaseClient(false);
+    if (!ok || !supabaseClient) {
+      render();
+      return;
+    }
+    try {
+      if (chart.storagePath) {
+        const storageResult = await supabaseClient.storage.from(AIRPORT_CHARTS_BUCKET).remove([chart.storagePath]);
+        if (storageResult.error) throw storageResult.error;
+      }
+      const deleteResult = await supabaseClient.from("airport_charts").delete().eq("id", chart.id);
+      if (deleteResult.error) throw deleteResult.error;
+      await loadAdminData();
+      state.admin.chartUploadStatus = "Chart deleted.";
+      render();
+    } catch (error) {
+      state.admin.chartUploadStatus = error && error.message ? error.message : "Could not delete chart.";
       render();
     }
   }
@@ -8779,6 +9066,7 @@
         airports: (state.catalog.airports || []).map((airport) => ({ ...airport })),
         waypoints: (state.catalog.waypoints || []).map((waypoint) => cloneWaypointRecord(waypoint)),
         rpcRegistry: (state.catalog.rpcRegistry || []).map((record) => cloneRpcRegistryRecord(record)),
+        charts: (state.catalog.charts || []).map((record) => cloneAirportChartRecord(record)),
         content: {
           manualHtml: String(state.catalog.content.manualHtml || ""),
           privacyHtml: String(state.catalog.content.privacyHtml || ""),
@@ -8815,6 +9103,9 @@
       if (Array.isArray(parsed.rpcRegistry) && parsed.rpcRegistry.length) {
         state.catalog.rpcRegistry = parsed.rpcRegistry.map((record) => cloneRpcRegistryRecord(record));
       }
+      if (Array.isArray(parsed.charts)) {
+        state.catalog.charts = parsed.charts.map((record) => cloneAirportChartRecord(record));
+      }
       if (parsed.content && typeof parsed.content === "object") {
         const content = parsed.content;
         if (typeof content.manualHtml === "string") state.catalog.content.manualHtml = content.manualHtml;
@@ -8840,12 +9131,13 @@
     if (!ok || !supabaseClient) return;
     loadingPublicCatalog = true;
     try {
-      const [presetResult, airportResult, contentResult, waypointResult, rpcResult] = await Promise.all([
+      const [presetResult, airportResult, contentResult, waypointResult, rpcResult, chartResult] = await Promise.all([
         runSupabaseQuery(supabaseClient.from("route_presets").select("*").order("name", { ascending: true })),
         runSupabaseQuery(supabaseClient.from("airports").select("*").order("code", { ascending: true })),
         runSupabaseQuery(supabaseClient.from("content_pages").select("*")),
         runSupabaseQuery(supabaseClient.from("waypoints").select("*").order("name", { ascending: true })),
         runSupabaseQuery(supabaseClient.from("rpc_registry").select("*").order("registration", { ascending: true })),
+        runSupabaseQuery(supabaseClient.from("airport_charts").select("*").order("airport_code", { ascending: true }).order("name", { ascending: true })),
       ]);
       if (presetResult.error || airportResult.error || contentResult.error) return;
 
@@ -8888,6 +9180,9 @@
       state.catalog.airports = dbAirports.map((airport) => ({ ...airport }));
       state.catalog.waypoints = dbWaypoints.map((waypoint) => ({ ...waypoint }));
       state.catalog.rpcRegistry = dbRpcRegistry.map((record) => ({ ...record }));
+      if (!chartResult.error) {
+        state.catalog.charts = (chartResult.data || []).map((row) => cloneAirportChartRecord(row));
+      }
       if (typeof contentMap.manual === "string") state.catalog.content.manualHtml = contentMap.manual;
       if (typeof contentMap.privacy === "string") state.catalog.content.privacyHtml = contentMap.privacy;
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");

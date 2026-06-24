@@ -31,6 +31,17 @@ create table if not exists public.rpc_registry (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.airport_charts (
+  id uuid primary key default gen_random_uuid(),
+  airport_code text not null,
+  name text not null,
+  storage_path text not null unique,
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists airport_charts_airport_code_idx
+  on public.airport_charts (airport_code);
+
 create table if not exists public.airports (
   code text primary key,
   id text not null,
@@ -79,6 +90,11 @@ create trigger rpc_registry_touch_updated_at
 before update on public.rpc_registry
 for each row execute function public.touch_updated_at();
 
+drop trigger if exists airport_charts_touch_updated_at on public.airport_charts;
+create trigger airport_charts_touch_updated_at
+before update on public.airport_charts
+for each row execute function public.touch_updated_at();
+
 drop trigger if exists content_pages_touch_updated_at on public.content_pages;
 create trigger content_pages_touch_updated_at
 before update on public.content_pages
@@ -88,6 +104,7 @@ alter table public.route_presets enable row level security;
 alter table public.airports enable row level security;
 alter table public.waypoints enable row level security;
 alter table public.rpc_registry enable row level security;
+alter table public.airport_charts enable row level security;
 alter table public.content_pages enable row level security;
 
 drop policy if exists route_presets_public_read on public.route_presets;
@@ -114,6 +131,13 @@ using (true);
 drop policy if exists rpc_registry_public_read on public.rpc_registry;
 create policy rpc_registry_public_read
 on public.rpc_registry
+for select
+to anon, authenticated
+using (true);
+
+drop policy if exists airport_charts_public_read on public.airport_charts;
+create policy airport_charts_public_read
+on public.airport_charts
 for select
 to anon, authenticated
 using (true);
@@ -160,6 +184,14 @@ to authenticated
 using (true)
 with check (true);
 
+drop policy if exists airport_charts_admin_write on public.airport_charts;
+create policy airport_charts_admin_write
+on public.airport_charts
+for all
+to authenticated
+using (true)
+with check (true);
+
 drop policy if exists content_pages_admin_write on public.content_pages;
 create policy content_pages_admin_write
 on public.content_pages
@@ -167,4 +199,23 @@ for all
 to authenticated
 using (true)
 with check (true);
+
+insert into storage.buckets (id, name, public)
+values ('airport-charts', 'airport-charts', true)
+on conflict (id) do update set public = excluded.public;
+
+drop policy if exists airport_charts_storage_public_read on storage.objects;
+create policy airport_charts_storage_public_read
+on storage.objects
+for select
+to anon, authenticated
+using (bucket_id = 'airport-charts');
+
+drop policy if exists airport_charts_storage_admin_write on storage.objects;
+create policy airport_charts_storage_admin_write
+on storage.objects
+for all
+to authenticated
+using (bucket_id = 'airport-charts')
+with check (bucket_id = 'airport-charts');
 
