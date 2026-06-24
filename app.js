@@ -181,6 +181,7 @@
       _manual: route ? { route: true } : {},
       _derived: {},
       _errors: {},
+      _kioskCreated: false,
     };
   }
 
@@ -338,6 +339,12 @@
     const snapshot = JSON.parse(JSON.stringify(state.navlog || createBlankNavlog()));
     normalizeDestinationLegPlacement(snapshot);
     if (!Array.isArray(snapshot.radios)) snapshot.radios = [];
+    if (Array.isArray(snapshot.legs)) {
+      snapshot.legs = snapshot.legs.map((leg) => ({
+        ...leg,
+        _kioskCreated: false,
+      }));
+    }
     snapshot.radios.push(createBlankRadioRow());
     return snapshot;
   }
@@ -1037,13 +1044,40 @@
     `;
   }
 
+  function renderBackButton(id, ariaLabel = "Back", extraClass = "") {
+    const className = ["back-link", extraClass].filter(Boolean).join(" ");
+    return `
+      <button class="${className}" id="${id}" type="button" aria-label="${escapeAttr(ariaLabel)}">
+        <span class="back-link-icon" aria-hidden="true">&#8592;</span>
+      </button>
+    `;
+  }
+
+  function renderLockGlyph(locked) {
+    if (locked) {
+      return `
+        <svg class="admin-lock-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M8 10V7a4 4 0 1 1 8 0v3"></path>
+          <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+        </svg>
+      `;
+    }
+    return `
+      <svg class="admin-lock-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M9 7a4 4 0 0 1 7 2.6"></path>
+        <path d="M8 10V7"></path>
+        <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+      </svg>
+    `;
+  }
+
   function renderManualScreen() {
     const customManual = String(state.catalog.content.manualHtml || "").trim();
     return `
       <div class="ui-scale">
       <main class="entry-page">
         <section class="topbar centered">
-          <div class="top-side"><button class="back-link" id="back-from-manual">Back</button></div>
+          <div class="top-side">${renderBackButton("back-from-manual", "Back to setup")}</div>
           <div class="top-center">
             <h1>User Manual</h1>
             <p class="setup-caption">Formulas, features, limits</p>
@@ -1073,7 +1107,7 @@
       <div class="ui-scale">
       <main class="entry-page">
         <section class="topbar centered">
-          <div class="top-side"><button class="back-link" id="back-from-privacy">Back</button></div>
+          <div class="top-side">${renderBackButton("back-from-privacy", "Back to setup")}</div>
           <div class="top-center">
             <h1>Privacy Policy</h1>
             <p class="setup-caption">Last updated: ${formatPolicyDate()}</p>
@@ -1106,7 +1140,7 @@
       <div class="ui-scale">
       <main class="entry-page">
         <section class="topbar centered">
-          <div class="top-side"><button class="back-link" id="back-from-additional-info">Back</button></div>
+          <div class="top-side">${renderBackButton("back-from-additional-info", "Back to setup")}</div>
           <div class="top-center">
             <h1>Additional Information</h1>
           </div>
@@ -1144,7 +1178,7 @@
       <div class="ui-scale">
       <main class="entry-page">
         <section class="topbar centered">
-          <div class="top-side"><button class="back-link" id="back-from-admin-login">Back</button></div>
+          <div class="top-side">${renderBackButton("back-from-admin-login", "Back to setup")}</div>
           <div class="top-center">
             <h1>Admin Login</h1>
             <p class="setup-caption">Sign in with your admin email and password</p>
@@ -1236,7 +1270,7 @@
       <div class="ui-scale">
       <main class="entry-page">
         <section class="topbar centered">
-          <div class="top-side"><button class="back-link" id="back-from-admin">Back</button></div>
+          <div class="top-side">${renderBackButton("back-from-admin", "Back to setup")}</div>
           <div class="top-center">
             <h1>Admin Console</h1>
           </div>
@@ -1266,8 +1300,10 @@
                 <input id="admin-preset-destination" list="admin-preset-code-list" value="${escapeAttr(state.admin.presetForm.destination)}" />
               </label>
             </div>
-            <div class="admin-preset-lock-band">
-              <button class="action admin-mini-btn admin-lock-btn${presetLockEnabled ? " active" : ""}" id="admin-preset-lock" type="button" aria-label="${presetLockEnabled ? "Unlock preset values" : "Lock preset values"}" title="${presetLockEnabled ? "Unlock preset values" : "Lock preset values"}">${presetLockEnabled ? "🔒" : "🔓"}</button>
+            <div class="admin-preset-lock-rail">
+              <span></span>
+              <span></span>
+              <button class="action admin-lock-btn${presetLockEnabled ? " active" : ""}" id="admin-preset-lock" type="button" aria-label="${presetLockEnabled ? "Unlock TC and distance overrides" : "Lock TC and distance overrides"}" title="${presetLockEnabled ? "Unlock TC and distance overrides" : "Lock TC and distance overrides"}">${renderLockGlyph(presetLockEnabled)}</button>
             </div>
             <div class="preset-status ${presetLookup.active ? (presetLookup.exists ? "available" : "missing") : ""}">${presetLookup.active ? (presetLookup.exists ? "preset avbl" : "preset unavbl") : ""}</div>
             <section class="admin-preset-table">
@@ -1276,17 +1312,23 @@
                 <div>COORDS</div>
                 <div>TC</div>
                 <div>DIST</div>
-                <div></div>
               </div>
               <div class="admin-preset-body">
                 ${presetRows.map((row, index) => {
                   return `
                     <div class="admin-preset-row admin-preset-row-extended" data-admin-row-index="${index}">
-                      <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" list="admin-preset-route-list" />
-                      <input data-admin-preset-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
-                      <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" ${presetLockEnabled ? "readonly" : ""} placeholder="000" />
-                      <input data-admin-preset-row="${index}:distance" value="${escapeAttr(row.distance)}" ${presetLockEnabled ? "readonly" : ""} placeholder="0.0" />
-                      <div class="admin-row-spacer"></div>
+                      <label class="admin-field-cell" data-label="Route">
+                        <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" list="admin-preset-route-list" />
+                      </label>
+                      <label class="admin-field-cell" data-label="Coords">
+                        <input data-admin-preset-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
+                      </label>
+                      <label class="admin-field-cell admin-field-cell-derived${presetLockEnabled ? " is-locked" : ""}" data-label="TC">
+                        <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" ${presetLockEnabled ? "readonly" : ""} placeholder="000" />
+                      </label>
+                      <label class="admin-field-cell admin-field-cell-derived${presetLockEnabled ? " is-locked" : ""}" data-label="Dist">
+                        <input data-admin-preset-row="${index}:distance" value="${escapeAttr(row.distance)}" ${presetLockEnabled ? "readonly" : ""} placeholder="0.0" />
+                      </label>
                     </div>
                   `;
                 }).join("")}
@@ -1301,20 +1343,20 @@
             <h3>Coordinates</h3><br>
             <datalist id="admin-waypoint-code-list">${waypointCodeOptions}</datalist>
             <section class="admin-preset-table admin-waypoint-table">
-              <div class="admin-preset-head admin-preset-head-waypoint">
+              <div class="admin-preset-head admin-waypoint-head">
                 <div>WAYPOINT</div>
                 <div>COORDS</div>
-                <div></div>
               </div>
               <div class="admin-preset-body">
                 ${waypointRows.map((row, index) => {
                   return `
                     <div class="admin-preset-row admin-waypoint-row" data-admin-row-index="${index}">
-                      <div class="admin-code-input-wrap">
+                      <label class="admin-field-cell" data-label="Waypoint">
                         <input data-admin-waypoint-row="${index}:name" value="${escapeAttr(row.name)}" list="admin-waypoint-code-list" />
-                      </div>
-                      <input data-admin-waypoint-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
-                      <div class="admin-row-spacer"></div>
+                      </label>
+                      <label class="admin-field-cell" data-label="Coords">
+                        <input data-admin-waypoint-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
+                      </label>
                     </div>
                   `;
                 }).join("")}
@@ -1329,26 +1371,32 @@
             <h3>RP-C Reg</h3><br>
             <datalist id="admin-rpc-code-list">${rpcCodeOptions}</datalist>
             <section class="admin-preset-table admin-rpc-table">
-              <div class="admin-preset-head admin-preset-head-rpc">
+              <div class="admin-preset-head admin-rpc-head">
                 <div>REGISTRATION</div>
                 <div>AIRCRAFT TYPE</div>
                 <div>CAS CLIMB</div>
                 <div>CAS CRUISE</div>
                 <div>GPH</div>
-                <div></div>
               </div>
               <div class="admin-preset-body">
                 ${rpcRows.map((row, index) => {
                   return `
                     <div class="admin-preset-row admin-rpc-row" data-admin-row-index="${index}">
-                      <div class="admin-code-input-wrap">
+                      <label class="admin-field-cell" data-label="Registration">
                         <input data-admin-rpc-row="${index}:registration" value="${escapeAttr(row.registration)}" list="admin-rpc-code-list" />
-                      </div>
-                      <input data-admin-rpc-row="${index}:aircraftType" value="${escapeAttr(row.aircraftType)}" placeholder="Aircraft type" />
-                      <input data-admin-rpc-row="${index}:casClimb" value="${escapeAttr(row.casClimb)}" placeholder="Climb CAS" />
-                      <input data-admin-rpc-row="${index}:casCruise" value="${escapeAttr(row.casCruise)}" placeholder="Cruise CAS" />
-                      <input data-admin-rpc-row="${index}:gph" value="${escapeAttr(row.gph)}" placeholder="GPH" />
-                      <div class="admin-row-spacer"></div>
+                      </label>
+                      <label class="admin-field-cell" data-label="Aircraft type">
+                        <input data-admin-rpc-row="${index}:aircraftType" value="${escapeAttr(row.aircraftType)}" placeholder="Aircraft type" />
+                      </label>
+                      <label class="admin-field-cell" data-label="CAS climb">
+                        <input data-admin-rpc-row="${index}:casClimb" value="${escapeAttr(row.casClimb)}" placeholder="Climb CAS" />
+                      </label>
+                      <label class="admin-field-cell" data-label="CAS cruise">
+                        <input data-admin-rpc-row="${index}:casCruise" value="${escapeAttr(row.casCruise)}" placeholder="Cruise CAS" />
+                      </label>
+                      <label class="admin-field-cell" data-label="GPH">
+                        <input data-admin-rpc-row="${index}:gph" value="${escapeAttr(row.gph)}" placeholder="GPH" />
+                      </label>
                     </div>
                   `;
                 }).join("")}
@@ -1374,13 +1422,13 @@
                 <div>REMARKS</div>
               </div>
               <div class="admin-airport-row">
-                <input id="admin-airport-code" list="admin-airport-code-list" value="${escapeAttr(state.admin.airportForm.code)}" />
-                <input id="admin-airport-cptAtis" value="${escapeAttr(state.admin.airportForm.cptAtis)}" />
-                <input id="admin-airport-depAap" value="${escapeAttr(state.admin.airportForm.depAap)}" />
-                <input id="admin-airport-twr" value="${escapeAttr(state.admin.airportForm.twr)}" />
-                <input id="admin-airport-gnd" value="${escapeAttr(state.admin.airportForm.gnd)}" />
-                <input id="admin-airport-fss" value="${escapeAttr(state.admin.airportForm.fss)}" />
-                <input id="admin-airport-remarks" value="${escapeAttr(state.admin.airportForm.remarks)}" />
+                <label class="admin-field-cell" data-label="Location"><input id="admin-airport-code" list="admin-airport-code-list" value="${escapeAttr(state.admin.airportForm.code)}" /></label>
+                <label class="admin-field-cell" data-label="CPT/ATIS"><input id="admin-airport-cptAtis" value="${escapeAttr(state.admin.airportForm.cptAtis)}" /></label>
+                <label class="admin-field-cell" data-label="DEP/AAP"><input id="admin-airport-depAap" value="${escapeAttr(state.admin.airportForm.depAap)}" /></label>
+                <label class="admin-field-cell" data-label="TWR"><input id="admin-airport-twr" value="${escapeAttr(state.admin.airportForm.twr)}" /></label>
+                <label class="admin-field-cell" data-label="GND"><input id="admin-airport-gnd" value="${escapeAttr(state.admin.airportForm.gnd)}" /></label>
+                <label class="admin-field-cell" data-label="FSS"><input id="admin-airport-fss" value="${escapeAttr(state.admin.airportForm.fss)}" /></label>
+                <label class="admin-field-cell" data-label="Remarks"><input id="admin-airport-remarks" value="${escapeAttr(state.admin.airportForm.remarks)}" /></label>
               </div>
             </section>
             <div class="entry-actions">
@@ -1484,7 +1532,7 @@
             </div>
             <div class="additional-info-subsection${additionalInfoPanel === "aircraft" ? "" : " hidden"}">
               <div class="entry-actions additional-info-inline-back">
-                <button class="back-link" id="admin-additional-back" type="button">Back</button>
+                ${renderBackButton("admin-additional-back", "Back to additional info panels")}
               </div>
               <h4 class="additional-info-subtitle">Aircraft Information</h4>
               <div class="additional-info-wrap">
@@ -1547,7 +1595,7 @@
       <div class="ui-scale">
       <main class="page">
         <section class="topbar centered navlog-topbar">
-          <div class="top-side navlog-back"><button class="back-link" id="back-to-setup">Back</button></div>
+          <div class="top-side navlog-back">${renderBackButton("back-to-setup", "Back to setup")}</div>
           <div class="top-center navlog-title-row">
             <h1>Navlog</h1>
           </div>
@@ -2146,10 +2194,12 @@
     const distanceToGo = getDistanceToGoDisplay(index);
     const isFirstRoute = index === 0;
     const isLastRoute = index === state.navlog.legs.length - 1;
+    const routeIsUnknown = String(leg.route || "").trim() && !isRecognizedRoute(leg.route);
+    const shouldShowUnknownRoute = routeIsUnknown && (state.view !== "ipad-kiosk" || leg._kioskCreated === true);
     const routeCellExtra = [
       isFirstRoute ? "first-route-hint" : "",
       isLastRoute ? "last-route-hint" : "",
-      state.view !== "ipad-kiosk" && String(leg.route || "").trim() && !isRecognizedRoute(leg.route) ? "route-unknown" : "",
+      shouldShowUnknownRoute ? "route-unknown" : "",
     ].filter(Boolean).join(" ");
     const rowClass = isPhoneKiosk
       ? `leg-row leg-row-phone${variationDeviationEnabled ? " leg-row-phone-vd" : ""}`
@@ -2403,8 +2453,12 @@
   }
 
   function renderLocationTable() {
+    const airportOptions = state.catalog.airports
+      .map((airport) => `<option value="${escapeAttr(airport.code)}"></option>`)
+      .join("");
     return `
       <section class="radio-block">
+        <datalist id="airport-location-catalog">${airportOptions}</datalist>
         <div class="radio-head">
           <div>LOCATION <button class="mini-plus inline" id="add-radio-row" type="button">+</button></div>
           <div>ATIS</div>
@@ -2425,7 +2479,7 @@
     return `
       <div class="radio-row">
         <div class="location-cell">
-          <input data-radio-field="${index}:location" value="${escapeAttr(row.location)}" />
+          <input data-radio-field="${index}:location" value="${escapeAttr(row.location)}" list="airport-location-catalog" />
           ${index > 0 ? `<button type="button" class="remove-chip" data-remove-radio="${index}">-</button>` : `<span class="blank-chip"></span>`}
         </div>
         <div><input data-radio-field="${index}:cptAtis" value="${escapeAttr(row.cptAtis)}" /></div>
@@ -3145,6 +3199,11 @@
 
     document.querySelectorAll("[data-radio-field$=':location']").forEach((input) => {
       wireKioskDelayedKeyboard(input);
+      const commitAirportLocation = (node) => {
+        if (!node) return;
+        const [indexText] = String(node.dataset.radioField || "").split(":");
+        autofillAirportRow(Number(indexText), node.value);
+      };
       input.addEventListener("input", (event) => {
         const [indexText] = event.target.dataset.radioField.split(":");
         const index = Number(indexText);
@@ -3163,11 +3222,16 @@
           render();
         }
       });
+      input.addEventListener("change", (event) => {
+        commitAirportLocation(event.target);
+      });
+      input.addEventListener("blur", (event) => {
+        commitAirportLocation(event.target);
+      });
       input.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
         event.preventDefault();
-        const [indexText] = event.target.dataset.radioField.split(":");
-        autofillAirportRow(Number(indexText), event.target.value);
+        commitAirportLocation(event.target);
       });
     });
 
@@ -3265,7 +3329,7 @@
     let pointerId = null;
     let committed = false;
     const holdMs = 2000;
-    const maxMovePx = 30;
+    const maxMovePx = 36;
 
     const setProgress = (value) => {
       if (!cell) return;
@@ -3307,9 +3371,9 @@
 
     const maybeCancelOnMove = (clientX, clientY) => {
       if (!startedAt || committed) return;
-      const dx = Math.abs((Number(clientX) || 0) - startX);
-      const dy = Math.abs((Number(clientY) || 0) - startY);
-      if (dx > maxMovePx || dy > maxMovePx) clear();
+      const dx = (Number(clientX) || 0) - startX;
+      const dy = (Number(clientY) || 0) - startY;
+      if (Math.hypot(dx, dy) > maxMovePx) clear();
     };
 
     const commit = () => {
@@ -3709,7 +3773,9 @@
     const targetIndex = direction === "above"
       ? Math.max(1, Math.min(index, lastIndex))
       : Math.max(1, Math.min(index + 1, lastIndex));
-    state.navlog.legs.splice(targetIndex, 0, createBlankLeg(""));
+    const insertedLeg = createBlankLeg("");
+    insertedLeg._kioskCreated = true;
+    state.navlog.legs.splice(targetIndex, 0, insertedLeg);
     normalizeDestinationLegPlacement(state.navlog);
     persistKioskPayload();
     state.meta.kioskRouteEstimate = createEmptyKioskRouteEstimateState();
@@ -3737,7 +3803,7 @@
     let started = false;
     let committed = false;
     const holdMs = 2000;
-    const maxMovePx = 36;
+    const maxMovePx = 44;
 
     const setProgress = (value) => {
       if (!cell) return;
@@ -3816,9 +3882,9 @@
 
     const maybeCancelOnMove = (clientX, clientY) => {
       if (!started) return;
-      const dx = Math.abs((Number(clientX) || 0) - startX);
-      const dy = Math.abs((Number(clientY) || 0) - startY);
-      if (dx > maxMovePx || dy > maxMovePx) clear();
+      const dx = (Number(clientX) || 0) - startX;
+      const dy = (Number(clientY) || 0) - startY;
+      if (Math.hypot(dx, dy) > maxMovePx) clear();
     };
 
     if (window.PointerEvent) {
