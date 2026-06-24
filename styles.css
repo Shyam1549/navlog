@@ -41,6 +41,11 @@ input[list]::-webkit-calendar-picker-indicator {
   opacity: 0 !important;
 }
 
+input[list]::-webkit-list-button {
+  display: none !important;
+  opacity: 0 !important;
+}
+
 .entry-page,
 .page {
   width: min(1320px, 100%);
@@ -610,13 +615,27 @@ body.kiosk-mode .time-head {
 
 .admin-code-input-wrap {
   position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px;
-  align-items: stretch;
+  display: block;
 }
 
 .admin-code-input-wrap input {
-  border-right: 0;
+  border-right: 1px solid rgba(46, 41, 35, 0.14);
+}
+
+.admin-row-spacer {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.admin-preset-lock-band {
+  display: flex;
+  justify-content: flex-end;
+  margin: 10px 0 8px;
+}
+
+.admin-lock-btn {
+  min-width: 42px;
+  padding: 8px 10px;
+  font-size: 1rem;
 }
 
 .admin-code-picker {
@@ -817,6 +836,28 @@ body.kiosk-mode .time-head {
 .back-link { border-radius: 12px; padding: 10px 14px; }
 .action.primary { background: var(--ink); color: var(--paper); }
 .back-link { color: var(--accent); }
+
+body.iphone-ui .back-link {
+  position: relative;
+  min-width: 38px;
+  min-height: 38px;
+  padding: 0;
+  font-size: 0;
+  line-height: 0;
+  text-indent: -9999px;
+}
+
+body.iphone-ui .back-link::before {
+  content: "←";
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 1.1rem;
+  line-height: 1;
+  text-indent: 0;
+}
 
 .topbar.centered {
   padding: 16px 18px;
@@ -1098,6 +1139,7 @@ body.kiosk-mode .ipad-kiosk-page {
 .kiosk-estimate-actions {
   margin-top: 12px;
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
 }
@@ -1248,12 +1290,12 @@ body.kiosk-mode .ipad-kiosk-page {
 }
 
 .kiosk-phone-toc-panel {
-  border: 0;
-  background: transparent;
-  padding: 0;
+  border: 2px solid rgba(46, 41, 35, 0.35);
+  background: rgba(255, 255, 255, 0.78);
+  padding: 6px;
   overflow-x: auto;
   overflow-y: hidden;
-  box-shadow: none;
+  box-shadow: inset 0 0 0 1px rgba(33, 76, 90, 0.12);
 }
 
 .kiosk-phone-header-scroll .sheet-header {
@@ -1581,6 +1623,13 @@ body.kiosk-mode .header-box input::placeholder {
 }
 
 body.kiosk-mode .field input[data-leg-field$=":at"] {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body.kiosk-mode .route-cell input[data-leg-field$=":route"] {
   touch-action: none;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
@@ -2607,6 +2656,11 @@ body.kiosk-phone-mode .route-progress-dot {
   position: relative;
 }
 
+body:not(.kiosk-mode) .route-unknown input {
+  color: #b32525;
+  -webkit-text-fill-color: #b32525;
+}
+
 .route-main,
 .location-cell {
   display: grid;
@@ -2625,6 +2679,17 @@ body.kiosk-phone-mode .route-progress-dot {
   -webkit-appearance: none;
   appearance: none;
   background-image: none !important;
+}
+
+body.iphone-ui .route-main input[list] {
+  padding-right: 12px;
+  background-image: none !important;
+}
+
+body.iphone-ui .route-main input[list]::-webkit-calendar-picker-indicator,
+body.iphone-ui .route-main input[list]::-webkit-list-button {
+  display: none !important;
+  opacity: 0 !important;
 }
 
 .route-main input {
@@ -3472,6 +3537,39 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     padding: 10px;
   }
 
+  body.iphone-ui .admin-shell {
+    gap: 10px;
+  }
+
+  body.iphone-ui .admin-menu {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body.iphone-ui .admin-preset-table,
+  body.iphone-ui .admin-airport-table {
+    border-radius: 14px;
+  }
+
+  body.iphone-ui .admin-preset-head,
+  body.iphone-ui .admin-preset-row {
+    min-width: 560px;
+  }
+
+  body.iphone-ui .admin-waypoint-table .admin-preset-head,
+  body.iphone-ui .admin-waypoint-row,
+  body.iphone-ui .admin-rpc-table .admin-preset-head,
+  body.iphone-ui .admin-rpc-row {
+    min-width: 660px;
+  }
+
+  body.iphone-ui .admin-code-input-wrap input {
+    min-width: 0;
+  }
+
+  body.iphone-ui .admin-row-spacer {
+    min-height: var(--admin-row-height);
+  }
+
   .additional-info-wrap {
     border-radius: 9px;
   }
@@ -3709,7 +3807,15 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 .pdf-export .field,
 .pdf-export .atis-cell,
 .pdf-export .header-box,
-.pdf-export .head-cell { overflow: hidden; }
+.pdf-export .head-cell,
+.pdf-export .toc-tod-card,
+.pdf-export .toc-value-wrap,
+.pdf-export .radio-row > div {
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
 .pdf-export .field input,
 .pdf-export .radio-row input,
@@ -3722,6 +3828,10 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   padding-top: 0 !important;
   padding-bottom: 0 !important;
   font-size: 1.08em !important;
+}
+
+.pdf-export .toc-value-wrap {
+  flex-direction: column;
 }
 .pdf-export input::placeholder { color: transparent !important; }
 .pdf-export .head-format-note { display: none !important; }
