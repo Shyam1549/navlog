@@ -1,18 +1,4 @@
 ﻿(function () {
-  const RPC_TO_AIRCRAFT = {
-    "832": "C152",
-    "840": "C152",
-    "860": "C152",
-    "831": "C152",
-    "8749": "C152",
-    "8596": "C152",
-    "8152": "C152",
-    "8804": "C152",
-    "8747": "C152",
-    "3288": "C172",
-    "833": "C172",
-    "8734": "Seneca",
-  };
   const SUPABASE_URL_KEY = "navlog_supabase_url";
   const SUPABASE_ANON_KEY = "navlog_supabase_anon_key";
   const ADMIN_REMEMBER_KEY = "navlog_admin_remember";
@@ -127,20 +113,6 @@
     },
   };
   const TRIG_TOLERANCE = 1e-6;
-  const DEFAULT_RPC_REGISTRY = [
-    { registration: "832", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    { registration: "840", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    { registration: "860", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    { registration: "831", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    { registration: "8749", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    { registration: "8596", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    { registration: "8152", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    { registration: "8804", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    { registration: "8747", aircraftType: "C152", casClimb: "70", casCruise: "85", gph: "6" },
-    { registration: "3288", aircraftType: "C172", casClimb: "", casCruise: "", gph: "" },
-    { registration: "833", aircraftType: "C172", casClimb: "", casCruise: "", gph: "" },
-    { registration: "8734", aircraftType: "Seneca", casClimb: "", casCruise: "", gph: "" },
-  ];
   const FEET_PER_METER = 3.280839895013123;
   const KNOTS_PER_MPH = 0.868976;
   const KNOTS_PER_KMH = 1 / 1.852;
@@ -737,12 +709,16 @@
       const current = catalog.get(normalized.registration) || {};
       catalog.set(normalized.registration, {
         ...current,
-        ...normalized,
+        id: normalized.id || current.id || normalized.registration,
+        registration: normalized.registration,
+        aircraftType: normalized.aircraftType || current.aircraftType || "",
+        casClimb: normalized.casClimb || current.casClimb || "",
+        casCruise: normalized.casCruise || current.casCruise || "",
+        gph: normalized.gph || current.gph || "",
         source,
       });
     };
 
-    DEFAULT_RPC_REGISTRY.forEach((record) => addEntry(record, "default"));
     (Array.isArray(state.catalog.rpcRegistry) ? state.catalog.rpcRegistry : []).forEach((record) => addEntry(record, "catalog"));
     (Array.isArray(state.admin.rpcRegistry) ? state.admin.rpcRegistry : []).forEach((record) => addEntry(record, "admin"));
     (Array.isArray(state.admin && state.admin.rpcRegistryForm && state.admin.rpcRegistryForm.rows) ? state.admin.rpcRegistryForm.rows : [])
@@ -862,6 +838,7 @@
   }
 
   function render() {
+    captureViewScrollState();
     if (state.view !== "ipad-kiosk") document.body.classList.remove("kiosk-mode");
     document.body.classList.remove("kiosk-phone-mode");
     document.body.classList.remove("ipad-desktop-scale");
@@ -900,11 +877,40 @@
       return;
     }
     syncKioskGpsTrackingForView();
+    restoreViewScrollState();
     wireUtcAdminTrigger();
     wireFooterActions();
     wireBugReportModal();
     wireAnnouncementModal();
     if (state.view === "manual") typesetManualMath();
+  }
+
+  function captureViewScrollState() {
+    if (state.view !== "navlog" || !isIphoneDevice()) return;
+    const wrap = document.querySelector(".sheet-wrap");
+    if (!wrap) return;
+    state.meta.viewScrollState = {
+      view: "navlog",
+      sheetWrap: {
+        left: wrap.scrollLeft,
+        top: wrap.scrollTop,
+      },
+    };
+  }
+
+  function restoreViewScrollState() {
+    const snapshot = state.meta && state.meta.viewScrollState ? state.meta.viewScrollState : null;
+    if (!snapshot || snapshot.view !== "navlog" || state.view !== "navlog" || !isIphoneDevice()) return;
+    const apply = () => {
+      const wrap = document.querySelector(".sheet-wrap");
+      if (!wrap) return;
+      wrap.scrollLeft = Number(snapshot.sheetWrap && snapshot.sheetWrap.left) || 0;
+      wrap.scrollTop = Number(snapshot.sheetWrap && snapshot.sheetWrap.top) || 0;
+    };
+    requestAnimationFrame(() => {
+      apply();
+      requestAnimationFrame(apply);
+    });
   }
 
   function createDefaultSettings() {
@@ -1301,8 +1307,7 @@
               </label>
             </div>
             <div class="admin-preset-lock-rail">
-              <span></span>
-              <span></span>
+              <div class="admin-lock-caption">TC / DIST</div>
               <button class="action admin-lock-btn${presetLockEnabled ? " active" : ""}" id="admin-preset-lock" type="button" aria-label="${presetLockEnabled ? "Unlock TC and distance overrides" : "Lock TC and distance overrides"}" title="${presetLockEnabled ? "Unlock TC and distance overrides" : "Lock TC and distance overrides"}">${renderLockGlyph(presetLockEnabled)}</button>
             </div>
             <div class="preset-status ${presetLookup.active ? (presetLookup.exists ? "available" : "missing") : ""}">${presetLookup.active ? (presetLookup.exists ? "preset avbl" : "preset unavbl") : ""}</div>
@@ -1386,16 +1391,16 @@
                         <input data-admin-rpc-row="${index}:registration" value="${escapeAttr(row.registration)}" list="admin-rpc-code-list" />
                       </label>
                       <label class="admin-field-cell" data-label="Aircraft type">
-                        <input data-admin-rpc-row="${index}:aircraftType" value="${escapeAttr(row.aircraftType)}" placeholder="Aircraft type" />
+                        <input data-admin-rpc-row="${index}:aircraftType" value="${escapeAttr(row.aircraftType)}" />
                       </label>
                       <label class="admin-field-cell" data-label="CAS climb">
-                        <input data-admin-rpc-row="${index}:casClimb" value="${escapeAttr(row.casClimb)}" placeholder="Climb CAS" />
+                        <input data-admin-rpc-row="${index}:casClimb" value="${escapeAttr(row.casClimb)}" />
                       </label>
                       <label class="admin-field-cell" data-label="CAS cruise">
-                        <input data-admin-rpc-row="${index}:casCruise" value="${escapeAttr(row.casCruise)}" placeholder="Cruise CAS" />
+                        <input data-admin-rpc-row="${index}:casCruise" value="${escapeAttr(row.casCruise)}" />
                       </label>
                       <label class="admin-field-cell" data-label="GPH">
-                        <input data-admin-rpc-row="${index}:gph" value="${escapeAttr(row.gph)}" placeholder="GPH" />
+                        <input data-admin-rpc-row="${index}:gph" value="${escapeAttr(row.gph)}" />
                       </label>
                     </div>
                   `;
@@ -2685,10 +2690,11 @@
     document.getElementById("add-leg").addEventListener("click", () => {
       const newLeg = createBlankLeg("");
       state.navlog.legs.splice(state.navlog.legs.length - 1, 0, newLeg);
-      const aircraftFromRpc = getMappedAircraftFromRpc(state.navlog.header.rpCNo);
-      if (aircraftFromRpc === "C152") {
+      const rpcRecord = getRpcRegistryRecord(state.navlog.header.rpCNo);
+      const cruiseCas = String(rpcRecord && rpcRecord.casCruise ? rpcRecord.casCruise : "").trim();
+      if (cruiseCas) {
         const insertedIndex = Math.max(1, state.navlog.legs.length - 2);
-        setLegCasDefault(insertedIndex, "85");
+        setLegCasDefault(insertedIndex, cruiseCas);
       }
       render();
     });
@@ -5737,10 +5743,6 @@
     waypointRowInputs.forEach((node) => {
       node.addEventListener("input", () => {
         readWaypointFormFromInputs();
-        if (ensureTrailingBlankRow(state.admin.waypointForm.rows, createEmptyWaypointRow, (row) => Boolean(String(row.name || "").trim() || String(row.coord || "").trim()))) {
-          render();
-          return;
-        }
         syncAdminWaypointFormUi();
       });
     });
@@ -5763,10 +5765,6 @@
     rpcRowInputs.forEach((node) => {
       node.addEventListener("input", () => {
         readRpcRegistryFromInputs();
-        if (ensureTrailingBlankRow(state.admin.rpcRegistryForm.rows, createEmptyRpcRegistryRow, (row) => Boolean(String(row.registration || "").trim() || String(row.aircraftType || "").trim() || String(row.casClimb || "").trim() || String(row.casCruise || "").trim() || String(row.gph || "").trim()))) {
-          render();
-          return;
-        }
         syncAdminRpcFormUi();
       });
     });
@@ -6166,10 +6164,10 @@
         casCruise: row.cas_cruise,
         gph: row.gph,
       }));
-      state.admin.waypointForm.rows = waypointRowsFromRecords(state.admin.waypoints);
-      state.admin.rpcRegistryForm.rows = rpcRowsFromRecords(state.admin.rpcRegistry);
-      ensureTrailingBlankRow(state.admin.waypointForm.rows, createEmptyWaypointRow, (row) => Boolean(String(row.name || "").trim() || String(row.coord || "").trim()));
-      ensureTrailingBlankRow(state.admin.rpcRegistryForm.rows, createEmptyRpcRegistryRow, (row) => Boolean(String(row.registration || "").trim() || String(row.aircraftType || "").trim() || String(row.casClimb || "").trim() || String(row.casCruise || "").trim() || String(row.gph || "").trim()));
+      if (state.admin.selectedWaypointName) selectWaypointForEditing(state.admin.selectedWaypointName);
+      else state.admin.waypointForm = createEmptyWaypointForm();
+      if (state.admin.selectedRpcRegistration) selectRpcForEditing(state.admin.selectedRpcRegistration);
+      else state.admin.rpcRegistryForm = createEmptyRpcRegistryForm();
       const contentMap = {};
       (contentResult.data || []).forEach((row) => {
         contentMap[String(row.key || "").toLowerCase()] = String(row.body_html || "");
@@ -6491,7 +6489,7 @@
   }
 
   function normalizeWaypointRows(rows) {
-    const source = Array.isArray(rows) ? rows : [];
+    const source = Array.isArray(rows) ? rows.slice(0, 1) : [];
     const normalized = source.map((row) => ({
       name: String(row && row.name != null ? row.name : ""),
       coord: String(row && row.coord != null ? row.coord : ""),
@@ -6513,7 +6511,6 @@
   }
 
   function readRpcRegistryFromInputs() {
-    const registrationInput = document.getElementById("admin-rpc-registration");
     const rowInputs = Array.from(document.querySelectorAll("[data-admin-rpc-row]"));
     const rows = [];
     rowInputs.forEach((node) => {
@@ -6525,14 +6522,13 @@
       rows[index][field] = String(node.value || "");
     });
     state.admin.rpcRegistryForm = {
-      registration: normalizeCode(registrationInput ? registrationInput.value : state.admin.rpcRegistryForm.registration),
       rows: normalizeRpcRegistryRows(rows.length ? rows : state.admin.rpcRegistryForm.rows),
     };
     syncAdminRpcAutofill();
   }
 
   function normalizeRpcRegistryRows(rows) {
-    const source = Array.isArray(rows) ? rows : [];
+    const source = Array.isArray(rows) ? rows.slice(0, 1) : [];
     const normalized = source.map((row) => ({
       registration: String(row && row.registration != null ? row.registration : ""),
       aircraftType: String(row && row.aircraftType != null ? row.aircraftType : ""),
@@ -6593,7 +6589,6 @@
         coord: selected.coord,
       }]),
     };
-    ensureTrailingBlankRow(state.admin.waypointForm.rows, createEmptyWaypointRow, (row) => Boolean(String(row.name || "").trim() || String(row.coord || "").trim()));
   }
 
   function selectRpcForEditing(registration) {
@@ -6614,7 +6609,6 @@
     state.admin.rpcRegistryForm = {
       rows: normalizeRpcRegistryRows([selected]),
     };
-    ensureTrailingBlankRow(state.admin.rpcRegistryForm.rows, createEmptyRpcRegistryRow, (row) => Boolean(String(row.registration || "").trim() || String(row.aircraftType || "").trim() || String(row.casClimb || "").trim() || String(row.casCruise || "").trim() || String(row.gph || "").trim()));
   }
 
   function collectPresetAirportCodes() {
@@ -6745,12 +6739,9 @@
       render();
       return;
     }
-    const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
-    const payloadRows = rows
-      .map((row) => normalizeWaypointRecord({ name: row.name, coord: row.coord }))
-      .filter((row) => row.name);
-    if (!payloadRows.length) {
-      state.admin.error = "Add at least one waypoint row before saving.";
+    const row = normalizeWaypointRecord(normalizeWaypointRows(state.admin.waypointForm.rows)[0]);
+    if (!row.name) {
+      state.admin.error = "Enter a waypoint before saving.";
       state.admin.notice = "";
       render();
       return;
@@ -6758,24 +6749,15 @@
     state.admin.error = "";
     state.admin.notice = "";
     try {
-      const upserts = payloadRows.map((row) => supabaseClient.from("waypoints").upsert({
+      const result = await supabaseClient.from("waypoints").upsert({
         id: row.id || row.name,
         name: row.name,
         coord: row.coord,
-      }, { onConflict: "name" }));
-      const results = await Promise.all(upserts);
-      const failed = results.find((result) => result.error);
-      if (failed) throw failed.error;
-      const keepNames = new Set(payloadRows.map((row) => row.name));
-      const staleRows = (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : []).filter((row) => row && !keepNames.has(normalizeCode(row.name)));
-      if (staleRows.length) {
-        const deletes = staleRows.map((row) => supabaseClient.from("waypoints").delete().eq("name", normalizeCode(row.name)));
-        const deleteResults = await Promise.all(deletes);
-        const deleteFailed = deleteResults.find((result) => result.error);
-        if (deleteFailed) throw deleteFailed.error;
-      }
+      }, { onConflict: "name" });
+      if (result.error) throw result.error;
+      state.admin.selectedWaypointName = row.name;
       await loadAdminData();
-      state.admin.notice = "Waypoints saved.";
+      state.admin.notice = "Waypoint saved.";
       render();
     } catch (error) {
       state.admin.error = error && error.message ? error.message : "Could not save waypoints.";
@@ -6784,15 +6766,39 @@
   }
 
   async function deleteWaypointRowFromAdmin() {
-    const changed = deleteAdminFormRow(
-      "waypointForm",
-      createEmptyWaypointRow,
-      (row) => Boolean(String(row.name || "").trim() || String(row.coord || "").trim()),
-    );
-    if (!changed) return;
-    ensureTrailingBlankRow(state.admin.waypointForm.rows, createEmptyWaypointRow, (row) => Boolean(String(row.name || "").trim() || String(row.coord || "").trim()));
-    syncAdminWaypointFormUi();
-    render();
+    const row = normalizeWaypointRecord(normalizeWaypointRows(state.admin.waypointForm.rows)[0]);
+    if (!row.name) {
+      state.admin.waypointForm = createEmptyWaypointForm();
+      syncAdminWaypointFormUi();
+      render();
+      return;
+    }
+    const exists = (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : []).some((waypoint) => normalizeCode(waypoint.name) === row.name);
+    if (!exists) {
+      state.admin.waypointForm = createEmptyWaypointForm();
+      state.admin.selectedWaypointName = "";
+      syncAdminWaypointFormUi();
+      render();
+      return;
+    }
+    const ok = await connectSupabaseClient(false);
+    if (!ok) {
+      render();
+      return;
+    }
+    if (!window.confirm("Delete this waypoint?")) return;
+    try {
+      const result = await supabaseClient.from("waypoints").delete().eq("name", row.name);
+      if (result.error) throw result.error;
+      state.admin.selectedWaypointName = "";
+      state.admin.waypointForm = createEmptyWaypointForm();
+      await loadAdminData();
+      state.admin.notice = "Waypoint deleted.";
+      render();
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Could not delete waypoint.";
+      render();
+    }
   }
 
   async function saveRpcRegistryFromAdmin() {
@@ -6801,18 +6807,9 @@
       render();
       return;
     }
-    const rows = normalizeRpcRegistryRows(state.admin.rpcRegistryForm.rows);
-    const payloadRows = rows
-      .map((row) => normalizeRpcRegistryRecord({
-        registration: row.registration,
-        aircraftType: row.aircraftType,
-        casClimb: row.casClimb,
-        casCruise: row.casCruise,
-        gph: row.gph,
-      }))
-      .filter((row) => row.registration);
-    if (!payloadRows.length) {
-      state.admin.error = "Add at least one RP-C row before saving.";
+    const row = normalizeRpcRegistryRecord(normalizeRpcRegistryRows(state.admin.rpcRegistryForm.rows)[0]);
+    if (!row.registration) {
+      state.admin.error = "Enter an RP-C registration before saving.";
       state.admin.notice = "";
       render();
       return;
@@ -6820,27 +6817,18 @@
     state.admin.error = "";
     state.admin.notice = "";
     try {
-      const upserts = payloadRows.map((row) => supabaseClient.from("rpc_registry").upsert({
+      const result = await supabaseClient.from("rpc_registry").upsert({
         id: row.id || row.registration,
         registration: row.registration,
         aircraft_type: row.aircraftType,
         cas_climb: row.casClimb,
         cas_cruise: row.casCruise,
         gph: row.gph,
-      }, { onConflict: "registration" }));
-      const results = await Promise.all(upserts);
-      const failed = results.find((result) => result.error);
-      if (failed) throw failed.error;
-      const keepRegs = new Set(payloadRows.map((row) => row.registration));
-      const staleRows = (Array.isArray(state.admin.rpcRegistry) ? state.admin.rpcRegistry : []).filter((row) => row && !keepRegs.has(normalizeCode(row.registration)));
-      if (staleRows.length) {
-        const deletes = staleRows.map((row) => supabaseClient.from("rpc_registry").delete().eq("registration", normalizeCode(row.registration)));
-        const deleteResults = await Promise.all(deletes);
-        const deleteFailed = deleteResults.find((result) => result.error);
-        if (deleteFailed) throw deleteFailed.error;
-      }
+      }, { onConflict: "registration" });
+      if (result.error) throw result.error;
+      state.admin.selectedRpcRegistration = row.registration;
       await loadAdminData();
-      state.admin.notice = "RP-C registry saved.";
+      state.admin.notice = "RP-C record saved.";
       render();
     } catch (error) {
       state.admin.error = error && error.message ? error.message : "Could not save RP-C registry.";
@@ -6849,21 +6837,39 @@
   }
 
   async function deleteRpcRowFromAdmin() {
-    const changed = deleteAdminFormRow(
-      "rpcRegistryForm",
-      createEmptyRpcRegistryRow,
-      (row) => Boolean(
-        String(row.registration || "").trim()
-        || String(row.aircraftType || "").trim()
-        || String(row.casClimb || "").trim()
-        || String(row.casCruise || "").trim()
-        || String(row.gph || "").trim()
-      ),
-    );
-    if (!changed) return;
-    ensureTrailingBlankRow(state.admin.rpcRegistryForm.rows, createEmptyRpcRegistryRow, (row) => Boolean(String(row.registration || "").trim() || String(row.aircraftType || "").trim() || String(row.casClimb || "").trim() || String(row.casCruise || "").trim() || String(row.gph || "").trim()));
-    syncAdminRpcFormUi();
-    render();
+    const row = normalizeRpcRegistryRecord(normalizeRpcRegistryRows(state.admin.rpcRegistryForm.rows)[0]);
+    if (!row.registration) {
+      state.admin.rpcRegistryForm = createEmptyRpcRegistryForm();
+      syncAdminRpcFormUi();
+      render();
+      return;
+    }
+    const exists = (Array.isArray(state.admin.rpcRegistry) ? state.admin.rpcRegistry : []).some((record) => normalizeCode(record.registration) === row.registration);
+    if (!exists) {
+      state.admin.rpcRegistryForm = createEmptyRpcRegistryForm();
+      state.admin.selectedRpcRegistration = "";
+      syncAdminRpcFormUi();
+      render();
+      return;
+    }
+    const ok = await connectSupabaseClient(false);
+    if (!ok) {
+      render();
+      return;
+    }
+    if (!window.confirm("Delete this RP-C record?")) return;
+    try {
+      const result = await supabaseClient.from("rpc_registry").delete().eq("registration", row.registration);
+      if (result.error) throw result.error;
+      state.admin.selectedRpcRegistration = "";
+      state.admin.rpcRegistryForm = createEmptyRpcRegistryForm();
+      await loadAdminData();
+      state.admin.notice = "RP-C record deleted.";
+      render();
+    } catch (error) {
+      state.admin.error = error && error.message ? error.message : "Could not delete RP-C record.";
+      render();
+    }
   }
 
   async function deletePresetFromAdmin() {
@@ -7126,10 +7132,10 @@
     });
     const lockButton = document.getElementById("admin-preset-lock");
     if (lockButton) {
-      lockButton.textContent = preset.locked ? "🔒" : "🔓";
+      lockButton.innerHTML = renderLockGlyph(Boolean(preset.locked));
       lockButton.classList.toggle("active", Boolean(preset.locked));
-      lockButton.setAttribute("aria-label", preset.locked ? "Unlock preset values" : "Lock preset values");
-      lockButton.setAttribute("title", preset.locked ? "Unlock preset values" : "Lock preset values");
+      lockButton.setAttribute("aria-label", preset.locked ? "Unlock TC and distance overrides" : "Lock TC and distance overrides");
+      lockButton.setAttribute("title", preset.locked ? "Unlock TC and distance overrides" : "Lock TC and distance overrides");
     }
   }
 
@@ -8272,8 +8278,7 @@
   function getMappedAircraftFromRpc(rpcValue) {
     const record = getRpcRegistryRecord(rpcValue);
     if (record && record.aircraftType) return String(record.aircraftType || "").trim();
-    const key = String(rpcValue || "").trim();
-    return key ? String(RPC_TO_AIRCRAFT[key] || "") : "";
+    return "";
   }
 
   function applyRpcAutofillFromHeader(rpcValue) {

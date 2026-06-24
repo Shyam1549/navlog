@@ -898,10 +898,16 @@ body.kiosk-mode .time-head {
   height: var(--admin-row-height);
   min-height: var(--admin-row-height);
   border: 0;
+  border-radius: 0;
   border-right: 1px solid rgba(46, 41, 35, 0.12);
   padding: 9px 12px;
   background: transparent;
   line-height: 1.15;
+}
+
+.admin-panel-wrap input:not([type="checkbox"]):not([type="radio"]),
+.admin-panel-wrap textarea {
+  border-radius: 0;
 }
 
 .admin-preset-row > :last-child input,
@@ -914,15 +920,27 @@ body.kiosk-mode .time-head {
 .admin-preset-lock-rail {
   display: grid;
   align-items: center;
+  min-height: 48px;
   margin: 10px 0 8px;
 }
 
+.admin-lock-caption {
+  grid-column: 3;
+  justify-self: end;
+  margin-right: 10px;
+  color: #355763;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
 .admin-lock-btn {
-  grid-column: 3 / span 2;
-  justify-self: center;
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
+  grid-column: 4;
+  justify-self: start;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
   padding: 0;
   border-radius: 12px;
   display: inline-flex;
@@ -931,11 +949,11 @@ body.kiosk-mode .time-head {
 }
 
 .admin-lock-glyph {
-  width: 18px;
-  height: 18px;
+  width: 25px;
+  height: 25px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.8;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -3813,7 +3831,7 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     min-width: 0;
     min-height: 44px;
     border: 1px solid rgba(46, 41, 35, 0.14);
-    border-radius: 12px;
+    border-radius: 0;
     background: rgba(248, 246, 240, 0.94);
   }
 
@@ -3825,20 +3843,28 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   }
 
   body.iphone-ui .admin-preset-lock-rail {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr auto;
     margin: 8px 0 10px;
+    padding: 0 2px;
   }
 
-  body.iphone-ui .admin-preset-lock-rail > span {
-    display: none;
+  body.iphone-ui .admin-lock-caption {
+    grid-column: 1;
+    justify-self: end;
+    margin-right: 10px;
   }
 
   body.iphone-ui .admin-lock-btn {
-    grid-column: auto;
-    justify-self: end;
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
+    grid-column: 2;
+    justify-self: start;
+    width: 48px;
+    min-width: 48px;
+    height: 48px;
+  }
+
+  body.iphone-ui .admin-lock-glyph {
+    width: 28px;
+    height: 28px;
   }
 
   .additional-info-wrap {
@@ -3878,17 +3904,17 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     font-size: clamp(1.35rem, 7vw, 1.72rem);
   }
 
-  .navlog-topbar {
-    grid-template-columns: 1fr;
+  body.iphone-ui .navlog-topbar {
+    grid-template-columns: minmax(82px, 0.85fr) minmax(0, 2.15fr);
     grid-template-areas:
-      "title"
-      "clock"
-      "actions";
+      "title title"
+      "clock actions";
+    column-gap: 8px;
     row-gap: 8px;
     padding: 10px 12px 12px;
   }
 
-  .navlog-topbar .navlog-back {
+  body.iphone-ui .navlog-topbar .navlog-back {
     position: absolute !important;
     top: 10px !important;
     left: 10px !important;
@@ -3899,29 +3925,48 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     justify-self: auto;
   }
 
-  .navlog-topbar .top-side.navlog-back {
+  body.iphone-ui .navlog-topbar .top-side.navlog-back {
     justify-content: flex-start;
   }
 
-  .navlog-topbar .navlog-back .back-link {
+  body.iphone-ui .navlog-topbar .navlog-back .back-link {
     width: 46px;
     min-width: 46px;
     height: 46px;
     border-radius: 14px;
   }
 
-  .navlog-topbar .navlog-back .back-link .back-link-icon {
+  body.iphone-ui .navlog-topbar .navlog-back .back-link .back-link-icon {
     font-size: 1.28rem;
   }
 
-  .navlog-topbar .navlog-title-row,
-  .navlog-topbar .navlog-clock,
-  .navlog-topbar .navlog-actions {
+  body.iphone-ui .navlog-topbar .navlog-title-row,
+  body.iphone-ui .navlog-topbar .navlog-clock,
+  body.iphone-ui .navlog-topbar .navlog-actions {
     justify-self: center;
   }
 
-  .navlog-topbar .navlog-actions {
-    justify-content: center;
+  body.iphone-ui .navlog-topbar .navlog-title-row {
+    width: 100%;
+    min-height: 46px;
+  }
+
+  body.iphone-ui .navlog-topbar .navlog-clock {
+    width: 100%;
+  }
+
+  body.iphone-ui .navlog-topbar .navlog-clock .utc-pill {
+    width: 100%;
+    min-width: 0;
+    padding: 9px 5px;
+    font-size: 0.78rem;
+    white-space: nowrap;
+  }
+
+  body.iphone-ui .navlog-topbar .navlog-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 7px;
     width: 100%;
   }
 
@@ -3930,13 +3975,16 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     border-radius: 14px;
   }
 
-  .navlog-topbar .navlog-actions {
-    gap: 7px;
+  body.iphone-ui .navlog-topbar .navlog-actions .action,
+  body.iphone-ui .navlog-topbar .navlog-back .back-link {
+    min-width: 0;
   }
 
-  .navlog-topbar .navlog-actions .action,
-  .navlog-topbar .navlog-back .back-link {
-    min-width: 0;
+  body.iphone-ui .navlog-topbar .navlog-actions .action {
+    width: 100%;
+    padding: 9px 4px;
+    font-size: 0.78rem;
+    white-space: nowrap;
   }
 
   .sheet {
