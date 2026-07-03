@@ -583,6 +583,9 @@ body.kiosk-mode .time-head {
 
 .admin-preset-head > div:first-child {
   justify-content: flex-start;
+  flex-wrap: nowrap;
+  gap: 8px;
+  white-space: nowrap;
   padding-left: 8px;
 }
 
@@ -823,6 +826,7 @@ body.kiosk-mode .time-head {
   display: flex;
   align-items: center;
   justify-content: center;
+  min-height: var(--admin-row-height);
   border-left: 1px solid rgba(46, 41, 35, 0.14);
   background: rgba(255, 255, 255, 0.26);
 }
@@ -946,22 +950,24 @@ body.kiosk-mode .time-head {
 .admin-lock-btn {
   grid-column: 4;
   justify-self: start;
-  width: 38px;
-  min-width: 38px;
-  height: 38px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  min-height: 30px;
   padding: 0;
-  border-radius: 12px;
+  border-radius: 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  overflow: visible;
 }
 
 .admin-lock-glyph {
-  width: 50px;
-  height: 50px;
+  width: 72px;
+  height: 72px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2.2;
+  stroke-width: 2.4;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -3502,10 +3508,32 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   display: grid;
   gap: 4px;
   padding: 6px;
+  max-height: 138px;
+  overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid rgba(46, 41, 35, 0.16);
   border-radius: 12px;
   background: #fffdf9;
   box-shadow: 0 16px 28px rgba(18, 47, 58, 0.12);
+}
+
+.suggestion-menu::-webkit-scrollbar {
+  width: 8px;
+}
+
+.suggestion-menu::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(33, 76, 90, 0.28);
+}
+
+.kiosk-chart-launch {
+  display: flex;
+  justify-content: center;
+  margin: 10px 0 12px;
+}
+
+.kiosk-chart-launch-btn {
+  min-width: 220px;
 }
 
 .suggestion-option {
@@ -4138,14 +4166,15 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   body.iphone-ui .admin-lock-btn {
     grid-column: 2;
     justify-self: start;
-    width: 34px;
-    min-width: 34px;
-    height: 34px;
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
   }
 
   body.iphone-ui .admin-lock-glyph {
-    width: 44px;
-    height: 44px;
+    width: 60px;
+    height: 60px;
   }
 
   .additional-info-wrap {

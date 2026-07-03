@@ -597,7 +597,7 @@
   function filterSuggestionValues(values, query) {
     const needle = normalizeCode(query);
     const list = Array.from(new Set((Array.isArray(values) ? values : []).map((value) => String(value || "").trim()).filter(Boolean)));
-    if (!needle) return list.slice(0, 3);
+    if (!needle) return list;
     const prefixMatches = [];
     const containsMatches = [];
     list.forEach((value) => {
@@ -606,7 +606,7 @@
       if (normalized.startsWith(needle)) prefixMatches.push(value);
       else containsMatches.push(value);
     });
-    return [...prefixMatches, ...containsMatches].slice(0, 3);
+    return [...prefixMatches, ...containsMatches];
   }
 
   function closeSuggestionMenu() {
@@ -927,10 +927,6 @@
       const nextCode = normalizeCode(name);
       if (!nextCode || catalog.has(nextCode)) return;
       const nextCoordRaw = String(coordRaw || "").trim();
-      if (!nextCoordRaw) {
-        catalog.add(nextCode);
-        return;
-      }
       if (parseWaypointCoordinate(nextCoordRaw)) catalog.add(nextCode);
     };
     (Array.isArray(state.catalog.waypoints) ? state.catalog.waypoints : []).forEach((row) => addEntry(row && row.name, row && row.coord));
@@ -1620,7 +1616,7 @@
       { id: "airports", label: "Airport Info" },
       { id: "charts", label: "Charts" },
       { id: "announcements", label: "Announcements" },
-      { id: "additional-info", label: "Additional Info" },
+      { id: "additional-info", label: "Aircraft Info" },
       { id: "manual", label: "User Manual" },
       { id: "privacy", label: "Privacy Policy" },
     ];
@@ -1663,11 +1659,11 @@
             <div class="preset-status ${presetLookup.active ? (presetLookup.exists ? "available" : "missing") : ""}">${presetLookup.active ? (presetLookup.exists ? "preset avbl" : "preset unavbl") : ""}</div>
             <section class="admin-preset-table">
               <div class="admin-preset-head admin-preset-head-extended">
-                <div>ROUTE</div>
+                <div>ROUTE <button class="mini-plus" id="admin-preset-add-row" type="button" aria-label="Add route row">+</button></div>
                 <div>COORDS</div>
                 <div>TC</div>
                 <div>DIST</div>
-                <div><button class="mini-plus" id="admin-preset-add-row" type="button" aria-label="Add route row">+</button></div>
+                <div></div>
               </div>
               <div class="admin-preset-body">
                 ${presetRows.map((row, index) => {
@@ -1943,32 +1939,23 @@
             </div>
           </div>
           <div class="manual-section${panel === "additional-info" ? "" : " hidden"}">
-            <h3>Additional Information</h3><br>
-            <div class="additional-info-menu-links${additionalInfoPanel ? " hidden" : ""}">
-              <button class="additional-info-link" data-admin-additional-panel="aircraft" type="button">Aircraft Information</button>
+            <h3>Aircraft Information</h3><br>
+            <div class="additional-info-wrap">
+              <table class="additional-info-table editable">
+                <tbody>
+                  ${additionalInfoRows.map((row, rowIndex) => `
+                    <tr>
+                      ${row.map((cell, colIndex) => `<td><input data-admin-additional="${rowIndex}:${colIndex}" value="${escapeAttr(cell)}" /></td>`).join("")}
+                      <td class="additional-info-row-action">
+                        <button class="action admin-mini-btn active" data-admin-additional-remove-row="${rowIndex}" type="button" aria-label="Remove row">-</button>
+                      </td>
+                    </tr>
+                  `).join("")}
+                </tbody>
+              </table>
             </div>
-            <div class="additional-info-subsection${additionalInfoPanel === "aircraft" ? "" : " hidden"}">
-              <div class="entry-actions additional-info-inline-back">
-                ${renderBackButton("admin-additional-back", "Back to additional info panels")}
-              </div>
-              <h4 class="additional-info-subtitle">Aircraft Information</h4>
-              <div class="additional-info-wrap">
-                <table class="additional-info-table editable">
-                  <tbody>
-                    ${additionalInfoRows.map((row, rowIndex) => `
-                      <tr>
-                        ${row.map((cell, colIndex) => `<td><input data-admin-additional="${rowIndex}:${colIndex}" value="${escapeAttr(cell)}" /></td>`).join("")}
-                        <td class="additional-info-row-action">
-                          <button class="action admin-mini-btn active" data-admin-additional-remove-row="${rowIndex}" type="button" aria-label="Remove row">-</button>
-                        </td>
-                      </tr>
-                    `).join("")}
-                  </tbody>
-                </table>
-              </div>
-              <div class="entry-actions additional-info-controls additional-info-controls-bottom">
-                <button class="action" id="admin-additional-add-row" type="button" aria-label="Add vertical row">+</button>
-              </div>
+            <div class="entry-actions additional-info-controls additional-info-controls-bottom">
+              <button class="action" id="admin-additional-add-row" type="button" aria-label="Add vertical row">+</button>
             </div>
             <div class="entry-actions">
               <button class="action primary" id="admin-additional-save">Save</button>
@@ -2098,6 +2085,9 @@
       <main class="ipad-kiosk-page${phoneMode ? " kiosk-phone-activate-page" : ""}">
         ${topStrip}
         ${renderKioskEventTimerStrip()}
+        <section class="kiosk-chart-launch">
+          <button class="action kiosk-chart-launch-btn" id="open-activate-charts" type="button">Charts</button>
+        </section>
         <section class="sheet-wrap ipad-kiosk-wrap">
           <div class="sheet ipad-kiosk-sheet${phoneMode ? " kiosk-phone-sheet" : ""}">
             ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-static-part kiosk-phone-header-panel"><p class="kiosk-part-label">Info</p>${headerSection}</section>` : headerSection}
@@ -2109,7 +2099,6 @@
         </section>
         <section class="kiosk-whereami-wrap">
           ${showWhereAmI ? `<button class="activate-button kiosk-whereami-btn" id="kiosk-whereami-open" type="button">Where am I</button>` : ""}
-          <button class="action" id="open-activate-charts" type="button">Charts</button>
         </section>
         <section class="kiosk-pad-overlay" id="kiosk-pad-overlay" aria-hidden="true">
           <div class="kiosk-pad-card">
@@ -2388,8 +2377,8 @@
             </ul>
             <label class="settings-item cockpit-gps-toggle">
               <input type="checkbox" id="activate-enable-gps" ${isActivateGpsEnabled() ? "checked" : ""} />
-              <span>Enable GPS?</span>
-            </label>
+                <span>Enable GPS Functionality? (experimental)</span>
+              </label>
           </div>
           <div class="bug-report-actions">
             <button class="action primary" id="activate-info-continue" type="button">Continue</button>
@@ -2890,6 +2879,7 @@
   }
 
   function wireTocTodControls(root = document) {
+    const shouldCommitOnBlur = state.view === "ipad-kiosk";
     const commitTocEntry = (input, field) => {
       if (!input || input.dataset.tocCommitted === "1") return;
       input.dataset.tocCommitted = "1";
@@ -2911,12 +2901,15 @@
     root.querySelectorAll("[data-toc-entry]").forEach((input) => {
       input.addEventListener("input", (event) => {
         const field = event.target.dataset.tocEntry;
+        event.target.dataset.tocCommitted = "0";
         state.navlog.tocTod[field] = event.target.value;
       });
       input.addEventListener("change", (event) => {
+        if (!shouldCommitOnBlur) return;
         commitTocEntry(event.target, event.target.dataset.tocEntry);
       });
       input.addEventListener("blur", (event) => {
+        if (!shouldCommitOnBlur) return;
         commitTocEntry(event.target, event.target.dataset.tocEntry);
       });
       input.addEventListener("keydown", (event) => {
