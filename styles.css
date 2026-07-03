@@ -645,6 +645,7 @@ body.kiosk-mode .time-head {
   padding: 0;
   border-radius: 10px;
   font-size: 1rem;
+  overflow: visible;
 }
 
 .admin-code-picker {
@@ -826,9 +827,21 @@ body.kiosk-mode .time-head {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: calc(var(--admin-row-height) + 2px);
+  min-width: calc(var(--admin-row-height) + 2px);
   min-height: var(--admin-row-height);
   border-left: 1px solid rgba(46, 41, 35, 0.14);
   background: rgba(255, 255, 255, 0.26);
+}
+
+.admin-row-action-cell .admin-mini-btn {
+  width: var(--admin-row-height);
+  min-width: var(--admin-row-height);
+  height: var(--admin-row-height);
+  min-height: var(--admin-row-height);
+  border-top: 2px solid var(--line);
+  border-right: 2px solid var(--line);
+  border-bottom: 2px solid var(--line);
 }
 
 .admin-preset-table,
@@ -854,7 +867,10 @@ body.kiosk-mode .time-head {
 }
 
 .admin-preset-head-extended,
-.admin-preset-row-extended,
+.admin-preset-row-extended {
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(88px, 0.7fr) minmax(88px, 0.8fr) calc(var(--admin-row-height) + 2px);
+}
+
 .admin-preset-lock-rail {
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(88px, 0.7fr) minmax(88px, 0.8fr);
 }
@@ -963,13 +979,15 @@ body.kiosk-mode .time-head {
 }
 
 .admin-lock-glyph {
-  width: 72px;
-  height: 72px;
+  width: 46px;
+  height: 46px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 2.4;
+  stroke-width: 1.9;
   stroke-linecap: round;
   stroke-linejoin: round;
+  pointer-events: none;
+  filter: drop-shadow(0 2px 3px rgba(18, 47, 58, 0.18));
 }
 
 .admin-field-cell-derived.is-locked input:disabled {
@@ -1260,21 +1278,56 @@ body.kiosk-mode .ipad-kiosk-page {
 }
 
 .kiosk-estimate-modal {
-  width: min(700px, 100%);
+  width: min(720px, 100%);
+  padding: 22px;
+}
+
+.kiosk-estimate-hero {
+  margin: 10px 0 14px;
+  padding: 14px 16px;
+  border: 1px solid rgba(33, 76, 90, 0.14);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(242, 235, 220, 0.92));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.kiosk-estimate-hero-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(33, 76, 90, 0.1);
+  color: #1d4451;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .kiosk-estimate-context {
-  margin: 8px 0 10px;
-  color: var(--muted);
-  font-weight: 700;
+  margin: 10px 0 4px;
+  color: #173944;
+  font-size: 1.02rem;
+  font-weight: 800;
   min-height: 1.2em;
+}
+
+.kiosk-estimate-helper {
+  margin: 0;
+  color: #5b6d73;
+  font-size: 0.9rem;
+  line-height: 1.4;
 }
 
 .kiosk-direction-toggle {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  padding: 6px;
+  border: 1px solid rgba(33, 76, 90, 0.12);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .kiosk-direction-btn {
@@ -1282,25 +1335,35 @@ body.kiosk-mode .ipad-kiosk-page {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.85);
   color: #203640;
-  padding: 10px 12px;
+  padding: 12px 14px;
   font-weight: 700;
   cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
 }
 
 .kiosk-direction-btn.active {
-  background: rgba(33, 76, 90, 0.12);
+  background: linear-gradient(180deg, rgba(33, 76, 90, 0.18), rgba(33, 76, 90, 0.08));
   border-color: rgba(33, 76, 90, 0.58);
+  transform: translateY(-1px);
 }
 
 .kiosk-estimate-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .kiosk-estimate-grid label {
   display: grid;
   gap: 6px;
+}
+
+.kiosk-estimate-input-card {
+  padding: 14px;
+  border: 1px solid rgba(33, 76, 90, 0.14);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 .kiosk-estimate-grid span {
@@ -1313,15 +1376,18 @@ body.kiosk-mode .ipad-kiosk-page {
 .kiosk-estimate-grid select {
   width: 100%;
   border: 2px solid rgba(46, 41, 35, 0.16);
-  border-radius: 10px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.94);
-  padding: 10px 10px;
+  padding: 11px 12px;
+  font-size: 1rem;
+  font-weight: 700;
 }
 
 .kiosk-distance-presets {
-  margin-top: 6px;
+  margin-top: 8px;
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .kiosk-preset-btn {
@@ -1329,30 +1395,46 @@ body.kiosk-mode .ipad-kiosk-page {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.88);
   color: #2e2923;
-  padding: 5px 9px;
+  padding: 6px 11px;
   font-size: 0.76rem;
   font-weight: 700;
   cursor: pointer;
 }
 
 .kiosk-estimate-result {
-  margin: 12px 0 0;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(33, 76, 90, 0.14);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.76);
   color: #203640;
-  font-weight: 700;
+  font-weight: 800;
 }
 
 .kiosk-estimate-error {
   margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(179, 58, 43, 0.18);
+  border-radius: 12px;
+  background: rgba(244, 221, 217, 0.55);
   color: #b33a2b;
   font-weight: 700;
 }
 
 .kiosk-estimate-actions {
-  margin-top: 12px;
+  margin-top: 14px;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.kiosk-estimate-actions .action {
+  min-height: 42px;
+}
+
+.kiosk-estimate-actions .action.primary {
+  min-width: 152px;
 }
 
 .kiosk-timer-alert {
@@ -1736,12 +1818,13 @@ body.kiosk-phone-mode .toc-tod-card.resolved .toc-tod-title {
 
 .kiosk-route-gps-readout {
   margin: 8px 0 10px;
+  gap: 10px;
 }
 
 .kiosk-gps-estimate {
   margin-top: 4px;
   margin-bottom: 14px;
-  color: var(--muted);
+  color: #203640;
 }
 
 .kiosk-reminder-heading {
@@ -3529,11 +3612,20 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
 .kiosk-chart-launch {
   display: flex;
   justify-content: center;
-  margin: 10px 0 12px;
+  align-items: center;
+  gap: 10px;
+  width: min(1120px, 96vw);
+  margin: 10px auto 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(33, 76, 90, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.74);
+  box-shadow: 0 10px 22px rgba(18, 47, 58, 0.08);
 }
 
 .kiosk-chart-launch-btn {
   min-width: 220px;
+  font-weight: 800;
 }
 
 .suggestion-option {
@@ -4173,8 +4265,8 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   }
 
   body.iphone-ui .admin-lock-glyph {
-    width: 60px;
-    height: 60px;
+    width: 42px;
+    height: 42px;
   }
 
   .additional-info-wrap {

@@ -1315,20 +1315,20 @@
   function renderLockGlyph(locked) {
     if (locked) {
       return `
-        <svg class="admin-lock-glyph" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
-          <path d="M9 12V9.5a5 5 0 1 1 10 0V12"></path>
-          <rect x="6" y="12" width="16" height="11" rx="3"></rect>
-          <path d="M14 15.5v4"></path>
+        <svg class="admin-lock-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="M7.75 10.25V7.75a4.25 4.25 0 1 1 8.5 0v2.5"></path>
+          <path d="M7 10.25h10a1.75 1.75 0 0 1 1.75 1.75v6a1.75 1.75 0 0 1-1.75 1.75H7A1.75 1.75 0 0 1 5.25 18v-6A1.75 1.75 0 0 1 7 10.25Z"></path>
+          <path d="M12 14v2.8"></path>
         </svg>
       `;
     }
     return `
-      <svg class="admin-lock-glyph" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
-        <path d="M17.8 9.3A5 5 0 0 0 9 12"></path>
-        <path d="M9 12V9.5"></path>
-        <rect x="6" y="12" width="16" height="11" rx="3"></rect>
-        <path d="M14 15.5v4"></path>
-      </svg>
+      <svg class="admin-lock-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <path d="M9 10.25V8.4a4.25 4.25 0 0 1 7.28-3"></path>
+        <path d="M16.25 5.4 18.1 3.55"></path>
+        <path d="M7 10.25h10a1.75 1.75 0 0 1 1.75 1.75v6A1.75 1.75 0 0 1 17 19.75H7A1.75 1.75 0 0 1 5.25 18v-6A1.75 1.75 0 0 1 7 10.25Z"></path>
+        <path d="M12 14v2.8"></path>
+        </svg>
     `;
   }
 
@@ -2187,7 +2187,11 @@
             <h3>Route Estimate</h3>
             <button class="action bug-report-close" id="kiosk-route-estimate-close" type="button">Close</button>
           </div>
-          <p class="kiosk-estimate-context" id="kiosk-estimate-context">${escapeHtml(routeContext)}</p>
+          <div class="kiosk-estimate-hero">
+            <span class="kiosk-estimate-hero-label">Selected route</span>
+            <p class="kiosk-estimate-context" id="kiosk-estimate-context">${escapeHtml(routeContext)}</p>
+            <p class="kiosk-estimate-helper">${gpsEnabled ? "Use the live GPS picture below, then start a reminder for this point." : "Choose direction, enter distance and groundspeed, then start a timer."}</p>
+          </div>
           ${
             gpsEnabled
               ? `
@@ -2216,7 +2220,7 @@
               `
           }
           <div class="kiosk-estimate-grid">
-            <label>
+            <label class="kiosk-estimate-input-card">
               <span>Distance (NM)</span>
               <input id="kiosk-route-estimate-distance" value="${escapeAttr(model.distance)}" inputmode="decimal" />
               <span class="kiosk-distance-presets">
@@ -2225,7 +2229,7 @@
                 <button type="button" class="kiosk-preset-btn" data-kiosk-distance-preset="15">15NM</button>
               </span>
             </label>
-            <label>
+            <label class="kiosk-estimate-input-card">
               <span>Groundspeed</span>
               <input id="kiosk-route-estimate-gs" value="${escapeAttr(model.groundspeed)}" inputmode="decimal" />
             </label>
@@ -3526,6 +3530,7 @@
       const isTocTodTitle = String(node.getAttribute("data-edit-toc") || "") !== "";
       const isSpeedToggle = Boolean(node.getAttribute("data-kiosk-speed-mode"));
       const isWhereAmIOpenButton = node.id === "kiosk-whereami-open";
+      const isActivateChartsButton = node.id === "open-activate-charts";
       const isTopScratchpadButton = node.id === "kiosk-top-scratchpad";
       const isKioskUtilityUi = Boolean(
         (node.closest && node.closest("#kiosk-route-estimate-overlay"))
@@ -3543,7 +3548,7 @@
         || radioField.endsWith(":gnd")
         || radioField.endsWith(":fss");
       const isDateHeader = String(node.getAttribute("data-header") || "") === "date" || node.hasAttribute("data-date-picker");
-      const keepInteractive = allowAt || allowLocation || allowAtisCode || isKioskUtilityUi || isSpeedToggle || isWhereAmIOpenButton || isTopScratchpadButton;
+      const keepInteractive = allowAt || allowLocation || allowAtisCode || isKioskUtilityUi || isSpeedToggle || isWhereAmIOpenButton || isActivateChartsButton || isTopScratchpadButton;
       if (!keepInteractive && node.tagName === "BUTTON" && !isTocTodTitle) node.style.display = "none";
       if (isAirportInfoAtisField) {
         node.tabIndex = -1;
@@ -3613,13 +3618,12 @@
       }
     });
 
-    document.querySelectorAll("[data-leg-field], [data-radio-field], [data-footer], [data-header]").forEach((input) => {
+    document.querySelectorAll("[data-radio-field], [data-footer]").forEach((input) => {
       if (input.tagName !== "INPUT" && input.tagName !== "TEXTAREA") return;
-      if (String(input.getAttribute("data-header") || "") === "date" || input.hasAttribute("data-date-picker")) return;
-      const legField = String(input.getAttribute("data-leg-field") || "");
       const radioField = String(input.getAttribute("data-radio-field") || "");
-      if (legField.endsWith(":route")) return;
-      if (radioField.endsWith(":cptAtis") || radioField.endsWith(":depAap") || radioField.endsWith(":twr") || radioField.endsWith(":gnd") || radioField.endsWith(":fss")) return;
+      const footerField = String(input.getAttribute("data-footer") || "");
+      const allowDelayedKeyboard = radioField.endsWith(":location") || footerField === "depAtisCode" || footerField === "destinAtisCode";
+      if (!allowDelayedKeyboard) return;
       wireKioskDelayedKeyboard(input);
     });
 
