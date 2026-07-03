@@ -74,6 +74,7 @@
       waypointForm: createEmptyWaypointForm(),
       rpcRegistryForm: createEmptyRpcRegistryForm(),
       airportForm: createEmptyAirportForm(),
+      chartForm: createEmptyChartForm(),
       manualHtmlDraft: "",
       privacyHtmlDraft: "",
       manualDraftBaselineText: "",
@@ -113,6 +114,7 @@
       kioskEventTimer: createEmptyKioskEventTimerState(),
       kioskTimerAlerts: createEmptyKioskTimerAlertState(),
       kioskGps: createEmptyKioskGpsState(),
+      chartPreview: createEmptyChartPreviewState(),
       gpsPermissionPromptOpen: false,
       routeProgressMarkerSnapshot: null,
       monthlyVisitors: 0,
@@ -134,6 +136,7 @@
   let gpsWatchId = null;
   let gpsLastPoint = null;
   let gpsSpeedSamplesKts = [];
+  let suggestionMenuState = null;
 
   function createBlankLeg(route) {
     return {
@@ -474,6 +477,22 @@
     };
   }
 
+  function createEmptyChartForm() {
+    return {
+      airportCode: "",
+      name: "",
+      category: "",
+    };
+  }
+
+  function createEmptyChartPreviewState() {
+    return {
+      open: false,
+      airportCode: "",
+      selectedChartId: "",
+    };
+  }
+
   function cloneWaypointRecord(record) {
     return normalizeWaypointRecord(record);
   }
@@ -489,7 +508,7 @@
   function normalizeWaypointRecord(record) {
     const name = normalizeCode(record && (record.name ?? record.code ?? record.route));
     return {
-      id: String(record && record.id != null ? record.id : name),
+      id: String(record && record.id != null ? record.id : ""),
       name,
       coord: String(record && (record.coord ?? record.coordinates ?? record.latlon ?? record.coordinate) != null ? (record.coord ?? record.coordinates ?? record.latlon ?? record.coordinate) : ""),
     };
@@ -498,7 +517,7 @@
   function normalizeRpcRegistryRecord(record) {
     const registration = normalizeCode(record && (record.registration ?? record.rpCNo ?? record.rpc));
     return {
-      id: String(record && record.id != null ? record.id : registration),
+      id: String(record && record.id != null ? record.id : ""),
       registration,
       aircraftType: String(record && (record.aircraftType ?? record.aircraft_type ?? record.aircraft ?? "") || ""),
       casClimb: String(record && (record.casClimb ?? record.cas_climb ?? "") || ""),
@@ -512,6 +531,7 @@
       id: String(record && record.id != null ? record.id : ""),
       airportCode: normalizeCode(record && (record.airportCode ?? record.airport_code ?? record.code)),
       name: String(record && (record.name ?? record.chart_name) != null ? (record.name ?? record.chart_name) : "").trim(),
+      category: String(record && (record.category ?? record.chart_category) != null ? (record.category ?? record.chart_category) : "").trim(),
       storagePath: String(record && (record.storagePath ?? record.storage_path) != null ? (record.storagePath ?? record.storage_path) : "").trim(),
     };
   }
@@ -521,6 +541,214 @@
     if (!supabaseClient || !chart.storagePath) return "";
     const result = supabaseClient.storage.from(AIRPORT_CHARTS_BUCKET).getPublicUrl(chart.storagePath);
     return String(result && result.data && result.data.publicUrl ? result.data.publicUrl : "");
+  }
+
+  function getChartCategoryOptions(includeAdminDraft = true) {
+    const values = new Set();
+    const addValue = (value) => {
+      const text = String(value || "").trim();
+      if (text) values.add(text);
+    };
+    (Array.isArray(state.catalog.charts) ? state.catalog.charts : []).forEach((chart) => addValue(chart && chart.category));
+    (Array.isArray(state.admin.charts) ? state.admin.charts : []).forEach((chart) => addValue(chart && chart.category));
+    if (includeAdminDraft) addValue(state.admin && state.admin.chartForm ? state.admin.chartForm.category : "");
+    return Array.from(values).sort((left, right) => left.localeCompare(right));
+  }
+
+  function getChartsForAirportCode(airportCode) {
+    const code = normalizeCode(airportCode);
+    if (!code) return [];
+    return (Array.isArray(state.catalog.charts) ? state.catalog.charts : [])
+      .map((chart) => normalizeAirportChartRecord(chart))
+      .filter((chart) => chart.airportCode === code && chart.storagePath)
+      .sort((left, right) => {
+        const categoryCompare = String(left.category || "").localeCompare(String(right.category || ""));
+        if (categoryCompare !== 0) return categoryCompare;
+        return String(left.name || "").localeCompare(String(right.name || ""));
+      });
+  }
+
+  function groupChartsByCategory(charts) {
+    const groups = new Map();
+    (Array.isArray(charts) ? charts : []).forEach((chart) => {
+      const normalized = normalizeAirportChartRecord(chart);
+      const key = String(normalized.category || "").trim() || "Uncategorized";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(normalized);
+    });
+    return Array.from(groups.entries())
+      .sort((left, right) => left[0].localeCompare(right[0]))
+      .map(([category, items]) => ({ category, items }));
+  }
+
+  function getSuggestionValuesForSource(source) {
+    const key = String(source || "").trim().toLowerCase();
+    if (key === "waypoints") return getWaypointCodesForSuggestions();
+    if (key === "airports") return state.catalog.airports.map((airport) => normalizeCode(airport && airport.code)).filter(Boolean).sort();
+    if (key === "preset-airports") return collectPresetAirportCodes();
+    if (key === "rpc") return getRpcRegistryOptions().map((entry) => entry.registration);
+    if (key === "chart-airports") {
+      return Array.from(new Set((state.catalog.charts || []).map((chart) => normalizeCode(chart && chart.airportCode)).filter(Boolean))).sort();
+    }
+    if (key === "chart-categories") return getChartCategoryOptions();
+    return [];
+  }
+
+  function filterSuggestionValues(values, query) {
+    const needle = normalizeCode(query);
+    const list = Array.from(new Set((Array.isArray(values) ? values : []).map((value) => String(value || "").trim()).filter(Boolean)));
+    if (!needle) return list.slice(0, 8);
+    const prefixMatches = [];
+    const containsMatches = [];
+    list.forEach((value) => {
+      const normalized = normalizeCode(value);
+      if (!normalized.includes(needle)) return;
+      if (normalized.startsWith(needle)) prefixMatches.push(value);
+      else containsMatches.push(value);
+    });
+    return [...prefixMatches, ...containsMatches].slice(0, 8);
+  }
+
+  function closeSuggestionMenu() {
+    if (suggestionMenuState && suggestionMenuState.menu && suggestionMenuState.menu.parentNode) {
+      suggestionMenuState.menu.parentNode.removeChild(suggestionMenuState.menu);
+    }
+    suggestionMenuState = null;
+  }
+
+  function ensureSuggestionMenu() {
+    if (suggestionMenuState && suggestionMenuState.menu && suggestionMenuState.menu.parentNode) return suggestionMenuState.menu;
+    const menu = document.createElement("div");
+    menu.className = "suggestion-menu";
+    document.body.appendChild(menu);
+    if (!document.body.dataset.suggestionPointerBound) {
+      document.body.dataset.suggestionPointerBound = "1";
+      document.addEventListener("pointerdown", (event) => {
+        const target = event.target;
+        if (!suggestionMenuState) return;
+        if (target === suggestionMenuState.input) return;
+        if (target && target.closest && target.closest(".suggestion-menu")) return;
+        closeSuggestionMenu();
+      });
+    }
+    suggestionMenuState = { ...(suggestionMenuState || {}), menu, activeIndex: -1, values: [] };
+    return menu;
+  }
+
+  function positionSuggestionMenu(input, menu) {
+    const rect = input.getBoundingClientRect();
+    menu.style.left = `${Math.round(window.scrollX + rect.left)}px`;
+    menu.style.top = `${Math.round(window.scrollY + rect.bottom + 6)}px`;
+    menu.style.width = `${Math.max(180, Math.round(rect.width))}px`;
+  }
+
+  function commitSuggestionValue(input, value) {
+    if (!input) return;
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    closeSuggestionMenu();
+  }
+
+  function renderSuggestionMenu(input) {
+    const source = input ? input.getAttribute("data-suggest-source") : "";
+    if (!source) {
+      closeSuggestionMenu();
+      return;
+    }
+    const query = String(input.value || "");
+    const showOnFocus = input.getAttribute("data-suggest-open-on-focus") === "true";
+    if (!showOnFocus && !query.trim()) {
+      closeSuggestionMenu();
+      return;
+    }
+    const values = filterSuggestionValues(getSuggestionValuesForSource(source), query);
+    if (!values.length) {
+      closeSuggestionMenu();
+      return;
+    }
+    const menu = ensureSuggestionMenu();
+    suggestionMenuState = { menu, input, values, activeIndex: -1 };
+    menu.innerHTML = values.map((value, index) => `
+      <button class="suggestion-option" data-suggestion-index="${index}" type="button">${escapeHtml(value)}</button>
+    `).join("");
+    positionSuggestionMenu(input, menu);
+    Array.from(menu.querySelectorAll("[data-suggestion-index]")).forEach((button) => {
+      button.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        const rawIndex = Number(button.getAttribute("data-suggestion-index"));
+        const nextValue = suggestionMenuState && Number.isFinite(rawIndex) ? suggestionMenuState.values[rawIndex] : "";
+        commitSuggestionValue(input, nextValue);
+      });
+    });
+  }
+
+  function moveSuggestionSelection(direction) {
+    if (!suggestionMenuState || !Array.isArray(suggestionMenuState.values) || !suggestionMenuState.values.length) return;
+    const total = suggestionMenuState.values.length;
+    const nextIndex = suggestionMenuState.activeIndex < 0
+      ? (direction > 0 ? 0 : total - 1)
+      : (suggestionMenuState.activeIndex + direction + total) % total;
+    suggestionMenuState.activeIndex = nextIndex;
+    const menu = suggestionMenuState.menu;
+    Array.from(menu.querySelectorAll("[data-suggestion-index]")).forEach((button, index) => {
+      button.classList.toggle("active", index === nextIndex);
+    });
+  }
+
+  function wireSuggestionInputs() {
+    document.querySelectorAll("[data-suggest-source]").forEach((input) => {
+      input.setAttribute("autocomplete", "off");
+      if (!input.hasAttribute("spellcheck")) input.setAttribute("spellcheck", "false");
+      input.addEventListener("focus", () => {
+        renderSuggestionMenu(input);
+      });
+      input.addEventListener("input", () => {
+        renderSuggestionMenu(input);
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          renderSuggestionMenu(input);
+          moveSuggestionSelection(1);
+          return;
+        }
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          renderSuggestionMenu(input);
+          moveSuggestionSelection(-1);
+          return;
+        }
+        if (event.key === "Enter" && suggestionMenuState && suggestionMenuState.input === input && suggestionMenuState.activeIndex >= 0) {
+          event.preventDefault();
+          commitSuggestionValue(input, suggestionMenuState.values[suggestionMenuState.activeIndex]);
+          return;
+        }
+        if (event.key === "Escape") closeSuggestionMenu();
+      });
+      input.addEventListener("blur", () => {
+        window.setTimeout(() => {
+          if (suggestionMenuState && suggestionMenuState.input === input) closeSuggestionMenu();
+        }, 120);
+      });
+    });
+  }
+
+  function openChartPreviewModal(airportCode = "", chartId = "") {
+    const code = normalizeCode(airportCode || state.meta.chartAirportQuery || state.meta.chartPreview.airportCode);
+    const charts = getChartsForAirportCode(code);
+    const selected = charts.find((chart) => chart.id === String(chartId || "")) || charts[0] || null;
+    state.meta.chartPreview = {
+      open: true,
+      airportCode: code,
+      selectedChartId: selected ? selected.id : "",
+    };
+    render();
+  }
+
+  function closeChartPreviewModal() {
+    state.meta.chartPreview = createEmptyChartPreviewState();
+    render();
   }
 
   function normalizeAirportRecord(airport) {
@@ -865,6 +1093,7 @@
 
   function render() {
     captureViewScrollState();
+    closeSuggestionMenu();
     if (state.view !== "ipad-kiosk") document.body.classList.remove("kiosk-mode");
     document.body.classList.remove("kiosk-phone-mode");
     document.body.classList.remove("ipad-desktop-scale");
@@ -898,6 +1127,8 @@
     else if (state.view === "admin") wireAdminPanel();
     else if (state.view === "ipad-kiosk") wireIpadKiosk();
     else wireNavlog();
+    wireSuggestionInputs();
+    wireChartPreviewControls();
     if (state.view === "ipad-kiosk") {
       syncKioskGpsTrackingForView();
       return;
@@ -1088,18 +1319,76 @@
   function renderLockGlyph(locked) {
     if (locked) {
       return `
-        <svg class="admin-lock-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path d="M8 10V7a4 4 0 1 1 8 0v3"></path>
-          <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+        <svg class="admin-lock-glyph" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
+          <path d="M9 12V9.5a5 5 0 1 1 10 0V12"></path>
+          <rect x="6" y="12" width="16" height="11" rx="3"></rect>
+          <path d="M14 15.5v4"></path>
         </svg>
       `;
     }
     return `
-      <svg class="admin-lock-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M9 7a4 4 0 0 1 7 2.6"></path>
-        <path d="M8 10V7"></path>
-        <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+      <svg class="admin-lock-glyph" viewBox="0 0 28 28" aria-hidden="true" focusable="false">
+        <path d="M17.8 9.3A5 5 0 0 0 9 12"></path>
+        <path d="M9 12V9.5"></path>
+        <rect x="6" y="12" width="16" height="11" rx="3"></rect>
+        <path d="M14 15.5v4"></path>
       </svg>
+    `;
+  }
+
+  function renderChartPreviewModal() {
+    const model = state.meta && state.meta.chartPreview ? state.meta.chartPreview : createEmptyChartPreviewState();
+    if (!model.open) return "";
+    const airportCode = normalizeCode(model.airportCode);
+    const charts = getChartsForAirportCode(airportCode);
+    const groupedCharts = groupChartsByCategory(charts);
+    const selectedChart = charts.find((chart) => chart.id === String(model.selectedChartId || "")) || charts[0] || null;
+    const selectedUrl = selectedChart ? getAirportChartPublicUrl(selectedChart) : "";
+    const frameUrl = selectedUrl ? `${selectedUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH` : "";
+    return `
+      <div class="bug-report-overlay" id="chart-preview-overlay">
+        <section class="bug-report-modal chart-preview-modal" role="dialog" aria-modal="true" aria-label="Chart preview">
+          <div class="bug-report-head">
+            <h3>Charts Preview</h3>
+            <button class="action bug-report-close" id="chart-preview-close" type="button">Close</button>
+          </div>
+          <section class="chart-search-card chart-search-card-modal">
+            <label class="setup-field chart-search-field">
+              <span>Airport code</span>
+              <input id="chart-preview-airport-search" value="${escapeAttr(airportCode)}" autocomplete="off" spellcheck="false" data-suggest-source="chart-airports" data-suggest-open-on-focus="true" />
+            </label>
+            <button class="action primary" id="chart-preview-search-button" type="button">Search</button>
+          </section>
+          <div class="chart-preview-layout">
+            <div class="chart-preview-list" aria-live="polite">
+              ${
+                !airportCode
+                  ? '<p class="chart-search-message">Enter an airport code to view charts.</p>'
+                  : !groupedCharts.length
+                    ? `<p class="chart-search-message error">No charts are available for ${escapeHtml(airportCode)}.</p>`
+                    : groupedCharts.map((group) => `
+                      <section class="chart-preview-group">
+                        <h4>${escapeHtml(group.category)}</h4>
+                        ${group.items.map((chart) => `
+                          <button class="chart-preview-select${selectedChart && selectedChart.id === chart.id ? " active" : ""}" data-chart-preview-select="${escapeAttr(chart.id)}" type="button">
+                            <span>${escapeHtml(chart.airportCode)}</span>
+                            <strong>${escapeHtml(chart.name || "Airport chart")}</strong>
+                          </button>
+                        `).join("")}
+                      </section>
+                    `).join("")
+              }
+            </div>
+            <div class="chart-preview-viewer">
+              ${
+                frameUrl
+                  ? `<iframe class="chart-preview-frame" title="${escapeAttr(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}" src="${escapeAttr(frameUrl)}" sandbox="allow-same-origin allow-scripts"></iframe>`
+                  : '<p class="chart-search-message">Choose a chart to preview it here.</p>'
+              }
+            </div>
+          </div>
+        </section>
+      </div>
     `;
   }
 
@@ -1173,10 +1462,6 @@
     const matchingCharts = (Array.isArray(state.catalog.charts) ? state.catalog.charts : [])
       .map((chart) => normalizeAirportChartRecord(chart))
       .filter((chart) => chart.airportCode === chartQuery && chart.storagePath);
-    const chartAirportOptions = Array.from(new Set((state.catalog.charts || []).map((chart) => normalizeCode(chart.airportCode)).filter(Boolean)))
-      .sort()
-      .map((code) => `<option value="${escapeAttr(code)}"></option>`)
-      .join("");
     return `
       <div class="ui-scale">
       <main class="entry-page">
@@ -1205,10 +1490,9 @@
           <div class="${viewPanel === "charts" ? "" : "hidden"}">
             <h3 class="additional-info-subtitle">Charts</h3>
             <section class="chart-search-card">
-              <datalist id="chart-airport-code-list">${chartAirportOptions}</datalist>
               <label class="setup-field chart-search-field">
                 <span>Airport code</span>
-                <input id="chart-airport-search" list="chart-airport-code-list" value="${escapeAttr(chartQuery)}" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+                <input id="chart-airport-search" value="${escapeAttr(chartQuery)}" autocomplete="off" spellcheck="false" data-suggest-source="chart-airports" data-suggest-open-on-focus="true" />
               </label>
               <button class="action primary" id="chart-airport-search-button" type="button">Search</button>
             </section>
@@ -1220,18 +1504,20 @@
                     ? '<p class="chart-search-message error">Enter an airport code.</p>'
                     : !matchingCharts.length
                       ? `<p class="chart-search-message error">No charts are available for ${escapeHtml(chartQuery)}.</p>`
-                      : matchingCharts.map((chart) => {
-                        const publicUrl = getAirportChartPublicUrl(chart);
-                        return `
-                          <article class="chart-result-card">
-                            <div>
-                              <span>${escapeHtml(chart.airportCode)}</span>
-                              <strong>${escapeHtml(chart.name || "Airport chart")}</strong>
-                            </div>
-                            ${publicUrl ? `<a class="action primary" href="${escapeAttr(publicUrl)}" target="_blank" rel="noopener">Open PDF</a>` : ""}
-                          </article>
-                        `;
-                      }).join("")
+                      : groupChartsByCategory(matchingCharts).map((group) => `
+                        <section class="chart-result-group">
+                          <h4>${escapeHtml(group.category)}</h4>
+                          ${group.items.map((chart) => `
+                            <article class="chart-result-card">
+                              <div>
+                                <span>${escapeHtml(chart.airportCode)}</span>
+                                <strong>${escapeHtml(chart.name || "Airport chart")}</strong>
+                              </div>
+                              <button class="action primary" data-open-chart-preview="${escapeAttr(chart.airportCode)}" data-chart-preview-id="${escapeAttr(chart.id)}" type="button">Preview</button>
+                            </article>
+                          `).join("")}
+                        </section>
+                      `).join("")
               }
             </div>
           </div>
@@ -1239,6 +1525,7 @@
         ${renderFrontFooter()}
         ${renderBugReportModal()}
         ${renderAnnouncementModal()}
+        ${renderChartPreviewModal()}
       </main>
       </div>
     `;
@@ -1311,25 +1598,13 @@
         ? state.admin.rpcRegistryForm.rows
         : [createEmptyRpcRegistryRow()],
     );
-    const presetCodeOptions = collectPresetAirportCodes()
-      .map((code) => `<option value="${escapeAttr(code)}"></option>`)
-      .join("");
-    const waypointCodeOptions = getWaypointCodesForSuggestions()
-      .map((code) => `<option value="${escapeAttr(code)}"></option>`)
-      .join("");
-    const rpcCodeOptions = getRpcRegistryOptions()
-      .map((entry) => `<option value="${escapeAttr(entry.registration)}"></option>`)
-      .join("");
     const existingRpcRecords = (Array.isArray(state.admin.rpcRegistry) ? state.admin.rpcRegistry : [])
       .map((record) => normalizeRpcRegistryRecord(record))
       .filter((record) => record.registration)
       .sort((left, right) => left.registration.localeCompare(right.registration));
-    const airportCodeOptions = state.admin.airports
-      .map((airport) => `<option value="${escapeAttr(airport.code)}"></option>`)
-      .join("");
     const adminCharts = (Array.isArray(state.admin.charts) ? state.admin.charts : [])
       .map((chart) => normalizeAirportChartRecord(chart))
-      .sort((left, right) => left.airportCode.localeCompare(right.airportCode) || left.name.localeCompare(right.name));
+      .sort((left, right) => left.airportCode.localeCompare(right.airportCode) || String(left.category || "").localeCompare(String(right.category || "")) || left.name.localeCompare(right.name));
     const presetLockEnabled = Boolean(state.admin.presetForm.locked);
     const additionalInfoPanel = String(state.admin.additionalInfoPanel || "");
     const additionalInfoRows = normalizeAdditionalInfoTable(
@@ -1371,16 +1646,14 @@
             <div class="admin-panel-wrap">
           <div class="manual-section${panel === "presets" ? "" : " hidden"}">
             <h3>Route Presets</h3><br>
-            <datalist id="admin-preset-code-list">${presetCodeOptions}</datalist>
-            <datalist id="admin-preset-route-list">${waypointCodeOptions}</datalist>
             <div class="admin-grid two-col">
               <label class="setup-field">
                 <span>Departure</span>
-                <input id="admin-preset-departure" list="admin-preset-code-list" value="${escapeAttr(state.admin.presetForm.departure)}" />
+                <input id="admin-preset-departure" value="${escapeAttr(state.admin.presetForm.departure)}" data-suggest-source="preset-airports" data-suggest-open-on-focus="true" />
               </label>
               <label class="setup-field">
                 <span>Destination</span>
-                <input id="admin-preset-destination" list="admin-preset-code-list" value="${escapeAttr(state.admin.presetForm.destination)}" />
+                <input id="admin-preset-destination" value="${escapeAttr(state.admin.presetForm.destination)}" data-suggest-source="preset-airports" data-suggest-open-on-focus="true" />
               </label>
             </div>
             <div class="admin-preset-lock-rail">
@@ -1390,27 +1663,31 @@
             <div class="preset-status ${presetLookup.active ? (presetLookup.exists ? "available" : "missing") : ""}">${presetLookup.active ? (presetLookup.exists ? "preset avbl" : "preset unavbl") : ""}</div>
             <section class="admin-preset-table">
               <div class="admin-preset-head admin-preset-head-extended">
-                <div>ROUTE</div>
+                <div>ROUTE <button class="action admin-mini-btn" id="admin-preset-add-row" type="button" aria-label="Add route row">+</button></div>
                 <div>COORDS</div>
                 <div>TC</div>
                 <div>DIST</div>
+                <div></div>
               </div>
               <div class="admin-preset-body">
                 ${presetRows.map((row, index) => {
                   return `
                     <div class="admin-preset-row admin-preset-row-extended" data-admin-row-index="${index}">
                       <label class="admin-field-cell" data-label="Route">
-                        <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" list="admin-preset-route-list" />
+                        <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" data-suggest-source="waypoints" />
                       </label>
                       <label class="admin-field-cell" data-label="Coords">
                         <input data-admin-preset-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
                       </label>
                       <label class="admin-field-cell admin-field-cell-derived${presetLockEnabled ? " is-locked" : ""}" data-label="TC">
-                        <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" ${presetLockEnabled ? "readonly" : ""} placeholder="000" />
+                        <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" ${presetLockEnabled ? 'disabled tabindex="-1"' : ""} placeholder="000" />
                       </label>
                       <label class="admin-field-cell admin-field-cell-derived${presetLockEnabled ? " is-locked" : ""}" data-label="Dist">
-                        <input data-admin-preset-row="${index}:distance" value="${escapeAttr(row.distance)}" ${presetLockEnabled ? "readonly" : ""} placeholder="0.0" />
+                        <input data-admin-preset-row="${index}:distance" value="${escapeAttr(row.distance)}" ${presetLockEnabled ? 'disabled tabindex="-1"' : ""} placeholder="0.0" />
                       </label>
+                      <div class="admin-row-action-cell">
+                        <button class="action admin-mini-btn" data-admin-preset-remove-row="${index}" type="button" aria-label="Remove route row">-</button>
+                      </div>
                     </div>
                   `;
                 }).join("")}
@@ -1423,7 +1700,6 @@
           </div>
           <div class="manual-section${panel === "coordinates" ? "" : " hidden"}">
             <h3>Coordinates</h3><br>
-            <datalist id="admin-waypoint-code-list">${waypointCodeOptions}</datalist>
             <section class="admin-preset-table admin-waypoint-table">
               <div class="admin-preset-head admin-waypoint-head">
                 <div>WAYPOINT</div>
@@ -1434,7 +1710,7 @@
                   return `
                     <div class="admin-preset-row admin-waypoint-row" data-admin-row-index="${index}">
                       <label class="admin-field-cell" data-label="Waypoint">
-                        <input data-admin-waypoint-row="${index}:name" value="${escapeAttr(row.name)}" list="admin-waypoint-code-list" />
+                        <input data-admin-waypoint-row="${index}:name" value="${escapeAttr(row.name)}" data-suggest-source="waypoints" />
                       </label>
                       <label class="admin-field-cell" data-label="Coords">
                         <input data-admin-waypoint-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
@@ -1451,7 +1727,6 @@
           </div>
           <div class="manual-section${panel === "rpc-reg" ? "" : " hidden"}">
             <h3>RP-C Reg</h3><br>
-            <datalist id="admin-rpc-code-list">${rpcCodeOptions}</datalist>
             <section class="admin-preset-table admin-rpc-table">
               <div class="admin-preset-head admin-rpc-head">
                 <div>REGISTRATION</div>
@@ -1465,7 +1740,7 @@
                   return `
                     <div class="admin-preset-row admin-rpc-row" data-admin-row-index="${index}">
                       <label class="admin-field-cell" data-label="Registration">
-                        <input data-admin-rpc-row="${index}:registration" value="${escapeAttr(row.registration)}" list="admin-rpc-code-list" />
+                        <input data-admin-rpc-row="${index}:registration" value="${escapeAttr(row.registration)}" data-suggest-source="rpc" data-suggest-open-on-focus="true" />
                       </label>
                       <label class="admin-field-cell" data-label="Aircraft type">
                         <input data-admin-rpc-row="${index}:aircraftType" value="${escapeAttr(row.aircraftType)}" />
@@ -1502,7 +1777,6 @@
           </div>
           <div class="manual-section${panel === "airports" ? "" : " hidden"}">
             <h3>Airport Information</h3><br>
-            <datalist id="admin-airport-code-list">${airportCodeOptions}</datalist>
             <div class="preset-status ${airportLookup.active ? (airportLookup.exists ? "available" : "missing") : ""}">${airportLookup.active ? (airportLookup.exists ? "airport avbl" : "airport unavbl") : ""}</div>
             <section class="admin-airport-table">
               <div class="admin-airport-head">
@@ -1515,7 +1789,7 @@
                 <div>REMARKS</div>
               </div>
               <div class="admin-airport-row">
-                <label class="admin-field-cell" data-label="Location"><input id="admin-airport-code" list="admin-airport-code-list" value="${escapeAttr(state.admin.airportForm.code)}" /></label>
+                <label class="admin-field-cell" data-label="Location"><input id="admin-airport-code" value="${escapeAttr(state.admin.airportForm.code)}" data-suggest-source="airports" data-suggest-open-on-focus="true" /></label>
                 <label class="admin-field-cell" data-label="CPT/ATIS"><input id="admin-airport-cptAtis" value="${escapeAttr(state.admin.airportForm.cptAtis)}" /></label>
                 <label class="admin-field-cell" data-label="DEP/AAP"><input id="admin-airport-depAap" value="${escapeAttr(state.admin.airportForm.depAap)}" /></label>
                 <label class="admin-field-cell" data-label="TWR"><input id="admin-airport-twr" value="${escapeAttr(state.admin.airportForm.twr)}" /></label>
@@ -1533,14 +1807,18 @@
             <h3>Airport Charts</h3>
             <p class="setup-caption">Upload named PDF charts and assign them to an airport code.</p>
             <section class="admin-chart-upload-card">
-              <div class="admin-grid two-col">
+              <div class="admin-grid three-col">
                 <label class="setup-field">
                   <span>Airport code</span>
-                  <input id="admin-chart-airport-code" list="admin-airport-code-list" autocomplete="off" autocapitalize="characters" spellcheck="false" />
+                  <input id="admin-chart-airport-code" value="${escapeAttr(state.admin.chartForm.airportCode)}" autocomplete="off" spellcheck="false" data-suggest-source="chart-airports" data-suggest-open-on-focus="true" />
                 </label>
                 <label class="setup-field">
                   <span>Chart name</span>
-                  <input id="admin-chart-name" autocomplete="off" />
+                  <input id="admin-chart-name" value="${escapeAttr(state.admin.chartForm.name)}" autocomplete="off" />
+                </label>
+                <label class="setup-field">
+                  <span>Category</span>
+                  <input id="admin-chart-category" value="${escapeAttr(state.admin.chartForm.category)}" autocomplete="off" spellcheck="false" data-suggest-source="chart-categories" data-suggest-open-on-focus="true" />
                 </label>
               </div>
               <label class="setup-field admin-chart-file-field">
@@ -1553,21 +1831,26 @@
               </div>
             </section>
             <section class="admin-chart-list">
-              ${adminCharts.length ? adminCharts.map((chart) => {
-                const publicUrl = getAirportChartPublicUrl(chart);
-                return `
-                  <article class="admin-chart-item">
-                    <div>
-                      <span>${escapeHtml(chart.airportCode)}</span>
-                      <strong>${escapeHtml(chart.name || "Airport chart")}</strong>
-                    </div>
-                    <div class="admin-chart-item-actions">
-                      ${publicUrl ? `<a class="action" href="${escapeAttr(publicUrl)}" target="_blank" rel="noopener">Open</a>` : ""}
-                      <button class="action" data-admin-chart-delete="${escapeAttr(chart.id)}" type="button">Delete</button>
-                    </div>
-                  </article>
-                `;
-              }).join("") : '<p class="setup-caption">No charts uploaded yet.</p>'}
+              ${adminCharts.length ? groupChartsByCategory(adminCharts).map((group) => `
+                <section class="admin-chart-group">
+                  <h4>${escapeHtml(group.category)}</h4>
+                  ${group.items.map((chart) => {
+                    const publicUrl = getAirportChartPublicUrl(chart);
+                    return `
+                      <article class="admin-chart-item">
+                        <div>
+                          <span>${escapeHtml(chart.airportCode)}</span>
+                          <strong>${escapeHtml(chart.name || "Airport chart")}</strong>
+                        </div>
+                        <div class="admin-chart-item-actions">
+                          ${publicUrl ? `<a class="action" href="${escapeAttr(publicUrl)}" target="_blank" rel="noopener">Open</a>` : ""}
+                          <button class="action" data-admin-chart-delete="${escapeAttr(chart.id)}" type="button">Delete</button>
+                        </div>
+                      </article>
+                    `;
+                  }).join("")}
+                </section>
+              `).join("") : '<p class="setup-caption">No charts uploaded yet.</p>'}
             </section>
           </div>
           <div class="manual-section${panel === "announcements" ? "" : " hidden"}">
@@ -1716,6 +1999,7 @@
         ${renderFrontFooter()}
         ${renderBugReportModal()}
         ${renderAnnouncementModal()}
+        ${renderChartPreviewModal()}
       </main>
       </div>
     `;
@@ -1763,12 +2047,14 @@
         </section>
         <section class="activate-wrap">
           <button class="activate-button" id="activate-ipad-mode" type="button" title="Activate is for cockpit use.">ACTIVATE</button>
+          <button class="action" id="open-activate-charts" type="button">Charts</button>
           ${activateError ? `<p class="activate-error">${escapeHtml(activateError)}</p>` : ""}
         </section>
         ${renderActivateInfoModal()}
         ${renderFrontFooter()}
         ${renderBugReportModal()}
         ${renderAnnouncementModal()}
+        ${renderChartPreviewModal()}
       </main>
       </div>
     `;
@@ -1979,9 +2265,6 @@
     const destCode = getKioskDestinationRouteCode();
     const depLabel = depCode || "DEP";
     const destLabel = destCode || "DEST";
-    const routeOptions = getWaypointCodesForSuggestions()
-      .map((code) => `<option value="${escapeAttr(code)}"></option>`)
-      .join("");
     const result = model.result || null;
     const distanceLabel = result && Number.isFinite(result.distanceNm) ? `${formatDistanceDisplayWithRounding(result.distanceNm, false)} NM` : "--";
     const quadrantLabel = result && result.quadrant ? result.quadrant : "--";
@@ -1999,8 +2282,7 @@
           <p class="kiosk-whereami-subtitle">Compute distance, quadrant and TH</p>
           <label class="setup-field kiosk-whereami-input">
             <span>Waypoint</span>
-            <input id="kiosk-whereami-query" list="kiosk-whereami-waypoint-list" value="${escapeAttr(model.query || "")}" placeholder="Type waypoint" />
-            <datalist id="kiosk-whereami-waypoint-list">${routeOptions}</datalist>
+            <input id="kiosk-whereami-query" value="${escapeAttr(model.query || "")}" placeholder="Type waypoint" data-suggest-source="waypoints" />
           </label>
           <div class="kiosk-distance-presets kiosk-whereami-quick">
             <button class="kiosk-preset-btn kiosk-whereami-preset" id="kiosk-whereami-use-departure" type="button">${escapeHtml(depLabel)}</button>
@@ -2144,9 +2426,6 @@
     const variationDeviationEnabled = Boolean(state.settings.variationDeviationEnabled);
     const isPhoneKiosk = isPhoneActivateMode();
     const showCasColumn = state.view !== "ipad-kiosk";
-    const waypointOptions = getWaypointCodesForSuggestions()
-      .map((code) => `<option value="${escapeAttr(code)}"></option>`)
-      .join("");
     const speedUnitLabel =
       state.settings.speedUnit === "mph"
         ? "MPH"
@@ -2271,7 +2550,6 @@
             </div>
           ` : ""}
         </div>
-        <datalist id="route-waypoint-catalog">${waypointOptions}</datalist>
       </section>
     `;
   }
@@ -2341,7 +2619,7 @@
     const routeCellMarkup = `
         <div class="${legFieldClass(leg, "route", `route route-cell ${routeCellExtra}`.trim())}">
         <div class="route-main">
-          <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" list="route-waypoint-catalog" />
+          <input data-leg-field="${index}:route" value="${escapeAttr(leg.route)}" data-suggest-source="waypoints" />
           ${removable ? `<button type="button" class="remove-chip" data-remove-leg="${index}">-</button>` : `<span class="blank-chip"></span>`}
           ${
             isFirstRoute
@@ -2657,12 +2935,8 @@
   }
 
   function renderLocationTable() {
-    const airportOptions = state.catalog.airports
-      .map((airport) => `<option value="${escapeAttr(airport.code)}"></option>`)
-      .join("");
     return `
       <section class="radio-block">
-        <datalist id="airport-location-catalog">${airportOptions}</datalist>
         <div class="radio-head">
           <div>LOCATION <button class="mini-plus inline" id="add-radio-row" type="button">+</button></div>
           <div>ATIS</div>
@@ -2683,7 +2957,7 @@
     return `
       <div class="radio-row">
         <div class="location-cell">
-          <input data-radio-field="${index}:location" value="${escapeAttr(row.location)}" list="airport-location-catalog" />
+          <input data-radio-field="${index}:location" value="${escapeAttr(row.location)}" data-suggest-source="airports" />
           ${index > 0 ? `<button type="button" class="remove-chip" data-remove-radio="${index}">-</button>` : `<span class="blank-chip"></span>`}
         </div>
         <div><input data-radio-field="${index}:cptAtis" value="${escapeAttr(row.cptAtis)}" /></div>
@@ -2840,6 +3114,12 @@
         state.meta.activateError = "";
         state.meta.activateInfoOpen = true;
         render();
+      });
+    }
+    const activateChartsButton = document.getElementById("open-activate-charts");
+    if (activateChartsButton) {
+      activateChartsButton.addEventListener("click", () => {
+        openChartPreviewModal(state.navlog.setup.destination || state.navlog.setup.departure || "");
       });
     }
     const activateInfoClose = document.getElementById("activate-info-close");
@@ -3200,7 +3480,7 @@
       if (legField.endsWith(":route")) {
         input.setAttribute("inputmode", "text");
         input.setAttribute("autocomplete", "off");
-        input.setAttribute("autocapitalize", "characters");
+        input.setAttribute("autocapitalize", "off");
         input.setAttribute("spellcheck", "false");
         input.removeAttribute("pattern");
         return;
@@ -4635,6 +4915,19 @@
     alertCountdownNode.textContent = `-${formatDurationClockFromMs(deltaMs, true)}`;
   }
 
+  function getKioskWhereAmIButtonState() {
+    if (!isActivateGpsEnabled()) {
+      return { label: "Where am I", unavailable: true };
+    }
+    const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : createEmptyKioskGpsState();
+    if (gps.error) return { label: "Where am I unavailable", unavailable: true };
+    if (!gps.tracking) return { label: "Where am I", unavailable: false };
+    if (!Number.isFinite(gps.latitude) || !Number.isFinite(gps.longitude)) {
+      return { label: "Where am I", unavailable: false };
+    }
+    return { label: "Where am I", unavailable: false };
+  }
+
   function formatDurationClockFromMs(milliseconds, floorAtZero = false) {
     const value = Number(milliseconds);
     const positiveMs = floorAtZero ? Math.max(0, value) : value;
@@ -5747,6 +6040,51 @@
       });
     }
     if (chartSearchButton) chartSearchButton.addEventListener("click", submitChartSearch);
+    document.querySelectorAll("[data-open-chart-preview]").forEach((button) => {
+      button.addEventListener("click", () => {
+        openChartPreviewModal(
+          button.getAttribute("data-open-chart-preview"),
+          button.getAttribute("data-chart-preview-id"),
+        );
+      });
+    });
+  }
+
+  function wireChartPreviewControls() {
+    const overlay = document.getElementById("chart-preview-overlay");
+    if (!overlay) return;
+    const closeButton = document.getElementById("chart-preview-close");
+    const searchInput = document.getElementById("chart-preview-airport-search");
+    const searchButton = document.getElementById("chart-preview-search-button");
+    const submitSearch = () => {
+      const nextCode = normalizeCode(searchInput ? searchInput.value : state.meta.chartPreview.airportCode);
+      state.meta.chartPreview.airportCode = nextCode;
+      const charts = getChartsForAirportCode(nextCode);
+      state.meta.chartPreview.selectedChartId = charts[0] ? charts[0].id : "";
+      render();
+    };
+    if (closeButton) closeButton.addEventListener("click", closeChartPreviewModal);
+    if (searchButton) searchButton.addEventListener("click", submitSearch);
+    if (searchInput) {
+      searchInput.addEventListener("input", () => {
+        state.meta.chartPreview.airportCode = String(searchInput.value || "");
+      });
+      searchInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        submitSearch();
+      });
+    }
+    overlay.addEventListener("click", (event) => {
+      if (event.target !== overlay) return;
+      closeChartPreviewModal();
+    });
+    document.querySelectorAll("[data-chart-preview-select]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.meta.chartPreview.selectedChartId = String(button.getAttribute("data-chart-preview-select") || "");
+        render();
+      });
+    });
   }
 
   function wireUtcAdminTrigger() {
@@ -5866,6 +6204,24 @@
         render();
       });
     }
+    const presetAddRowButton = document.getElementById("admin-preset-add-row");
+    if (presetAddRowButton) {
+      presetAddRowButton.addEventListener("click", () => {
+        readPresetFormFromInputs();
+        state.admin.presetForm.rows.push(createEmptyPresetRow());
+        render();
+      });
+    }
+    document.querySelectorAll("[data-admin-preset-remove-row]").forEach((button) => {
+      button.addEventListener("click", () => {
+        readPresetFormFromInputs();
+        const index = Number(button.getAttribute("data-admin-preset-remove-row"));
+        if (!Number.isFinite(index)) return;
+        if (state.admin.presetForm.rows.length <= 1) state.admin.presetForm.rows = [createEmptyPresetRow()];
+        else state.admin.presetForm.rows.splice(index, 1);
+        render();
+      });
+    });
 
     const presetRowInputs = Array.from(document.querySelectorAll("[data-admin-preset-row]"));
     presetRowInputs.forEach((node) => {
@@ -5891,10 +6247,6 @@
           }
         }
         readPresetFormFromInputs();
-        if (ensureTrailingBlankRow(state.admin.presetForm.rows, createEmptyPresetRow, hasPresetRowContent)) {
-          render();
-          return;
-        }
         syncAdminPresetFormUi();
       });
     });
@@ -6004,6 +6356,13 @@
         await uploadAirportChartFromAdmin();
       });
     }
+    ["admin-chart-airport-code", "admin-chart-name", "admin-chart-category"].forEach((id) => {
+      const field = document.getElementById(id);
+      if (!field) return;
+      field.addEventListener("input", () => {
+        readAdminChartFormFromInputs();
+      });
+    });
     document.querySelectorAll("[data-admin-chart-delete]").forEach((button) => {
       button.addEventListener("click", async () => {
         await deleteAirportChartFromAdmin(button.getAttribute("data-admin-chart-delete"));
@@ -6300,6 +6659,7 @@
     state.admin.presetForm = createEmptyPresetForm();
     state.admin.waypointForm = createEmptyWaypointForm();
     state.admin.rpcRegistryForm = createEmptyRpcRegistryForm();
+    state.admin.chartForm = createEmptyChartForm();
     state.admin.notice = "Signed out.";
     state.admin.error = "";
     state.view = "admin-login";
@@ -6668,6 +7028,17 @@
     });
   }
 
+  function readAdminChartFormFromInputs() {
+    const airportInput = document.getElementById("admin-chart-airport-code");
+    const nameInput = document.getElementById("admin-chart-name");
+    const categoryInput = document.getElementById("admin-chart-category");
+    state.admin.chartForm = {
+      airportCode: String(airportInput ? airportInput.value : state.admin.chartForm.airportCode || ""),
+      name: String(nameInput ? nameInput.value : state.admin.chartForm.name || ""),
+      category: String(categoryInput ? categoryInput.value : state.admin.chartForm.category || ""),
+    };
+  }
+
   function readWaypointFormFromInputs() {
     const rowInputs = Array.from(document.querySelectorAll("[data-admin-waypoint-row]"));
     const rows = [];
@@ -6765,7 +7136,6 @@
       rows: presetRowsFromLegs(selected.legs),
     };
     syncAdminPresetRowAutofill();
-    ensureTrailingBlankRow(state.admin.presetForm.rows, createEmptyPresetRow, hasPresetRowContent);
   }
 
   function selectWaypointForEditing(name) {
@@ -6833,7 +7203,6 @@
       state.admin.selectedPresetId = "";
       state.admin.presetForm.rows = hadSelection ? [createEmptyPresetRow()] : normalizePresetRows(state.admin.presetForm.rows);
       syncAdminPresetRowAutofill();
-      ensureTrailingBlankRow(state.admin.presetForm.rows, createEmptyPresetRow, hasPresetRowContent);
       return;
     }
     selectPresetForEditing(match.id);
@@ -6920,7 +7289,6 @@
       if (result.error) throw result.error;
       if (result.data && result.data.id) state.admin.selectedPresetId = String(result.data.id);
       state.admin.presetForm.rows = presetRowsFromLegs(parsedLegs);
-      ensureTrailingBlankRow(state.admin.presetForm.rows, createEmptyPresetRow, hasPresetRowContent);
       await loadAdminData();
       state.admin.notice = "Preset saved.";
       render();
@@ -6946,11 +7314,12 @@
     state.admin.error = "";
     state.admin.notice = "";
     try {
-      const result = await supabaseClient.from("waypoints").upsert({
-        id: row.id || row.name,
+      const payload = {
         name: row.name,
         coord: row.coord,
-      }, { onConflict: "name" });
+      };
+      if (row.id) payload.id = row.id;
+      const result = await supabaseClient.from("waypoints").upsert(payload, { onConflict: "name" });
       if (result.error) throw result.error;
       state.admin.selectedWaypointName = row.name;
       await loadAdminData();
@@ -7014,14 +7383,15 @@
     state.admin.error = "";
     state.admin.notice = "";
     try {
-      const result = await supabaseClient.from("rpc_registry").upsert({
-        id: row.id || row.registration,
+      const payload = {
         registration: row.registration,
         aircraft_type: row.aircraftType,
         cas_climb: row.casClimb,
         cas_cruise: row.casCruise,
         gph: row.gph,
-      }, { onConflict: "registration" });
+      };
+      if (row.id) payload.id = row.id;
+      const result = await supabaseClient.from("rpc_registry").upsert(payload, { onConflict: "registration" });
       if (result.error) throw result.error;
       state.admin.selectedRpcRegistration = row.registration;
       await loadAdminData();
@@ -7171,14 +7541,14 @@
       render();
       return;
     }
-    const airportInput = document.getElementById("admin-chart-airport-code");
-    const nameInput = document.getElementById("admin-chart-name");
+    readAdminChartFormFromInputs();
     const fileInput = document.getElementById("admin-chart-file");
     const uploadButton = document.getElementById("admin-chart-upload");
-    const airportCode = normalizeCode(airportInput ? airportInput.value : "");
+    const airportCode = normalizeCode(state.admin.chartForm.airportCode);
     const file = fileInput && fileInput.files ? fileInput.files[0] : null;
     const fallbackName = file ? String(file.name || "").replace(/\.pdf$/i, "").trim() : "";
-    const chartName = String(nameInput ? nameInput.value : "").trim() || fallbackName;
+    const chartName = String(state.admin.chartForm.name || "").trim() || fallbackName;
+    const chartCategory = String(state.admin.chartForm.category || "").trim();
     const isPdf = Boolean(file && (file.type === "application/pdf" || /\.pdf$/i.test(file.name || "")));
     if (!airportCode || !chartName || !isPdf) {
       state.admin.chartUploadStatus = !airportCode
@@ -7205,6 +7575,7 @@
       const insertResult = await supabaseClient.from("airport_charts").insert({
         airport_code: airportCode,
         name: chartName,
+        category: chartCategory,
         storage_path: storagePath,
       });
       if (insertResult.error) {
@@ -7212,6 +7583,7 @@
         throw insertResult.error;
       }
       await loadAdminData();
+      state.admin.chartForm = createEmptyChartForm();
       state.admin.chartUploadStatus = "Chart uploaded.";
       render();
     } catch (error) {

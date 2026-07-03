@@ -35,12 +35,19 @@ create table if not exists public.airport_charts (
   id uuid primary key default gen_random_uuid(),
   airport_code text not null,
   name text not null,
+  category text not null default '',
   storage_path text not null unique,
   updated_at timestamptz not null default now()
 );
 
+alter table if exists public.airport_charts
+  add column if not exists category text not null default '';
+
 create index if not exists airport_charts_airport_code_idx
   on public.airport_charts (airport_code);
+
+create index if not exists airport_charts_category_idx
+  on public.airport_charts (category);
 
 create table if not exists public.airports (
   code text primary key,
