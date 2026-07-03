@@ -1278,56 +1278,21 @@ body.kiosk-mode .ipad-kiosk-page {
 }
 
 .kiosk-estimate-modal {
-  width: min(720px, 100%);
-  padding: 22px;
-}
-
-.kiosk-estimate-hero {
-  margin: 10px 0 14px;
-  padding: 14px 16px;
-  border: 1px solid rgba(33, 76, 90, 0.14);
-  border-radius: 16px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(242, 235, 220, 0.92));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
-}
-
-.kiosk-estimate-hero-label {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(33, 76, 90, 0.1);
-  color: #1d4451;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  width: min(700px, 100%);
 }
 
 .kiosk-estimate-context {
-  margin: 10px 0 4px;
-  color: #173944;
-  font-size: 1.02rem;
-  font-weight: 800;
+  margin: 8px 0 10px;
+  color: var(--muted);
+  font-weight: 700;
   min-height: 1.2em;
-}
-
-.kiosk-estimate-helper {
-  margin: 0;
-  color: #5b6d73;
-  font-size: 0.9rem;
-  line-height: 1.4;
 }
 
 .kiosk-direction-toggle {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
-  margin-bottom: 12px;
-  padding: 6px;
-  border: 1px solid rgba(33, 76, 90, 0.12);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.7);
+  margin-bottom: 10px;
 }
 
 .kiosk-direction-btn {
@@ -1335,35 +1300,25 @@ body.kiosk-mode .ipad-kiosk-page {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.85);
   color: #203640;
-  padding: 12px 14px;
+  padding: 10px 12px;
   font-weight: 700;
   cursor: pointer;
-  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
 }
 
 .kiosk-direction-btn.active {
-  background: linear-gradient(180deg, rgba(33, 76, 90, 0.18), rgba(33, 76, 90, 0.08));
+  background: rgba(33, 76, 90, 0.12);
   border-color: rgba(33, 76, 90, 0.58);
-  transform: translateY(-1px);
 }
 
 .kiosk-estimate-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .kiosk-estimate-grid label {
   display: grid;
   gap: 6px;
-}
-
-.kiosk-estimate-input-card {
-  padding: 14px;
-  border: 1px solid rgba(33, 76, 90, 0.14);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 .kiosk-estimate-grid span {
@@ -1376,18 +1331,15 @@ body.kiosk-mode .ipad-kiosk-page {
 .kiosk-estimate-grid select {
   width: 100%;
   border: 2px solid rgba(46, 41, 35, 0.16);
-  border-radius: 12px;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.94);
-  padding: 11px 12px;
-  font-size: 1rem;
-  font-weight: 700;
+  padding: 10px 10px;
 }
 
 .kiosk-distance-presets {
-  margin-top: 8px;
+  margin-top: 6px;
   display: flex;
   gap: 6px;
-  flex-wrap: wrap;
 }
 
 .kiosk-preset-btn {
@@ -1395,46 +1347,30 @@ body.kiosk-mode .ipad-kiosk-page {
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.88);
   color: #2e2923;
-  padding: 6px 11px;
+  padding: 5px 9px;
   font-size: 0.76rem;
   font-weight: 700;
   cursor: pointer;
 }
 
 .kiosk-estimate-result {
-  margin: 14px 0 0;
-  padding: 12px 14px;
-  border: 1px solid rgba(33, 76, 90, 0.14);
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.76);
+  margin: 12px 0 0;
   color: #203640;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .kiosk-estimate-error {
   margin: 10px 0 0;
-  padding: 10px 12px;
-  border: 1px solid rgba(179, 58, 43, 0.18);
-  border-radius: 12px;
-  background: rgba(244, 221, 217, 0.55);
   color: #b33a2b;
   font-weight: 700;
 }
 
 .kiosk-estimate-actions {
-  margin-top: 14px;
+  margin-top: 12px;
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
-}
-
-.kiosk-estimate-actions .action {
-  min-height: 42px;
-}
-
-.kiosk-estimate-actions .action.primary {
-  min-width: 152px;
 }
 
 .kiosk-timer-alert {
@@ -3514,13 +3450,17 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
 }
 
 .chart-preview-modal {
-  width: min(1120px, 94vw);
-  max-width: none;
+  width: min(900px, 94vw);
 }
 
 .chart-search-card-modal {
   max-width: none;
   margin: 0 0 14px;
+}
+
+.chart-preview-simple {
+  display: grid;
+  gap: 14px;
 }
 
 .chart-preview-layout {
@@ -3537,6 +3477,11 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   max-height: 62vh;
   overflow: auto;
   padding-right: 4px;
+}
+
+.chart-preview-list-simple {
+  max-height: 220px;
+  padding-right: 2px;
 }
 
 .chart-preview-group {
@@ -3575,6 +3520,10 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.82);
   overflow: hidden;
+}
+
+.chart-preview-viewer-simple {
+  min-height: 54vh;
 }
 
 .chart-preview-frame {
@@ -3649,6 +3598,33 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   display: flex;
   flex: 0 0 auto;
   gap: 7px;
+}
+
+.admin-chart-item {
+  align-items: stretch;
+}
+
+.admin-chart-item.active {
+  border-color: rgba(33, 76, 90, 0.36);
+  background: rgba(219, 234, 240, 0.48);
+}
+
+.admin-chart-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  display: grid;
+  gap: 3px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.admin-chart-select small {
+  color: #54707a;
+  font-size: 0.76rem;
 }
 
 .admin-record-picker {
@@ -3981,6 +3957,23 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
 input:focus,
 select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
 
+body.kiosk-mode input:focus,
+body.kiosk-mode select:focus,
+body.kiosk-mode textarea:focus {
+  background: transparent;
+  box-shadow: none;
+}
+
+body.kiosk-mode .kiosk-editable-on-tap:focus {
+  background: rgba(33, 76, 90, 0.08);
+}
+
+body.kiosk-mode input:not(.kiosk-editable-on-tap),
+body.kiosk-mode textarea:not(.kiosk-editable-on-tap),
+body.kiosk-mode select:not(.kiosk-editable-on-tap) {
+  -webkit-tap-highlight-color: transparent;
+}
+
 @page {
   size: A4;
   margin: 8mm;
@@ -4201,6 +4194,11 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
     box-shadow: 0 12px 22px rgba(18, 47, 58, 0.08);
   }
 
+  body.iphone-ui .admin-preset-row-extended {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) calc(var(--admin-row-height) + 2px);
+    align-items: end;
+  }
+
   body.iphone-ui .admin-waypoint-row {
     grid-template-columns: 1fr;
   }
@@ -4211,6 +4209,24 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   body.iphone-ui .admin-rpc-row .admin-field-cell:nth-child(2),
   body.iphone-ui .admin-airport-row .admin-field-cell:last-child {
     grid-column: 1 / -1;
+  }
+
+  body.iphone-ui .admin-preset-row-extended .admin-field-cell:nth-child(3) {
+    grid-column: 1;
+  }
+
+  body.iphone-ui .admin-preset-row-extended .admin-field-cell:nth-child(4) {
+    grid-column: 2;
+  }
+
+  body.iphone-ui .admin-preset-row-extended .admin-row-action-cell {
+    grid-column: 3;
+    justify-self: end;
+    align-self: end;
+    width: calc(var(--admin-row-height) + 2px);
+    min-width: calc(var(--admin-row-height) + 2px);
+    border-left: 0;
+    background: transparent;
   }
 
   body.iphone-ui .admin-field-cell {
@@ -4306,6 +4322,16 @@ select:focus { outline: 0; background: rgba(33, 76, 90, 0.08); }
   .chart-preview-viewer,
   .chart-preview-frame {
     min-height: 42vh;
+  }
+
+  .chart-preview-list-simple {
+    min-height: 0;
+    max-height: 180px;
+  }
+
+  .chart-preview-viewer-simple,
+  .chart-preview-viewer-simple .chart-preview-frame {
+    min-height: 46vh;
   }
 
   .setup-card,

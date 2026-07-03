@@ -479,9 +479,11 @@
 
   function createEmptyChartForm() {
     return {
+      id: "",
       airportCode: "",
       name: "",
       category: "",
+      storagePath: "",
     };
   }
 
@@ -1355,8 +1357,8 @@
             </label>
             <button class="action primary" id="chart-preview-search-button" type="button">Search</button>
           </section>
-          <div class="chart-preview-layout">
-            <div class="chart-preview-list" aria-live="polite">
+          <div class="chart-preview-simple">
+            <div class="chart-preview-list chart-preview-list-simple" aria-live="polite">
               ${
                 !airportCode
                   ? '<p class="chart-search-message">Enter an airport code to view charts.</p>'
@@ -1364,10 +1366,10 @@
                     ? `<p class="chart-search-message error">No charts are available for ${escapeHtml(airportCode)}.</p>`
                     : groupedCharts.map((group) => `
                       <section class="chart-preview-group">
-                        <h4>${escapeHtml(group.category)}</h4>
+                        ${group.category ? `<h4>${escapeHtml(group.category)}</h4>` : ""}
                         ${group.items.map((chart) => `
                           <button class="chart-preview-select${selectedChart && selectedChart.id === chart.id ? " active" : ""}" data-chart-preview-select="${escapeAttr(chart.id)}" type="button">
-                            <span>${escapeHtml(chart.airportCode)}</span>
+                            <span>${escapeHtml(chart.category || chart.airportCode || "Chart")}</span>
                             <strong>${escapeHtml(chart.name || "Airport chart")}</strong>
                           </button>
                         `).join("")}
@@ -1375,7 +1377,7 @@
                     `).join("")
               }
             </div>
-            <div class="chart-preview-viewer">
+            <div class="chart-preview-viewer chart-preview-viewer-simple">
               ${
                 frameUrl
                   ? `<iframe class="chart-preview-frame" title="${escapeAttr(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}" src="${escapeAttr(frameUrl)}" sandbox="allow-same-origin allow-scripts"></iframe>`
@@ -1484,7 +1486,6 @@
             </div>
           </div>
           <div class="${viewPanel === "charts" ? "" : "hidden"}">
-            <h3 class="additional-info-subtitle">Charts</h3>
             <section class="chart-search-card">
               <label class="setup-field chart-search-field">
                 <span>Airport code</span>
@@ -1612,7 +1613,7 @@
       { id: "dashboard", label: "Dashboard" },
       { id: "presets", label: "Presets" },
       { id: "coordinates", label: "Coordinates" },
-      { id: "rpc-reg", label: "RP-C Reg" },
+      { id: "rpc-reg", label: "Aircraft" },
       { id: "airports", label: "Airport Info" },
       { id: "charts", label: "Charts" },
       { id: "announcements", label: "Announcements" },
@@ -1722,7 +1723,7 @@
             </div>
           </div>
           <div class="manual-section${panel === "rpc-reg" ? "" : " hidden"}">
-            <h3>RP-C Reg</h3><br>
+            <h3>Aircraft</h3><br>
             <section class="admin-preset-table admin-rpc-table">
               <div class="admin-preset-head admin-rpc-head">
                 <div>REGISTRATION</div>
@@ -1822,7 +1823,8 @@
                 <input id="admin-chart-file" type="file" accept="application/pdf,.pdf" />
               </label>
               <div class="entry-actions">
-                <button class="action primary" id="admin-chart-upload" type="button">Upload chart</button>
+                <button class="action primary" id="admin-chart-upload" type="button">${state.admin.chartForm.id ? "Save chart" : "Upload chart"}</button>
+                ${state.admin.chartForm.id ? '<button class="action" id="admin-chart-reset" type="button">New chart</button>' : ""}
                 <span class="admin-subtle-status">${escapeHtml(state.admin.chartUploadStatus)}</span>
               </div>
             </section>
@@ -1833,11 +1835,12 @@
                   ${group.items.map((chart) => {
                     const publicUrl = getAirportChartPublicUrl(chart);
                     return `
-                      <article class="admin-chart-item">
-                        <div>
+                      <article class="admin-chart-item${state.admin.chartForm.id === chart.id ? " active" : ""}">
+                        <button class="admin-chart-select" data-admin-chart-select="${escapeAttr(chart.id)}" type="button">
                           <span>${escapeHtml(chart.airportCode)}</span>
                           <strong>${escapeHtml(chart.name || "Airport chart")}</strong>
-                        </div>
+                          ${chart.category ? `<small>${escapeHtml(chart.category)}</small>` : ""}
+                        </button>
                         <div class="admin-chart-item-actions">
                           ${publicUrl ? `<a class="action" href="${escapeAttr(publicUrl)}" target="_blank" rel="noopener">Open</a>` : ""}
                           <button class="action" data-admin-chart-delete="${escapeAttr(chart.id)}" type="button">Delete</button>
@@ -2187,11 +2190,7 @@
             <h3>Route Estimate</h3>
             <button class="action bug-report-close" id="kiosk-route-estimate-close" type="button">Close</button>
           </div>
-          <div class="kiosk-estimate-hero">
-            <span class="kiosk-estimate-hero-label">Selected route</span>
-            <p class="kiosk-estimate-context" id="kiosk-estimate-context">${escapeHtml(routeContext)}</p>
-            <p class="kiosk-estimate-helper">${gpsEnabled ? "Use the live GPS picture below, then start a reminder for this point." : "Choose direction, enter distance and groundspeed, then start a timer."}</p>
-          </div>
+          <p class="kiosk-estimate-context" id="kiosk-estimate-context">${escapeHtml(routeContext)}</p>
           ${
             gpsEnabled
               ? `
@@ -2220,7 +2219,7 @@
               `
           }
           <div class="kiosk-estimate-grid">
-            <label class="kiosk-estimate-input-card">
+            <label>
               <span>Distance (NM)</span>
               <input id="kiosk-route-estimate-distance" value="${escapeAttr(model.distance)}" inputmode="decimal" />
               <span class="kiosk-distance-presets">
@@ -2229,7 +2228,7 @@
                 <button type="button" class="kiosk-preset-btn" data-kiosk-distance-preset="15">15NM</button>
               </span>
             </label>
-            <label class="kiosk-estimate-input-card">
+            <label>
               <span>Groundspeed</span>
               <input id="kiosk-route-estimate-gs" value="${escapeAttr(model.groundspeed)}" inputmode="decimal" />
             </label>
@@ -3707,6 +3706,7 @@
 
   function wireKioskDelayedKeyboard(input) {
     if (!input || input.dataset.longPressBound === "1") return;
+    input.classList.add("kiosk-editable-on-tap");
     let unlocked = false;
     let tapCount = 0;
     let lastTapAt = 0;
@@ -6378,11 +6378,28 @@
         await uploadAirportChartFromAdmin();
       });
     }
+    const chartResetButton = document.getElementById("admin-chart-reset");
+    if (chartResetButton) {
+      chartResetButton.addEventListener("click", () => {
+        state.admin.chartForm = createEmptyChartForm();
+        state.admin.chartUploadStatus = "";
+        const fileInput = document.getElementById("admin-chart-file");
+        if (fileInput) fileInput.value = "";
+        render();
+      });
+    }
     ["admin-chart-airport-code", "admin-chart-name", "admin-chart-category"].forEach((id) => {
       const field = document.getElementById(id);
       if (!field) return;
       field.addEventListener("input", () => {
         readAdminChartFormFromInputs();
+      });
+    });
+    document.querySelectorAll("[data-admin-chart-select]").forEach((button) => {
+      button.addEventListener("click", () => {
+        selectAirportChartForEditing(button.getAttribute("data-admin-chart-select"));
+        state.admin.chartUploadStatus = "";
+        render();
       });
     });
     document.querySelectorAll("[data-admin-chart-delete]").forEach((button) => {
@@ -7055,9 +7072,28 @@
     const nameInput = document.getElementById("admin-chart-name");
     const categoryInput = document.getElementById("admin-chart-category");
     state.admin.chartForm = {
+      id: String(state.admin.chartForm.id || ""),
       airportCode: String(airportInput ? airportInput.value : state.admin.chartForm.airportCode || ""),
       name: String(nameInput ? nameInput.value : state.admin.chartForm.name || ""),
       category: String(categoryInput ? categoryInput.value : state.admin.chartForm.category || ""),
+      storagePath: String(state.admin.chartForm.storagePath || ""),
+    };
+  }
+
+  function selectAirportChartForEditing(chartId) {
+    const selected = (Array.isArray(state.admin.charts) ? state.admin.charts : [])
+      .map((record) => normalizeAirportChartRecord(record))
+      .find((record) => record.id === String(chartId || ""));
+    if (!selected) {
+      state.admin.chartForm = createEmptyChartForm();
+      return;
+    }
+    state.admin.chartForm = {
+      id: selected.id,
+      airportCode: selected.airportCode,
+      name: selected.name,
+      category: selected.category,
+      storagePath: selected.storagePath,
     };
   }
 
@@ -7587,11 +7623,17 @@
     const uploadButton = document.getElementById("admin-chart-upload");
     const airportCode = normalizeCode(state.admin.chartForm.airportCode);
     const file = fileInput && fileInput.files ? fileInput.files[0] : null;
+    const currentChartId = String(state.admin.chartForm.id || "");
+    const existingChart = currentChartId
+      ? (Array.isArray(state.admin.charts) ? state.admin.charts : [])
+        .map((record) => normalizeAirportChartRecord(record))
+        .find((record) => record.id === currentChartId)
+      : null;
     const fallbackName = file ? String(file.name || "").replace(/\.pdf$/i, "").trim() : "";
     const chartName = String(state.admin.chartForm.name || "").trim() || fallbackName;
     const chartCategory = String(state.admin.chartForm.category || "").trim();
     const isPdf = Boolean(file && (file.type === "application/pdf" || /\.pdf$/i.test(file.name || "")));
-    if (!airportCode || !chartName || !isPdf) {
+    if (!airportCode || !chartName || (!existingChart && !isPdf)) {
       state.admin.chartUploadStatus = !airportCode
         ? "Enter an airport code."
         : !chartName
@@ -7600,45 +7642,74 @@
       render();
       return;
     }
-    const storagePath = `${airportCode}/${Date.now()}-${sanitizeChartFileName(file.name)}`;
     if (uploadButton) {
       uploadButton.disabled = true;
-      uploadButton.textContent = "Uploading...";
+      uploadButton.textContent = existingChart ? "Saving..." : "Uploading...";
     }
-    state.admin.chartUploadStatus = "Uploading chart...";
+    state.admin.chartUploadStatus = existingChart ? "Saving chart..." : "Uploading chart...";
     try {
-      const uploadResult = await supabaseClient.storage.from(AIRPORT_CHARTS_BUCKET).upload(storagePath, file, {
-        cacheControl: "3600",
-        contentType: "application/pdf",
-        upsert: false,
-      });
-      if (uploadResult.error) throw uploadResult.error;
-      let insertResult = await supabaseClient.from("airport_charts").insert({
-        airport_code: airportCode,
-        name: chartName,
-        category: chartCategory,
-        storage_path: storagePath,
-      });
-      if (insertResult.error && isAirportChartsCategorySchemaError(insertResult.error)) {
-        insertResult = await supabaseClient.from("airport_charts").insert({
+      let storagePath = existingChart ? String(existingChart.storagePath || "") : "";
+      let previousStoragePath = "";
+      if (file) {
+        storagePath = `${airportCode}/${Date.now()}-${sanitizeChartFileName(file.name)}`;
+        const uploadResult = await supabaseClient.storage.from(AIRPORT_CHARTS_BUCKET).upload(storagePath, file, {
+          cacheControl: "3600",
+          contentType: "application/pdf",
+          upsert: false,
+        });
+        if (uploadResult.error) throw uploadResult.error;
+        previousStoragePath = existingChart ? String(existingChart.storagePath || "") : "";
+      }
+      let chartResult;
+      if (existingChart) {
+        chartResult = await supabaseClient.from("airport_charts").update({
           airport_code: airportCode,
           name: chartName,
+          category: chartCategory,
+          storage_path: storagePath,
+        }).eq("id", existingChart.id);
+        if (chartResult.error && isAirportChartsCategorySchemaError(chartResult.error)) {
+          chartResult = await supabaseClient.from("airport_charts").update({
+            airport_code: airportCode,
+            name: chartName,
+            storage_path: storagePath,
+          }).eq("id", existingChart.id);
+          if (!chartResult.error) {
+            state.admin.chartUploadStatus = "Chart saved. Run the SQL update to enable saved categories.";
+          }
+        }
+      } else {
+        chartResult = await supabaseClient.from("airport_charts").insert({
+          airport_code: airportCode,
+          name: chartName,
+          category: chartCategory,
           storage_path: storagePath,
         });
-        if (!insertResult.error) {
-          state.admin.chartUploadStatus = "Chart uploaded. Run the SQL update to enable saved categories.";
+        if (chartResult.error && isAirportChartsCategorySchemaError(chartResult.error)) {
+          chartResult = await supabaseClient.from("airport_charts").insert({
+            airport_code: airportCode,
+            name: chartName,
+            storage_path: storagePath,
+          });
+          if (!chartResult.error) {
+            state.admin.chartUploadStatus = "Chart uploaded. Run the SQL update to enable saved categories.";
+          }
         }
       }
-      if (insertResult.error) {
-        await supabaseClient.storage.from(AIRPORT_CHARTS_BUCKET).remove([storagePath]);
-        throw insertResult.error;
+      if (chartResult.error) {
+        if (file && storagePath) await supabaseClient.storage.from(AIRPORT_CHARTS_BUCKET).remove([storagePath]);
+        throw chartResult.error;
+      }
+      if (file && previousStoragePath && previousStoragePath !== storagePath) {
+        await supabaseClient.storage.from(AIRPORT_CHARTS_BUCKET).remove([previousStoragePath]);
       }
       await loadAdminData();
       state.admin.chartForm = createEmptyChartForm();
-      if (!String(state.admin.chartUploadStatus || "").trim()) state.admin.chartUploadStatus = "Chart uploaded.";
+      if (fileInput) fileInput.value = "";
+      if (!String(state.admin.chartUploadStatus || "").trim()) state.admin.chartUploadStatus = existingChart ? "Chart saved." : "Chart uploaded.";
       render();
     } catch (error) {
-      state.admin.chartUploadStatus = error && error.message ? error.message : "Could not upload chart.";
+      state.admin.chartUploadStatus = error && error.message ? error.message : (existingChart ? "Could not save chart." : "Could not upload chart.");
       render();
     }
   }
@@ -7661,6 +7732,7 @@
       const deleteResult = await supabaseClient.from("airport_charts").delete().eq("id", chart.id);
       if (deleteResult.error) throw deleteResult.error;
       await loadAdminData();
+      if (state.admin.chartForm.id === chart.id) state.admin.chartForm = createEmptyChartForm();
       state.admin.chartUploadStatus = "Chart deleted.";
       render();
     } catch (error) {
