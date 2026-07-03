@@ -597,7 +597,7 @@
   function filterSuggestionValues(values, query) {
     const needle = normalizeCode(query);
     const list = Array.from(new Set((Array.isArray(values) ? values : []).map((value) => String(value || "").trim()).filter(Boolean)));
-    if (!needle) return list.slice(0, 8);
+    if (!needle) return list.slice(0, 3);
     const prefixMatches = [];
     const containsMatches = [];
     list.forEach((value) => {
@@ -606,7 +606,7 @@
       if (normalized.startsWith(needle)) prefixMatches.push(value);
       else containsMatches.push(value);
     });
-    return [...prefixMatches, ...containsMatches].slice(0, 8);
+    return [...prefixMatches, ...containsMatches].slice(0, 3);
   }
 
   function closeSuggestionMenu() {
@@ -1663,11 +1663,11 @@
             <div class="preset-status ${presetLookup.active ? (presetLookup.exists ? "available" : "missing") : ""}">${presetLookup.active ? (presetLookup.exists ? "preset avbl" : "preset unavbl") : ""}</div>
             <section class="admin-preset-table">
               <div class="admin-preset-head admin-preset-head-extended">
-                <div>ROUTE <button class="action admin-mini-btn" id="admin-preset-add-row" type="button" aria-label="Add route row">+</button></div>
+                <div>ROUTE</div>
                 <div>COORDS</div>
                 <div>TC</div>
                 <div>DIST</div>
-                <div></div>
+                <div><button class="mini-plus" id="admin-preset-add-row" type="button" aria-label="Add route row">+</button></div>
               </div>
               <div class="admin-preset-body">
                 ${presetRows.map((row, index) => {
@@ -1990,6 +1990,14 @@
                 <h4>Airports loaded</h4>
                 <p>${escapeHtml(String((state.admin.airports || []).length))}</p>
               </article>
+              <article class="admin-dashboard-card">
+                <h4>Airplanes</h4>
+                <p>${escapeHtml(String((state.admin.rpcRegistry || []).length))}</p>
+              </article>
+              <article class="admin-dashboard-card">
+                <h4>Charts</h4>
+                <p>${escapeHtml(String((state.admin.charts || []).length))}</p>
+              </article>
             </div>
           </div>
           </div>
@@ -2047,7 +2055,6 @@
         </section>
         <section class="activate-wrap">
           <button class="activate-button" id="activate-ipad-mode" type="button" title="Activate is for cockpit use.">ACTIVATE</button>
-          <button class="action" id="open-activate-charts" type="button">Charts</button>
           ${activateError ? `<p class="activate-error">${escapeHtml(activateError)}</p>` : ""}
         </section>
         ${renderActivateInfoModal()}
@@ -2100,11 +2107,10 @@
             ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-scroll-part kiosk-phone-atis-scroll"><p class="kiosk-part-label">ATIS</p>${renderAtisSection()}</section>` : renderAtisSection()}
           </div>
         </section>
-        ${showWhereAmI ? `
-          <section class="kiosk-whereami-wrap">
-            <button class="activate-button kiosk-whereami-btn" id="kiosk-whereami-open" type="button">Where am I</button>
-          </section>
-        ` : ""}
+        <section class="kiosk-whereami-wrap">
+          ${showWhereAmI ? `<button class="activate-button kiosk-whereami-btn" id="kiosk-whereami-open" type="button">Where am I</button>` : ""}
+          <button class="action" id="open-activate-charts" type="button">Charts</button>
+        </section>
         <section class="kiosk-pad-overlay" id="kiosk-pad-overlay" aria-hidden="true">
           <div class="kiosk-pad-card">
             <div class="kiosk-pad-head">
@@ -2118,6 +2124,7 @@
         ${renderKioskWhereAmIModal()}
         ${renderKioskTimerAlertModal()}
         ${renderActivateGpsPermissionPromptModal()}
+        ${renderChartPreviewModal()}
       </main>
     `;
   }
@@ -2828,8 +2835,8 @@
       );
     const timeUnitLabel = isKiosk ? "mins" : (state.settings.roundTimeValues ? "mins" : "min+sec");
     const showTocUnits = true;
-    const tocDistancePlaceholder = showTocUnits ? `Distance (${distanceUnitLabel})` : "Distance";
-    const tocTimePlaceholder = showTocUnits ? `Time (${timeUnitLabel})` : "Time";
+    const tocDistancePlaceholder = "Distance";
+    const tocTimePlaceholder = "Time";
     const renderTocValueCell = (field, value, placeholder, unitText, isLast = false) => `
       <label class="toc-value-wrap${isLast ? " is-last" : ""}">
         <input data-toc="${field}" value="${escapeAttr(value)}" placeholder="${escapeAttr(placeholder)}" />
@@ -3114,12 +3121,6 @@
         state.meta.activateError = "";
         state.meta.activateInfoOpen = true;
         render();
-      });
-    }
-    const activateChartsButton = document.getElementById("open-activate-charts");
-    if (activateChartsButton) {
-      activateChartsButton.addEventListener("click", () => {
-        openChartPreviewModal(state.navlog.setup.destination || state.navlog.setup.departure || "");
       });
     }
     const activateInfoClose = document.getElementById("activate-info-close");
@@ -3515,6 +3516,12 @@
     document.querySelectorAll(".mini-plus, .remove-chip, .blank-chip").forEach((node) => {
       node.style.display = "none";
     });
+    const activateChartsButton = document.getElementById("open-activate-charts");
+    if (activateChartsButton) {
+      activateChartsButton.addEventListener("click", () => {
+        openChartPreviewModal(state.navlog.setup.destination || state.navlog.setup.departure || "");
+      });
+    }
     document.body.classList.add("kiosk-mode");
     if (!phoneMode) fitSheetToViewport(".ipad-kiosk-wrap");
     document.querySelectorAll("input, select, textarea, button").forEach((node) => {
@@ -6291,6 +6298,24 @@
     const rpcRowInputs = Array.from(document.querySelectorAll("[data-admin-rpc-row]"));
     rpcRowInputs.forEach((node) => {
       node.addEventListener("input", () => {
+        const key = String(node.getAttribute("data-admin-rpc-row") || "");
+        const [, field] = key.split(":");
+        if (field === "registration") {
+          const registration = String(node.value || "");
+          state.admin.selectedRpcRegistration = normalizeCode(registration);
+          state.admin.rpcRegistryForm = {
+            rows: normalizeRpcRegistryRows([{
+              registration,
+              aircraftType: "",
+              casClimb: "",
+              casCruise: "",
+              gph: "",
+            }]),
+          };
+          syncAdminRpcAutofill();
+          syncAdminRpcFormUi();
+          return;
+        }
         readRpcRegistryFromInputs();
         syncAdminRpcFormUi();
       });
@@ -7111,13 +7136,25 @@
     const rows = normalizeRpcRegistryRows(state.admin.rpcRegistryForm.rows);
     rows.forEach((row) => {
       const registration = normalizeCode(row.registration);
-      if (!registration) return;
+      if (!registration) {
+        row.aircraftType = "";
+        row.casClimb = "";
+        row.casCruise = "";
+        row.gph = "";
+        return;
+      }
       const known = getRpcRegistryRecord(registration);
-      if (!known) return;
-      if (!String(row.aircraftType || "").trim() && known.aircraftType) row.aircraftType = known.aircraftType;
-      if (!String(row.casClimb || "").trim() && known.casClimb) row.casClimb = known.casClimb;
-      if (!String(row.casCruise || "").trim() && known.casCruise) row.casCruise = known.casCruise;
-      if (!String(row.gph || "").trim() && known.gph) row.gph = known.gph;
+      if (!known) {
+        row.aircraftType = "";
+        row.casClimb = "";
+        row.casCruise = "";
+        row.gph = "";
+        return;
+      }
+      row.aircraftType = String(known.aircraftType || "");
+      row.casClimb = String(known.casClimb || "");
+      row.casCruise = String(known.casCruise || "");
+      row.gph = String(known.gph || "");
     });
     state.admin.rpcRegistryForm.rows = rows;
   }
@@ -7535,6 +7572,13 @@
     return cleaned || "chart.pdf";
   }
 
+  function isAirportChartsCategorySchemaError(error) {
+    const message = String(error && error.message ? error.message : "").toLowerCase();
+    return message.includes("could not find the 'category' column")
+      || message.includes('could not find the "category" column')
+      || message.includes("schema cache");
+  }
+
   async function uploadAirportChartFromAdmin() {
     const ok = await connectSupabaseClient(false);
     if (!ok || !supabaseClient) {
@@ -7572,19 +7616,29 @@
         upsert: false,
       });
       if (uploadResult.error) throw uploadResult.error;
-      const insertResult = await supabaseClient.from("airport_charts").insert({
+      let insertResult = await supabaseClient.from("airport_charts").insert({
         airport_code: airportCode,
         name: chartName,
         category: chartCategory,
         storage_path: storagePath,
       });
+      if (insertResult.error && isAirportChartsCategorySchemaError(insertResult.error)) {
+        insertResult = await supabaseClient.from("airport_charts").insert({
+          airport_code: airportCode,
+          name: chartName,
+          storage_path: storagePath,
+        });
+        if (!insertResult.error) {
+          state.admin.chartUploadStatus = "Chart uploaded. Run the SQL update to enable saved categories.";
+        }
+      }
       if (insertResult.error) {
         await supabaseClient.storage.from(AIRPORT_CHARTS_BUCKET).remove([storagePath]);
         throw insertResult.error;
       }
       await loadAdminData();
       state.admin.chartForm = createEmptyChartForm();
-      state.admin.chartUploadStatus = "Chart uploaded.";
+      if (!String(state.admin.chartUploadStatus || "").trim()) state.admin.chartUploadStatus = "Chart uploaded.";
       render();
     } catch (error) {
       state.admin.chartUploadStatus = error && error.message ? error.message : "Could not upload chart.";
@@ -8688,8 +8742,12 @@
       const node = document.querySelector(`[data-leg-field="${index}:route"]`);
       const wrapper = node && node.closest(".route-cell");
       if (!node || !wrapper) return;
+      const leg = state.navlog.legs[index] || {};
       const showHint = String(node.value || "").trim() === "" && document.activeElement !== node;
+      const routeIsUnknown = String(node.value || "").trim() !== "" && !isRecognizedRoute(node.value);
+      const shouldShowUnknownRoute = routeIsUnknown && (state.view !== "ipad-kiosk" || leg._kioskCreated === true);
       wrapper.classList.toggle("show-route-hint", showHint);
+      wrapper.classList.toggle("route-unknown", shouldShowUnknownRoute);
     });
   }
 
