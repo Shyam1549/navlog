@@ -347,12 +347,12 @@ body.kiosk-mode .time-head {
   margin-top: 12px;
 }
 
-.bug-report-form label {
+.bug-report-field {
   display: grid;
   gap: 6px;
 }
 
-.bug-report-form span {
+.bug-report-field label {
   color: var(--muted);
   font-size: 0.85rem;
   text-transform: uppercase;
@@ -360,6 +360,8 @@ body.kiosk-mode .time-head {
 
 .bug-report-form textarea,
 .bug-report-form input {
+  box-sizing: border-box;
+  display: block;
   width: 100%;
   border: 2px solid rgba(46, 41, 35, 0.16);
   border-radius: 12px;
@@ -1184,6 +1186,15 @@ body.kiosk-mode .ipad-kiosk-page {
   background: #efe3cf;
 }
 
+body.kiosk-modal-scroll-lock {
+  overflow: hidden !important;
+}
+
+body.kiosk-modal-scroll-lock .ipad-kiosk-page {
+  overflow: hidden !important;
+  max-height: 100vh;
+}
+
 .kiosk-utc {
   display: flex;
   align-items: center;
@@ -1199,17 +1210,19 @@ body.kiosk-mode .ipad-kiosk-page {
 }
 
 .kiosk-top-strip {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   align-items: center;
-  justify-content: center;
   gap: 8px;
   margin: 0 auto 8px;
-  width: min(1120px, 96vw);
+  width: min(430px, 96vw);
 }
 
 .kiosk-top-strip .kiosk-utc {
   margin: 0;
-  min-width: 110px;
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
 }
 
 .kiosk-gps-age {
@@ -1226,7 +1239,8 @@ body.kiosk-mode .ipad-kiosk-page {
   align-items: center;
   justify-content: center;
   min-height: 40px;
-  min-width: 126px;
+  min-width: 0;
+  width: 100%;
   padding: 8px 10px;
   border-radius: 12px;
   border: 2px solid rgba(33, 76, 90, 0.36);
@@ -1236,11 +1250,12 @@ body.kiosk-mode .ipad-kiosk-page {
 }
 
 .kiosk-top-strip.is-phone {
-  justify-content: space-between;
+  justify-content: stretch;
 }
 
 .kiosk-top-scratchpad {
-  min-width: 118px;
+  min-width: 0;
+  width: 100%;
   min-height: 40px;
   padding: 8px 10px;
   border-radius: 12px;
@@ -1397,7 +1412,11 @@ body.kiosk-mode .ipad-kiosk-page {
 
 .kiosk-estimate-primary-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
+}
+
+.kiosk-estimate-grid.gps-distance-only {
+  grid-template-columns: 1fr;
 }
 
 .kiosk-route-edit-actions {
@@ -1734,6 +1753,16 @@ body.kiosk-phone-mode .toc-tod-card.resolved .toc-tod-title {
   border-color: #8a1111;
   background: #c51f1f;
   min-width: 220px;
+}
+
+.kiosk-whereami-wrap .kiosk-whereami-btn,
+.kiosk-whereami-wrap .kiosk-chart-launch-btn {
+  width: 220px;
+  min-width: 220px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .kiosk-whereami-btn.is-error {
@@ -3653,7 +3682,11 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
 }
 
 .kiosk-chart-launch-btn-top {
-  min-width: 150px;
+  min-width: 0;
+  width: 100%;
+  min-height: 40px;
+  padding: 8px 10px;
+  border-radius: 12px;
 }
 
 .suggestion-option {

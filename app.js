@@ -1108,6 +1108,10 @@
     document.body.classList.remove("kiosk-phone-mode");
     document.body.classList.remove("ipad-desktop-scale");
     document.body.classList.remove("iphone-navlog-vd-mode");
+    document.body.classList.toggle(
+      "kiosk-modal-scroll-lock",
+      state.view === "ipad-kiosk" && Boolean(state.meta?.kioskRouteEstimate?.open),
+    );
     document.body.classList.toggle("iphone-ui", isIphoneDevice());
     if (isIpadDevice() && (state.view === "navlog" || state.view === "ipad-kiosk")) {
       document.body.classList.add("ipad-desktop-scale");
@@ -1270,14 +1274,14 @@
             <button class="action bug-report-close" id="close-bug-report" type="button" ${disabled}>Close</button>
           </div>
           <form id="bug-report-form" class="bug-report-form">
-            <label>
-              <span>What went wrong?</span>
+            <div class="bug-report-field">
+              <label for="bug-report-message">What went wrong?</label>
               <textarea id="bug-report-message" maxlength="2000" required placeholder="Describe what happened and how to reproduce it."></textarea>
-            </label>
-            <label>
-              <span>Your email (optional)</span>
+            </div>
+            <div class="bug-report-field">
+              <label for="bug-report-email">Your email (optional)</label>
               <input id="bug-report-email" type="email" maxlength="200" placeholder="you@example.com" />
-            </label>
+            </div>
             ${state.bugReport.note ? `<p class="${statusClass}">${escapeHtml(state.bugReport.note)}</p>` : ""}
             <div class="bug-report-actions">
               <button class="action primary" type="submit" ${disabled}>${submitLabel}</button>
@@ -1378,7 +1382,7 @@
           <section class="chart-search-card chart-search-card-modal">
             <label class="setup-field chart-search-field">
               <span>Airport code</span>
-              <input id="chart-preview-airport-search" value="${escapeAttr(airportCode)}" autocomplete="off" spellcheck="false" data-suggest-source="chart-airports" data-suggest-open-on-focus="true" />
+              <input id="chart-preview-airport-search" value="${escapeAttr(airportCode)}" autocomplete="off" inputmode="text" autocapitalize="characters" spellcheck="false" data-suggest-source="chart-airports" data-suggest-open-on-focus="true" />
             </label>
             <button class="action primary" id="chart-preview-search-button" type="button">Search</button>
           </section>
@@ -1386,7 +1390,7 @@
             <div class="chart-preview-list chart-preview-list-simple" aria-live="polite">
               ${
                 !airportCode
-                  ? '<p class="chart-search-message">Enter an airport code to view charts.</p>'
+                  ? ""
                   : !groupedCharts.length
                     ? `<p class="chart-search-message error">No charts are available for ${escapeHtml(airportCode)}.</p>`
                     : groupedCharts.map((group) => `
@@ -1403,7 +1407,6 @@
                     `).join("")
               }
             </div>
-            <p class="chart-search-message">Tap a chart to preview it full screen.</p>
           </div>
         </section>
       </div>
@@ -1847,7 +1850,6 @@
               </label>
               <div class="entry-actions">
                 <button class="action primary" id="admin-chart-upload" type="button">${state.admin.chartForm.id ? "Save chart" : "Upload chart"}</button>
-                ${state.admin.chartForm.id ? '<button class="action" id="admin-chart-reset" type="button">New chart</button>' : ""}
                 <span class="admin-subtle-status">${escapeHtml(state.admin.chartUploadStatus)}</span>
               </div>
             </section>
@@ -2111,8 +2113,8 @@
     `;
     return `
       <main class="ipad-kiosk-page${phoneMode ? " kiosk-phone-activate-page" : ""}">
-        ${gpsAgeLabel ? `<div class="kiosk-gps-age" id="kiosk-gps-age">${escapeHtml(gpsAgeLabel)}</div>` : ""}
         ${topStrip}
+        ${gpsAgeLabel ? `<div class="kiosk-gps-age" id="kiosk-gps-age">${escapeHtml(gpsAgeLabel)}</div>` : ""}
         ${renderKioskEventTimerStrip()}
         <section class="sheet-wrap ipad-kiosk-wrap">
           <div class="sheet ipad-kiosk-sheet${phoneMode ? " kiosk-phone-sheet" : ""}">
@@ -2242,7 +2244,7 @@
                 </div>
               `
           }
-          <div class="kiosk-estimate-grid">
+          <div class="kiosk-estimate-grid${gpsEnabled ? " gps-distance-only" : ""}">
             <label>
               <span>Distance (NM)</span>
               <input id="kiosk-route-estimate-distance" value="${escapeAttr(model.distance)}" inputmode="decimal" />
@@ -2252,10 +2254,10 @@
                 <button type="button" class="kiosk-preset-btn" data-kiosk-distance-preset="15">15NM</button>
               </span>
             </label>
-            <label>
+            ${gpsEnabled ? "" : `<label>
               <span>Groundspeed</span>
               <input id="kiosk-route-estimate-gs" value="${escapeAttr(model.groundspeed)}" inputmode="decimal" />
-            </label>
+            </label>`}
           </div>
           <p class="kiosk-estimate-result${gpsEnabled && !model.resultHhmm ? " hidden" : ""}" id="kiosk-route-estimate-result">${gpsEnabled ? "Alert ETA" : "ETA"}: <strong>${escapeHtml(model.resultHhmm || "--")}${model.resultHhmm ? "Z" : ""}</strong></p>
           ${model.error ? `<p class="kiosk-estimate-error">${escapeHtml(model.error)}</p>` : ""}
@@ -3576,6 +3578,7 @@
         (node.closest && node.closest("#kiosk-route-estimate-overlay"))
         || (node.closest && node.closest("#kiosk-timer-alert-overlay"))
         || (node.closest && node.closest("#kiosk-whereami-overlay"))
+        || (node.closest && node.closest("#chart-preview-overlay"))
         || (node.closest && node.closest(".kiosk-event-stack")),
       );
       const allowAt = legField.endsWith(":at");
@@ -4137,24 +4140,20 @@
     const direction = getKioskRouteTimeDirection(model.legIndex, nowMs) || "outbound";
     const targetDistanceNm = parseDistanceInputWithUnit(model.distance, "nm");
     if (!Number.isFinite(targetDistanceNm) || targetDistanceNm <= 0) {
-      return { error: "Distance/groundspeed invalid. cannot compute." };
+      return { error: "Distance invalid. cannot compute." };
     }
     const relative = computeKioskRouteGpsRelativeInfo(model.legIndex);
     if (relative && relative.error) return { error: relative.error };
     const currentDistanceNm = Number(relative.distanceNm);
     if (!Number.isFinite(currentDistanceNm)) return { error: "Could not compute GPS position." };
-    const liveGpsSpeed = state.meta?.kioskGps?.speedKts;
-    const draftSpeed = parseSpeedInput(model.groundspeed);
-    const speedKnots = Number.isFinite(draftSpeed) && draftSpeed > 0
-      ? draftSpeed
-      : (Number.isFinite(liveGpsSpeed) && liveGpsSpeed > 0 ? liveGpsSpeed : Number.NaN);
-    if (!Number.isFinite(speedKnots) || speedKnots <= 0) return { error: "Distance/groundspeed invalid. cannot compute." };
+    const liveGpsSpeed = Number(state.meta?.kioskGps?.speedKts);
+    const speedKnots = Number.isFinite(liveGpsSpeed) && liveGpsSpeed > 0 ? liveGpsSpeed : Number.NaN;
     const remainingNm = direction === "inbound"
       ? Math.max(0, currentDistanceNm - targetDistanceNm)
       : Math.max(0, targetDistanceNm - currentDistanceNm);
-    const dueUtcMs = nowMs + Math.round((remainingNm / speedKnots) * 60 * 60 * 1000);
-    const dueDate = new Date(dueUtcMs);
-    const hhmm = `${String(dueDate.getUTCHours()).padStart(2, "0")}${String(dueDate.getUTCMinutes()).padStart(2, "0")}`;
+    const dueUtcMs = Number.isFinite(speedKnots) ? nowMs + Math.round((remainingNm / speedKnots) * 60 * 60 * 1000) : Number.NaN;
+    const dueDate = Number.isFinite(dueUtcMs) ? new Date(dueUtcMs) : null;
+    const hhmm = dueDate ? `${String(dueDate.getUTCHours()).padStart(2, "0")}${String(dueDate.getUTCMinutes()).padStart(2, "0")}` : "";
     return {
       direction,
       speedKnots,
@@ -4219,7 +4218,7 @@
       const estimate = computeKioskGpsReminderEstimateFromDraft(model, Date.now());
       if (estimateNode) {
         const strong = estimateNode.querySelector("strong");
-        if (!estimate || estimate.error) {
+        if (!estimate || estimate.error || !estimate.hhmm) {
           estimateNode.classList.add("hidden");
           if (strong) strong.textContent = "--";
         } else {
@@ -4515,7 +4514,7 @@
           const model = state.meta.kioskRouteEstimate;
           const reminder = computeKioskGpsReminderEstimateFromDraft(model);
           if (!reminder) {
-            model.error = "Distance/groundspeed invalid. cannot compute.";
+            model.error = "Distance invalid. cannot compute.";
             render();
             return;
           }
@@ -5983,8 +5982,6 @@
     document.removeEventListener("keydown", handleBugReportEscape);
     if (state.bugReport.open) {
       document.addEventListener("keydown", handleBugReportEscape);
-      const messageInput = document.getElementById("bug-report-message");
-      if (messageInput) messageInput.focus();
     }
 
     const bugReportForm = document.getElementById("bug-report-form");
@@ -6440,7 +6437,13 @@
     }
     document.querySelectorAll("[data-admin-rpc-select]").forEach((button) => {
       button.addEventListener("click", () => {
-        selectRpcForEditing(button.getAttribute("data-admin-rpc-select"));
+        const registration = normalizeCode(button.getAttribute("data-admin-rpc-select"));
+        if (registration && registration === normalizeCode(state.admin.selectedRpcRegistration)) {
+          state.admin.selectedRpcRegistration = "";
+          state.admin.rpcRegistryForm = createEmptyRpcRegistryForm();
+        } else {
+          selectRpcForEditing(registration);
+        }
         render();
       });
     });
@@ -6504,7 +6507,12 @@
     });
     document.querySelectorAll("[data-admin-chart-select]").forEach((button) => {
       button.addEventListener("click", () => {
-        selectAirportChartForEditing(button.getAttribute("data-admin-chart-select"));
+        const chartId = String(button.getAttribute("data-admin-chart-select") || "");
+        if (chartId && chartId === String(state.admin.chartForm.id || "")) {
+          state.admin.chartForm = createEmptyChartForm();
+        } else {
+          selectAirportChartForEditing(chartId);
+        }
         state.admin.chartUploadStatus = "";
         render();
       });
