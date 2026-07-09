@@ -952,6 +952,21 @@ body.kiosk-mode .time-head {
   margin: 24px 0 8px;
 }
 
+.admin-preset-add-mobile {
+  display: none;
+}
+
+.admin-preset-add-mobile-btn {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  padding: 0;
+  font-size: 1.35rem;
+  line-height: 1;
+  font-weight: 900;
+}
+
 .admin-lock-caption {
   grid-column: 3;
   justify-self: end;
@@ -1197,6 +1212,15 @@ body.kiosk-mode .ipad-kiosk-page {
   min-width: 110px;
 }
 
+.kiosk-gps-age {
+  width: min(1120px, 96vw);
+  margin: 0 auto 4px;
+  color: rgba(32, 54, 64, 0.68);
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-align: center;
+}
+
 .kiosk-gps-speed {
   display: inline-flex;
   align-items: center;
@@ -1367,10 +1391,32 @@ body.kiosk-mode .ipad-kiosk-page {
 
 .kiosk-estimate-actions {
   margin-top: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
   gap: 8px;
+}
+
+.kiosk-estimate-primary-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.kiosk-route-edit-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.kiosk-route-symbol-btn {
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-weight: 900;
+}
+
+.kiosk-route-symbol-btn.danger {
+  border-color: rgba(185, 28, 28, 0.42);
+  background: rgba(185, 28, 28, 0.1);
+  color: #b91c1c;
 }
 
 .kiosk-timer-alert {
@@ -1679,6 +1725,9 @@ body.kiosk-phone-mode .toc-tod-card.resolved .toc-tod-title {
   width: min(1120px, 96vw);
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .kiosk-whereami-btn {
@@ -3534,6 +3583,32 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   background: #f5f1e8;
 }
 
+.chart-fullscreen-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2600;
+  padding: 16px;
+  background: rgba(16, 22, 27, 0.54);
+  display: grid;
+  place-items: center;
+}
+
+.chart-fullscreen-viewer {
+  width: min(1120px, 96vw);
+  height: min(92vh, 980px);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f5f1e8;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
+}
+
+.chart-fullscreen-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #f5f1e8;
+}
+
 .suggestion-menu {
   position: absolute;
   z-index: 1500;
@@ -3575,6 +3650,10 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
 .kiosk-chart-launch-btn {
   min-width: 220px;
   font-weight: 800;
+}
+
+.kiosk-chart-launch-btn-top {
+  min-width: 150px;
 }
 
 .suggestion-option {
@@ -4265,6 +4344,12 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
     padding: 0 2px;
   }
 
+  body.iphone-ui .admin-preset-add-mobile {
+    display: flex;
+    justify-content: center;
+    margin: 10px 0 12px;
+  }
+
   body.iphone-ui .admin-lock-caption {
     grid-column: 1;
     justify-self: end;
@@ -4582,11 +4667,15 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
 .pdf-export .settings-info-wrap { display: none !important; }
 
 .pdf-export .sheet { font-size: 1em; }
+.pdf-export .sheet,
+.pdf-export .sheet * {
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+}
 .pdf-export .field,
 .pdf-export .atis-cell,
 .pdf-export .header-box,
 .pdf-export .head-cell,
-.pdf-export .toc-tod-card,
 .pdf-export .toc-value-wrap,
 .pdf-export .radio-row > div {
   overflow: hidden;
@@ -4611,18 +4700,20 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   margin: 0 auto !important;
   line-height: 1 !important;
   font-size: 1.08em !important;
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
 }
 
-.pdf-export .toc-value-wrap {
-  flex-direction: column;
-}
 .pdf-export input::placeholder { color: transparent !important; }
 .pdf-export .head-format-note { display: none !important; }
 .pdf-export .toc-unit {
   display: inline-flex !important;
-  color: var(--muted) !important;
+  color: #000 !important;
 }
-.pdf-export .cas-head { color: transparent !important; }
+.pdf-export .cas-head {
+  color: transparent !important;
+  -webkit-text-fill-color: transparent !important;
+}
 .pdf-export input[data-leg-field$=":cas"] {
   color: transparent !important;
   -webkit-text-fill-color: transparent !important;

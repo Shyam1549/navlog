@@ -242,7 +242,7 @@
       legIndex: -1,
       routeLabel: "",
       routeCode: "",
-      direction: "outbound",
+      direction: "",
       distance: "10",
       groundspeed: "",
       error: "",
@@ -270,6 +270,7 @@
       latitude: null,
       longitude: null,
       accuracyMeters: null,
+      lastFixMs: null,
       speedCellMode: "gs",
       speedCellModeByLeg: {},
       whereAmI: {
@@ -492,6 +493,8 @@
       open: false,
       airportCode: "",
       selectedChartId: "",
+      viewer: false,
+      activateMode: false,
     };
   }
 
@@ -736,7 +739,7 @@
     });
   }
 
-  function openChartPreviewModal(airportCode = "", chartId = "") {
+  function openChartPreviewModal(airportCode = "", chartId = "", options = {}) {
     const code = normalizeCode(airportCode || state.meta.chartAirportQuery || state.meta.chartPreview.airportCode);
     const charts = getChartsForAirportCode(code);
     const selected = charts.find((chart) => chart.id === String(chartId || "")) || charts[0] || null;
@@ -744,6 +747,8 @@
       open: true,
       airportCode: code,
       selectedChartId: selected ? selected.id : "",
+      viewer: Object.prototype.hasOwnProperty.call(options, "viewer") ? Boolean(options.viewer) : Boolean(chartId),
+      activateMode: Object.prototype.hasOwnProperty.call(options, "activateMode") ? Boolean(options.activateMode) : state.view === "ipad-kiosk",
     };
     render();
   }
@@ -751,6 +756,13 @@
   function closeChartPreviewModal() {
     state.meta.chartPreview = createEmptyChartPreviewState();
     render();
+  }
+
+  function openChartInNewTab(chart) {
+    const url = getAirportChartPublicUrl(chart);
+    if (!url) return;
+    const opened = window.open(url, "_blank", "noopener,noreferrer");
+    if (opened && typeof opened.focus === "function") opened.focus();
   }
 
   function normalizeAirportRecord(airport) {
@@ -1343,11 +1355,24 @@
     const selectedChart = charts.find((chart) => chart.id === String(model.selectedChartId || "")) || charts[0] || null;
     const selectedUrl = selectedChart ? getAirportChartPublicUrl(selectedChart) : "";
     const frameUrl = selectedUrl ? `${selectedUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH` : "";
+    if (model.viewer) {
+      return `
+        <div class="chart-fullscreen-overlay" id="chart-preview-overlay">
+          <section class="chart-fullscreen-viewer" role="dialog" aria-modal="true" aria-label="Chart preview">
+            ${
+              frameUrl
+                ? `<iframe class="chart-fullscreen-frame" title="${escapeAttr(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}" src="${escapeAttr(frameUrl)}"></iframe>`
+                : '<p class="chart-search-message">Chart preview unavailable.</p>'
+            }
+          </section>
+        </div>
+      `;
+    }
     return `
       <div class="bug-report-overlay" id="chart-preview-overlay">
         <section class="bug-report-modal chart-preview-modal" role="dialog" aria-modal="true" aria-label="Chart preview">
           <div class="bug-report-head">
-            <h3>Charts Preview</h3>
+            <h3>Charts</h3>
             <button class="action bug-report-close" id="chart-preview-close" type="button">Close</button>
           </div>
           <section class="chart-search-card chart-search-card-modal">
@@ -1371,19 +1396,14 @@
                           <button class="chart-preview-select${selectedChart && selectedChart.id === chart.id ? " active" : ""}" data-chart-preview-select="${escapeAttr(chart.id)}" type="button">
                             <span>${escapeHtml(chart.category || chart.airportCode || "Chart")}</span>
                             <strong>${escapeHtml(chart.name || "Airport chart")}</strong>
+                            ${model.activateMode ? "" : '<small>Preview</small>'}
                           </button>
                         `).join("")}
                       </section>
                     `).join("")
               }
             </div>
-            <div class="chart-preview-viewer chart-preview-viewer-simple">
-              ${
-                frameUrl
-                  ? `<iframe class="chart-preview-frame" title="${escapeAttr(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}" src="${escapeAttr(frameUrl)}" sandbox="allow-same-origin allow-scripts"></iframe>`
-                  : '<p class="chart-search-message">Choose a chart to preview it here.</p>'
-              }
-            </div>
+            <p class="chart-search-message">Tap a chart to preview it full screen.</p>
           </div>
         </section>
       </div>
@@ -1505,12 +1525,12 @@
                         <section class="chart-result-group">
                           <h4>${escapeHtml(group.category)}</h4>
                           ${group.items.map((chart) => `
-                            <article class="chart-result-card">
+                            <article class="chart-result-card" data-preview-chart-card="${escapeAttr(chart.airportCode)}" data-chart-preview-id="${escapeAttr(chart.id)}" role="button" tabindex="0">
                               <div>
                                 <span>${escapeHtml(chart.airportCode)}</span>
                                 <strong>${escapeHtml(chart.name || "Airport chart")}</strong>
                               </div>
-                              <button class="action primary" data-open-chart-preview="${escapeAttr(chart.airportCode)}" data-chart-preview-id="${escapeAttr(chart.id)}" type="button">Preview</button>
+                              <button class="action primary" data-open-chart-url="${escapeAttr(chart.id)}" type="button">Open</button>
                             </article>
                           `).join("")}
                         </section>
@@ -1690,6 +1710,9 @@
                 }).join("")}
               </div>
             </section>
+            <div class="admin-preset-add-mobile">
+              <button class="action admin-preset-add-mobile-btn" id="admin-preset-add-row-mobile" type="button" aria-label="Add route row">+</button>
+            </div>
             <div class="entry-actions">
               <button class="action primary" id="admin-preset-save">Save</button>
               <button class="action" id="admin-preset-delete"${presetLookup.exists ? "" : " disabled"}>Delete</button>
@@ -2063,11 +2086,13 @@
     const gpsSpeedLabel = getKioskGpsSpeedDisplayText();
     const showGpsSpeed = Boolean(gpsSpeedLabel);
     const showWhereAmI = isActivateGpsEnabled();
+    const gpsAgeLabel = showWhereAmI ? getKioskGpsAgeDisplayText() : "";
     const topClockLabel = phoneMode ? `${formatUtcNow()}Z` : `UTC ${formatUtcNow()}`;
     const topStrip = `
       <section class="kiosk-top-strip${phoneMode ? " is-phone" : ""}">
         <div class="kiosk-utc" id="utc-clock">${topClockLabel}</div>
         ${showGpsSpeed ? `<div class="kiosk-gps-speed" id="kiosk-gps-speed">${escapeHtml(gpsSpeedLabel)}</div>` : ""}
+        ${!showWhereAmI ? `<button class="action kiosk-chart-launch-btn kiosk-chart-launch-btn-top" id="open-activate-charts" type="button">Charts</button>` : ""}
         <button class="action kiosk-top-scratchpad" id="kiosk-top-scratchpad" type="button">Scratchpad</button>
       </section>
     `;
@@ -2086,11 +2111,9 @@
     `;
     return `
       <main class="ipad-kiosk-page${phoneMode ? " kiosk-phone-activate-page" : ""}">
+        ${gpsAgeLabel ? `<div class="kiosk-gps-age" id="kiosk-gps-age">${escapeHtml(gpsAgeLabel)}</div>` : ""}
         ${topStrip}
         ${renderKioskEventTimerStrip()}
-        <section class="kiosk-chart-launch">
-          <button class="action kiosk-chart-launch-btn" id="open-activate-charts" type="button">Charts</button>
-        </section>
         <section class="sheet-wrap ipad-kiosk-wrap">
           <div class="sheet ipad-kiosk-sheet${phoneMode ? " kiosk-phone-sheet" : ""}">
             ${phoneMode ? `<section class="kiosk-phone-part kiosk-phone-static-part kiosk-phone-header-panel"><p class="kiosk-part-label">Info</p>${headerSection}</section>` : headerSection}
@@ -2102,6 +2125,7 @@
         </section>
         <section class="kiosk-whereami-wrap">
           ${showWhereAmI ? `<button class="activate-button kiosk-whereami-btn" id="kiosk-whereami-open" type="button">Where am I</button>` : ""}
+          ${showWhereAmI ? `<button class="action kiosk-chart-launch-btn" id="open-activate-charts" type="button">Charts</button>` : ""}
         </section>
         <section class="kiosk-pad-overlay" id="kiosk-pad-overlay" aria-hidden="true">
           <div class="kiosk-pad-card">
@@ -2196,7 +2220,7 @@
               ? `
                 <div class="kiosk-whereami-results kiosk-route-gps-readout">
                   <article>
-                    <span>Status</span>
+                    <span>TH TO</span>
                     <strong id="kiosk-route-gps-direction">--</strong>
                   </article>
                   <article>
@@ -2208,8 +2232,8 @@
                     <strong id="kiosk-route-gps-quadrant">--</strong>
                   </article>
                 </div>
-                <p class="kiosk-estimate-result kiosk-gps-estimate" id="kiosk-route-gps-station-estimate">GPS estimate: <strong>--</strong></p>
-                <p class="kiosk-estimate-context kiosk-reminder-heading">Reminder setup</p>
+                <p class="kiosk-estimate-result kiosk-gps-estimate" id="kiosk-route-gps-station-estimate">ETA: <strong>--</strong></p>
+                <p class="kiosk-estimate-context kiosk-reminder-heading">Distance Alert</p>
               `
               : `
                 <div class="kiosk-direction-toggle" id="kiosk-route-estimate-direction">
@@ -2233,14 +2257,17 @@
               <input id="kiosk-route-estimate-gs" value="${escapeAttr(model.groundspeed)}" inputmode="decimal" />
             </label>
           </div>
-          ${model.resultHhmm ? `<p class="kiosk-estimate-result" id="kiosk-route-estimate-result">${gpsEnabled ? "Reminder estimate" : "Estimate"}: <strong>${escapeHtml(model.resultHhmm)}Z</strong></p>` : `<p class="kiosk-estimate-result hidden" id="kiosk-route-estimate-result">${gpsEnabled ? "Reminder estimate" : "Estimate"}: <strong>--</strong></p>`}
+          <p class="kiosk-estimate-result${gpsEnabled && !model.resultHhmm ? " hidden" : ""}" id="kiosk-route-estimate-result">${gpsEnabled ? "Alert ETA" : "ETA"}: <strong>${escapeHtml(model.resultHhmm || "--")}${model.resultHhmm ? "Z" : ""}</strong></p>
           ${model.error ? `<p class="kiosk-estimate-error">${escapeHtml(model.error)}</p>` : ""}
           <div class="kiosk-estimate-actions">
-            <button class="action" id="kiosk-route-estimate-add-above" type="button">Add row above</button>
-            <button class="action" id="kiosk-route-estimate-add-below" type="button">Add row below</button>
-            <button class="action" id="kiosk-route-estimate-remove-route" type="button" ${Number.isFinite(model.legIndex) && model.legIndex > 0 && model.legIndex < (state.navlog.legs.length - 1) ? "" : "disabled"}>Remove this route</button>
-            ${gpsEnabled ? "" : '<button class="action" id="kiosk-route-estimate-compute" type="button">Execute</button>'}
-            <button class="action primary" id="kiosk-route-estimate-set-timer" type="button">${gpsEnabled ? "Start Reminder" : "Start Timer"}</button>
+            <div class="kiosk-estimate-primary-actions">
+              ${gpsEnabled ? '<button class="action primary" id="kiosk-route-estimate-set-timer" type="button">Execute</button>' : '<button class="action primary" id="kiosk-route-estimate-set-timer" type="button">Start Timer</button>'}
+            </div>
+            <div class="kiosk-route-edit-actions">
+              <button class="action kiosk-route-symbol-btn" id="kiosk-route-estimate-add-below" type="button" aria-label="Add row below" title="Add row below">+↓</button>
+              <button class="action kiosk-route-symbol-btn danger" id="kiosk-route-estimate-remove-route" type="button" aria-label="Remove waypoint" title="Remove waypoint" ${Number.isFinite(model.legIndex) && model.legIndex > 0 && model.legIndex < (state.navlog.legs.length - 1) ? "" : "disabled"}>Del</button>
+              <button class="action kiosk-route-symbol-btn" id="kiosk-route-estimate-add-above" type="button" aria-label="Add row above" title="Add row above">+↑</button>
+            </div>
           </div>
         </section>
       </div>
@@ -2253,6 +2280,19 @@
     if (gps.error) return "No GS avbl";
     if (!Number.isFinite(gps.speedKts)) return "GS -- kts";
     return `GS ${formatSpeedDisplayForUnit(gps.speedKts, "kts")} kts`;
+  }
+
+  function getKioskGpsAgeDisplayText(nowMs = Date.now()) {
+    if (!isActivateGpsEnabled()) return "";
+    const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : createEmptyKioskGpsState();
+    if (gps.error) return "GPS not updating";
+    const lastFixMs = Number(gps.lastFixMs);
+    if (!Number.isFinite(lastFixMs)) return "GPS waiting for position";
+    const ageSeconds = Math.max(0, Math.round((Number(nowMs) - lastFixMs) / 1000));
+    if (ageSeconds < 2) return "GPS updated just now";
+    if (ageSeconds < 60) return `GPS updated ${ageSeconds}s ago`;
+    const ageMinutes = Math.floor(ageSeconds / 60);
+    return `GPS updated ${ageMinutes}m ago`;
   }
 
   function renderKioskWhereAmIModal() {
@@ -2841,7 +2881,7 @@
           <button type="button" class="toc-tod-title" data-edit-toc="toc">TOC</button>
           ${
             t.tocEditing
-              ? `<input class="toc-entry" data-toc-entry="roc" value="${escapeAttr(t.roc)}" placeholder="ROC" inputmode="numeric" enterkeyhint="done" autocomplete="off" />`
+              ? `<input class="toc-entry" data-toc-entry="roc" value="${escapeAttr(t.roc)}" placeholder="ROC" inputmode="text" enterkeyhint="done" autocomplete="off" />`
               : `
                 ${renderTocValueCell("tocDistance", t.tocDistance, tocDistancePlaceholder, distanceUnitLabel)}
                 ${renderTocValueCell("tocTime", t.tocTime, tocTimePlaceholder, timeUnitLabel, true)}
@@ -2852,7 +2892,7 @@
           <button type="button" class="toc-tod-title" data-edit-toc="tod">TOD</button>
           ${
             t.todEditing
-              ? `<input class="toc-entry" data-toc-entry="rod" value="${escapeAttr(t.rod)}" placeholder="ROD" inputmode="numeric" enterkeyhint="done" autocomplete="off" />`
+              ? `<input class="toc-entry" data-toc-entry="rod" value="${escapeAttr(t.rod)}" placeholder="ROD" inputmode="text" enterkeyhint="done" autocomplete="off" />`
               : `
                 ${renderTocValueCell("todDistance", t.todDistance, tocDistancePlaceholder, distanceUnitLabel)}
                 ${renderTocValueCell("todTime", t.todTime, tocTimePlaceholder, timeUnitLabel, true)}
@@ -2882,7 +2922,7 @@
   }
 
   function wireTocTodControls(root = document) {
-    const shouldCommitOnBlur = state.view === "ipad-kiosk";
+    const shouldCommitOnBlur = state.view === "ipad-kiosk" && !isTouchInputDevice();
     const commitTocEntry = (input, field) => {
       if (!input || input.dataset.tocCommitted === "1") return;
       input.dataset.tocCommitted = "1";
@@ -3110,7 +3150,7 @@
     if (activateButton) {
       activateButton.addEventListener("click", () => {
         if (!isActivateSupportedDevice()) {
-          state.meta.activateError = "Only avbl on iphone & ipad";
+          state.meta.activateError = "Only avbl on touch devices";
           render();
           return;
         }
@@ -3496,9 +3536,10 @@
         return;
       }
       if (tocField === "roc" || tocField === "rod") {
-        input.setAttribute("inputmode", "numeric");
+        input.setAttribute("inputmode", isTouchInputDevice() ? "text" : "numeric");
         input.setAttribute("enterkeyhint", "done");
-        input.setAttribute("pattern", "[0-9]*");
+        if (isTouchInputDevice()) input.removeAttribute("pattern");
+        else input.setAttribute("pattern", "[0-9]*");
         return;
       }
       input.setAttribute("inputmode", "numeric");
@@ -3515,7 +3556,7 @@
     const activateChartsButton = document.getElementById("open-activate-charts");
     if (activateChartsButton) {
       activateChartsButton.addEventListener("click", () => {
-        openChartPreviewModal(state.navlog.setup.destination || state.navlog.setup.departure || "");
+        openChartPreviewModal(state.navlog.setup.destination || state.navlog.setup.departure || "", "", { activateMode: true, viewer: false });
       });
     }
     document.body.classList.add("kiosk-mode");
@@ -4080,10 +4121,12 @@
     const current = getKioskCurrentGpsPoint();
     if (!current) return { error: "GPS position unavailable." };
     const distanceNm = computeGreatCircleDistanceNm(current.lat, current.lon, target.lat, target.lon);
+    const headingToWaypoint = computeInitialTrueBearing(current.lat, current.lon, target.lat, target.lon);
     const waypointToUserBearing = computeInitialTrueBearing(target.lat, target.lon, current.lat, current.lon);
-    if (!Number.isFinite(distanceNm) || !Number.isFinite(waypointToUserBearing)) return { error: "Could not compute GPS position." };
+    if (!Number.isFinite(distanceNm) || !Number.isFinite(waypointToUserBearing) || !Number.isFinite(headingToWaypoint)) return { error: "Could not compute GPS position." };
     return {
       distanceNm,
+      headingTrue: headingToWaypoint,
       quadrant: bearingToCompass16(waypointToUserBearing),
       routeCode,
     };
@@ -4160,9 +4203,8 @@
       const quadrantNode = document.getElementById("kiosk-route-gps-quadrant");
       const stationEstimateNode = document.getElementById("kiosk-route-gps-station-estimate");
       const estimateNode = document.getElementById("kiosk-route-estimate-result");
-      const direction = getKioskRouteTimeDirection(model?.legIndex, Date.now()) || "--";
       const relative = computeKioskRouteGpsRelativeInfo(model?.legIndex);
-      if (directionNode) directionNode.textContent = direction === "inbound" ? "Inbound" : direction === "outbound" ? "Outbound" : "--";
+      if (directionNode) directionNode.textContent = relative && !relative.error && Number.isFinite(relative.headingTrue) ? `${String(roundHalfUp(relative.headingTrue)).padStart(3, "0")}°T` : "--";
       if (distanceNode) {
         distanceNode.textContent = relative && !relative.error && Number.isFinite(relative.distanceNm)
           ? `${formatDistanceDisplayWithRounding(relative.distanceNm, false)} NM`
@@ -4189,13 +4231,31 @@
     }
     const liveDistanceText = computeKioskRouteLiveDistanceText(model);
     node.textContent = liveDistanceText ? `${routeLabel} (${liveDistanceText})` : routeLabel;
+    const estimateNode = document.getElementById("kiosk-route-estimate-result");
+    if (estimateNode) {
+      const strong = estimateNode.querySelector("strong");
+      const estimate = computeKioskRouteEstimateFromDraft();
+      if (estimate && !estimate.error) {
+        if (strong) strong.textContent = `${estimate.hhmm}Z`;
+        estimateNode.classList.remove("hidden");
+        model.resultLabel = estimate.label;
+        model.resultHhmm = estimate.hhmm;
+        model.resultMinuteOfDay = estimate.minuteOfDay;
+      } else {
+        if (strong) strong.textContent = "--";
+        estimateNode.classList.remove("hidden");
+        model.resultLabel = "";
+        model.resultHhmm = "";
+        model.resultMinuteOfDay = null;
+      }
+    }
   }
 
   function openKioskRouteEstimateModalForLeg(legIndex) {
     if (!Number.isFinite(legIndex) || legIndex < 0 || legIndex >= state.navlog.legs.length) return;
     const leg = state.navlog.legs[legIndex] || {};
     const routeLabel = String(leg.route || "").trim() || `Waypoint ${legIndex + 1}`;
-    const direction = getKioskRouteTimeDirection(legIndex) || "outbound";
+    const direction = isActivateGpsEnabled() ? (getKioskRouteTimeDirection(legIndex) || "outbound") : "";
     const defaultGpsSpeed = Number.isFinite(state.meta?.kioskGps?.speedKts) ? formatSpeedDisplayForUnit(state.meta.kioskGps.speedKts, "kts") : "";
     state.meta.kioskRouteEstimate = {
       ...createEmptyKioskRouteEstimateState(),
@@ -4509,6 +4569,7 @@
     const removeRouteButton = document.getElementById("kiosk-route-estimate-remove-route");
     if (removeRouteButton) {
       removeRouteButton.addEventListener("click", () => {
+        if (!window.confirm("Are you sure you wish to delete this waypoint?")) return;
         removeKioskRouteRowAt(state.meta.kioskRouteEstimate.legIndex);
       });
     }
@@ -4721,7 +4782,8 @@
     }
 
     const offsetMs = (distanceNm / groundspeedKnots) * 60 * 60000;
-    const direction = model.direction === "inbound" ? "inbound" : "outbound";
+    const direction = model.direction === "inbound" || model.direction === "outbound" ? model.direction : "";
+    if (!direction) return { error: "Select inbound or outbound." };
     const timeline = buildLegAbsoluteTimeTimeline();
     const legTime = timeline[legIndex] || {};
     let baseUtcMs = Number.NaN;
@@ -4773,12 +4835,13 @@
     timers.push({
       id: `kg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
       kind: "gps-distance",
-      label: `${formatDistanceDisplay(targetDistanceNm)} NM ${direction} ${toFromText} ${routeLabel}`,
+      label: `Alert ${formatDistanceDisplay(targetDistanceNm)} NM ${toFromText} ${routeLabel}`,
       targetHhmm: String(estimate.hhmm || ""),
       waypointIndex: Number.isFinite(legIndex) ? legIndex : -1,
       waypointCode: routeCode,
       direction,
       targetDistanceNm,
+      lastDistanceNm: Number(estimate.currentDistanceNm),
       speedKts: Number(estimate.speedKnots),
       dueUtcMs: Number(estimate.dueUtcMs || Date.now()),
     });
@@ -4855,8 +4918,13 @@
         const timerSpeed = Number.isFinite(Number(timer.speedKts)) ? Number(timer.speedKts) : Number.NaN;
         const speedKts = Number.isFinite(liveSpeed) && liveSpeed > 0 ? liveSpeed : timerSpeed;
         const canMeasure = Number.isFinite(liveDistanceNm) && Number.isFinite(targetDistanceNm) && targetDistanceNm >= 0;
+        const previousDistanceNm = Number(timer.lastDistanceNm);
         const reached = canMeasure
-          ? (direction === "inbound" ? liveDistanceNm <= targetDistanceNm : liveDistanceNm >= targetDistanceNm)
+          ? (
+            direction === "inbound"
+              ? (liveDistanceNm <= targetDistanceNm || (Number.isFinite(previousDistanceNm) && previousDistanceNm > targetDistanceNm && liveDistanceNm < targetDistanceNm))
+              : (liveDistanceNm >= targetDistanceNm || (Number.isFinite(previousDistanceNm) && previousDistanceNm < targetDistanceNm && liveDistanceNm > targetDistanceNm))
+          )
           : false;
 
         if (countdownNode) {
@@ -4878,6 +4946,7 @@
             targetNode.textContent = `ETA ${hhmm}Z`;
           }
         }
+        if (canMeasure) timer.lastDistanceNm = liveDistanceNm;
         if (reached) completedTimerIds.push(timerId);
         return;
       }
@@ -4965,6 +5034,8 @@
   function updateKioskGpsDom() {
     const node = document.getElementById("kiosk-gps-speed");
     if (node) node.textContent = getKioskGpsSpeedDisplayText();
+    const ageNode = document.getElementById("kiosk-gps-age");
+    if (ageNode) ageNode.textContent = getKioskGpsAgeDisplayText();
     syncKioskWhereAmIButtonStateDom();
     const whereAmI = state.meta?.kioskGps?.whereAmI;
     if (whereAmI && whereAmI.open && String(whereAmI.query || "").trim()) {
@@ -5039,6 +5110,7 @@
     state.meta.kioskGps.accuracyMeters = Number.isFinite(accuracy) ? accuracy : null;
     state.meta.kioskGps.headingTrue = Number.isFinite(headingTrue) ? headingTrue : state.meta.kioskGps.headingTrue;
     state.meta.kioskGps.speedKts = Number.isFinite(smoothedKts) ? smoothedKts : state.meta.kioskGps.speedKts;
+    state.meta.kioskGps.lastFixMs = now;
 
     gpsLastPoint = { lat, lon, tsMs: timestampMs };
     updateKioskGpsDom();
@@ -5402,12 +5474,28 @@
     return /iPhone|iPod/i.test(ua) || /iPhone|iPod/i.test(platform);
   }
 
+  function isTouchInputDevice() {
+    const touchPoints = Number(navigator.maxTouchPoints || 0);
+    const coarsePointer = Boolean(window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+    const noHover = Boolean(window.matchMedia && window.matchMedia("(hover: none)").matches);
+    return touchPoints > 0 || coarsePointer || noHover;
+  }
+
+  function isMobileOrTabletDevice() {
+    const ua = String(navigator.userAgent || "");
+    return /Android|iPhone|iPad|iPod|Mobile|Tablet|Silk|Kindle|PlayBook|BlackBerry|Windows Phone/i.test(ua) || isIpadDevice() || isIphoneDevice();
+  }
+
   function isActivateSupportedDevice() {
-    return isIpadDevice() || isIphoneDevice();
+    if (isIpadDevice() || isIphoneDevice()) return true;
+    const ua = String(navigator.userAgent || "");
+    const isDesktopOs = /Windows NT|Macintosh|X11|Linux x86_64/i.test(ua) && !/Android|Mobile|Tablet/i.test(ua);
+    if (isDesktopOs) return false;
+    return isTouchInputDevice() && isMobileOrTabletDevice();
   }
 
   function isPhoneActivateMode() {
-    return state.view === "ipad-kiosk" && isIphoneDevice();
+    return state.view === "ipad-kiosk" && !isIpadDevice() && isMobileOrTabletDevice();
   }
 
   function isActivateGpsEnabled() {
@@ -6044,12 +6132,29 @@
       });
     }
     if (chartSearchButton) chartSearchButton.addEventListener("click", submitChartSearch);
-    document.querySelectorAll("[data-open-chart-preview]").forEach((button) => {
-      button.addEventListener("click", () => {
+    document.querySelectorAll("[data-open-chart-url]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const chartId = String(button.getAttribute("data-open-chart-url") || "");
+        const chart = (Array.isArray(state.catalog.charts) ? state.catalog.charts : [])
+          .map((record) => normalizeAirportChartRecord(record))
+          .find((record) => record.id === chartId);
+        if (chart) openChartInNewTab(chart);
+      });
+    });
+    document.querySelectorAll("[data-preview-chart-card]").forEach((card) => {
+      const openPreview = () => {
         openChartPreviewModal(
-          button.getAttribute("data-open-chart-preview"),
-          button.getAttribute("data-chart-preview-id"),
+          card.getAttribute("data-preview-chart-card"),
+          card.getAttribute("data-chart-preview-id"),
+          { viewer: true, activateMode: false },
         );
+      };
+      card.addEventListener("click", openPreview);
+      card.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        openPreview();
       });
     });
   }
@@ -6057,6 +6162,7 @@
   function wireChartPreviewControls() {
     const overlay = document.getElementById("chart-preview-overlay");
     if (!overlay) return;
+    const model = state.meta && state.meta.chartPreview ? state.meta.chartPreview : createEmptyChartPreviewState();
     const closeButton = document.getElementById("chart-preview-close");
     const searchInput = document.getElementById("chart-preview-airport-search");
     const searchButton = document.getElementById("chart-preview-search-button");
@@ -6086,6 +6192,8 @@
     document.querySelectorAll("[data-chart-preview-select]").forEach((button) => {
       button.addEventListener("click", () => {
         state.meta.chartPreview.selectedChartId = String(button.getAttribute("data-chart-preview-select") || "");
+        state.meta.chartPreview.viewer = true;
+        state.meta.chartPreview.activateMode = Boolean(model.activateMode);
         render();
       });
     });
@@ -6208,14 +6316,13 @@
         render();
       });
     }
-    const presetAddRowButton = document.getElementById("admin-preset-add-row");
-    if (presetAddRowButton) {
+    document.querySelectorAll("#admin-preset-add-row, #admin-preset-add-row-mobile").forEach((presetAddRowButton) => {
       presetAddRowButton.addEventListener("click", () => {
         readPresetFormFromInputs();
         state.admin.presetForm.rows.push(createEmptyPresetRow());
         render();
       });
-    }
+    });
     document.querySelectorAll("[data-admin-preset-remove-row]").forEach((button) => {
       button.addEventListener("click", () => {
         readPresetFormFromInputs();
@@ -9734,7 +9841,7 @@
       normalizeActivateRows(false);
     } else if (kioskRequested && state.meta.navlogUnlocked && !isActivateSupportedDevice()) {
       state.view = "navlog";
-      state.meta.activateError = "Only avbl on iphone & ipad";
+      state.meta.activateError = "Only avbl on touch devices";
     } else if (kioskRequested && !state.meta.navlogUnlocked) {
       state.view = "access";
       state.meta.accessError = "Enter access key before opening Activate mode.";
