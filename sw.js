@@ -1,4 +1,4 @@
-const CACHE_NAME = "navlog-offline-v2";
+const CACHE_NAME = "navlog-offline-v3";
 const SHELL_ASSETS = [
   "./",
   "./index.html",
@@ -49,7 +49,7 @@ self.addEventListener("activate", (event) => {
 function isNetworkOnlyRequest(request) {
   const url = new URL(request.url);
   if (url.origin === self.location.origin && url.pathname.startsWith("/api/")) return true;
-  if (/\.supabase\.co$/i.test(url.hostname)) return true;
+  if (/\.supabase\.co$/i.test(url.hostname) && !url.pathname.startsWith("/storage/v1/object/public/")) return true;
   return false;
 }
 
@@ -58,6 +58,7 @@ function shouldHandleRequest(request) {
   const url = new URL(request.url);
   if (url.origin === self.location.origin) return true;
   if (url.hostname === "cdn.jsdelivr.net") return true;
+  if (/\.supabase\.co$/i.test(url.hostname) && url.pathname.startsWith("/storage/v1/object/public/")) return true;
   return false;
 }
 

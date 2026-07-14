@@ -17,6 +17,7 @@
   const ADDITIONAL_INFO_DEFAULT_ROWS = 19;
   const ADDITIONAL_INFO_DEFAULT_COLS = 9;
   const AIRPORT_CHARTS_BUCKET = "airport-charts";
+  const GPS_STALE_RESTART_MS = 45000;
 
   const app = document.getElementById("app");
   const state = {
@@ -114,6 +115,7 @@
       kioskEventTimer: createEmptyKioskEventTimerState(),
       kioskTimerAlerts: createEmptyKioskTimerAlertState(),
       kioskGps: createEmptyKioskGpsState(),
+      activateHeadingMode: "tc",
       chartPreview: createEmptyChartPreviewState(),
       gpsPermissionPromptOpen: false,
       routeProgressMarkerSnapshot: null,
@@ -137,6 +139,7 @@
   let gpsLastPoint = null;
   let gpsSpeedSamplesKts = [];
   let suggestionMenuState = null;
+  let lastRenderedView = "";
 
   function createBlankLeg(route) {
     return {
@@ -318,8 +321,16 @@
   }
 
   function buildActivateNavlogSnapshot() {
+    autofillAllCoordinateNavigationValues();
+    computeRouteMath();
     const snapshot = JSON.parse(JSON.stringify(state.navlog || createBlankNavlog()));
     normalizeDestinationLegPlacement(snapshot);
+    snapshot.tocTod = {
+      ...createBlankNavlog().tocTod,
+      ...(snapshot.tocTod && typeof snapshot.tocTod === "object" ? snapshot.tocTod : {}),
+      tocEditing: false,
+      todEditing: false,
+    };
     if (!Array.isArray(snapshot.radios)) snapshot.radios = [];
     if (Array.isArray(snapshot.legs)) {
       snapshot.legs = snapshot.legs.map((leg) => ({
@@ -473,6 +484,8 @@
         ? preset.legs.map((leg) => ({
           route: String(leg && leg.route != null ? leg.route : ""),
           coord: String(leg && (leg.coord ?? leg.coordinates ?? leg.latlon) != null ? (leg.coord ?? leg.coordinates ?? leg.latlon) : ""),
+          tc: String(leg && leg.tc != null ? leg.tc : ""),
+          distance: String(leg && leg.distance != null ? leg.distance : ""),
         }))
         : [],
     };
@@ -740,7 +753,8 @@
   }
 
   function openChartPreviewModal(airportCode = "", chartId = "", options = {}) {
-    const code = normalizeCode(airportCode || state.meta.chartAirportQuery || state.meta.chartPreview.airportCode);
+    const activateMode = Object.prototype.hasOwnProperty.call(options, "activateMode") ? Boolean(options.activateMode) : state.view === "ipad-kiosk";
+    const code = normalizeCode(activateMode && !chartId ? airportCode : (airportCode || state.meta.chartAirportQuery || state.meta.chartPreview.airportCode));
     const charts = getChartsForAirportCode(code);
     const selected = charts.find((chart) => chart.id === String(chartId || "")) || charts[0] || null;
     state.meta.chartPreview = {
@@ -748,7 +762,7 @@
       airportCode: code,
       selectedChartId: selected ? selected.id : "",
       viewer: Object.prototype.hasOwnProperty.call(options, "viewer") ? Boolean(options.viewer) : Boolean(chartId),
-      activateMode: Object.prototype.hasOwnProperty.call(options, "activateMode") ? Boolean(options.activateMode) : state.view === "ipad-kiosk",
+      activateMode,
     };
     render();
   }
@@ -763,6 +777,31 @@
     if (!url) return;
     const opened = window.open(url, "_blank", "noopener,noreferrer");
     if (opened && typeof opened.focus === "function") opened.focus();
+  }
+
+  function getRouteEndpointChartAirportCodes(navlog = state.navlog) {
+    const codes = new Set();
+    const setup = navlog && navlog.setup ? navlog.setup : {};
+    [setup.departure, setup.destination].forEach((value) => {
+      const code = normalizeCode(value);
+      if (code) codes.add(code);
+    });
+    return Array.from(codes);
+  }
+
+  function warmAirportChartsForActivate(navlog = state.navlog) {
+    const urls = [];
+    getRouteEndpointChartAirportCodes(navlog).forEach((airportCode) => {
+      getChartsForAirportCode(airportCode).forEach((chart) => {
+        const url = getAirportChartPublicUrl(chart);
+        if (url) urls.push(url);
+      });
+    });
+    Array.from(new Set(urls)).forEach((url) => {
+      fetch(url, { mode: "no-cors", cache: "reload" }).catch(() => {
+        // Best-effort offline warmup only.
+      });
+    });
   }
 
   function normalizeAirportRecord(airport) {
@@ -1031,6 +1070,12 @@
     return leg._distanceAutofillFromCoords === true;
   }
 
+  function shouldTreatTrueCourseAsAutofill(leg) {
+    if (!leg || !leg._manual) return true;
+    if (!leg._manual.tc) return true;
+    return leg._tcAutofillFromCoords === true;
+  }
+
   function autofillDistanceBetweenWaypoints(distanceLegIndex) {
     const legIndex = Number(distanceLegIndex);
     if (!Number.isFinite(legIndex) || legIndex <= 0 || legIndex >= state.navlog.legs.length) return false;
@@ -1040,13 +1085,50 @@
     const toRoute = targetLeg.route;
     const fromCoord = getWaypointCoordinate(fromRoute);
     const toCoord = getWaypointCoordinate(toRoute);
-    if (!fromCoord || !toCoord) return false;
+    if (!fromCoord || !toCoord) {
+      if (targetLeg._distanceAutofillFromCoords === true) {
+        targetLeg.distance = "";
+        targetLeg._manual = targetLeg._manual || {};
+        targetLeg._manual.distance = false;
+        targetLeg._distanceAutofillFromCoords = false;
+        return true;
+      }
+      return false;
+    }
     const distanceNm = computeGreatCircleDistanceNm(fromCoord.lat, fromCoord.lon, toCoord.lat, toCoord.lon);
     if (!Number.isFinite(distanceNm) || distanceNm <= 0) return false;
     targetLeg.distance = formatDistanceDisplay(distanceNm);
     targetLeg._manual = targetLeg._manual || {};
     targetLeg._manual.distance = true;
     targetLeg._distanceAutofillFromCoords = true;
+    return true;
+  }
+
+  function autofillTrueCourseBetweenWaypoints(courseLegIndex) {
+    const legIndex = Number(courseLegIndex);
+    if (!Number.isFinite(legIndex) || legIndex <= 0 || legIndex >= state.navlog.legs.length) return false;
+    const targetLeg = state.navlog.legs[legIndex];
+    if (!targetLeg || !shouldTreatTrueCourseAsAutofill(targetLeg)) return false;
+    const fromRoute = state.navlog.legs[legIndex - 1] ? state.navlog.legs[legIndex - 1].route : "";
+    const toRoute = targetLeg.route;
+    const fromCoord = getWaypointCoordinate(fromRoute);
+    const toCoord = getWaypointCoordinate(toRoute);
+    if (!fromCoord || !toCoord) {
+      if (targetLeg._tcAutofillFromCoords === true) {
+        targetLeg.tc = "";
+        targetLeg._manual = targetLeg._manual || {};
+        targetLeg._manual.tc = false;
+        targetLeg._tcAutofillFromCoords = false;
+        return true;
+      }
+      return false;
+    }
+    const trueCourse = computeInitialTrueBearing(fromCoord.lat, fromCoord.lon, toCoord.lat, toCoord.lon);
+    if (!Number.isFinite(trueCourse)) return false;
+    targetLeg.tc = formatHeadingDisplay(trueCourse);
+    targetLeg._manual = targetLeg._manual || {};
+    targetLeg._manual.tc = true;
+    targetLeg._tcAutofillFromCoords = true;
     return true;
   }
 
@@ -1058,11 +1140,37 @@
     return changedCurrent || changedNext;
   }
 
+  function applyCoordinateCourseAutofillAroundRoute(routeIndex) {
+    const index = Number(routeIndex);
+    if (!Number.isFinite(index)) return false;
+    const changedCurrent = autofillTrueCourseBetweenWaypoints(index);
+    const changedNext = autofillTrueCourseBetweenWaypoints(index + 1);
+    return changedCurrent || changedNext;
+  }
+
+  function applyCoordinateAutofillAroundRoute(routeIndex) {
+    const changedDistance = applyCoordinateDistanceAutofillAroundRoute(routeIndex);
+    const changedCourse = applyCoordinateCourseAutofillAroundRoute(routeIndex);
+    return changedDistance || changedCourse;
+  }
+
   function autofillAllCoordinateDistances() {
     if (!Array.isArray(state.navlog.legs) || state.navlog.legs.length < 2) return;
     for (let index = 1; index < state.navlog.legs.length; index += 1) {
       autofillDistanceBetweenWaypoints(index);
     }
+  }
+
+  function autofillAllCoordinateCourses() {
+    if (!Array.isArray(state.navlog.legs) || state.navlog.legs.length < 2) return;
+    for (let index = 1; index < state.navlog.legs.length; index += 1) {
+      autofillTrueCourseBetweenWaypoints(index);
+    }
+  }
+
+  function autofillAllCoordinateNavigationValues() {
+    autofillAllCoordinateDistances();
+    autofillAllCoordinateCourses();
   }
 
   function computeGreatCircleDistanceNm(fromLatDeg, fromLonDeg, toLatDeg, toLonDeg) {
@@ -1102,6 +1210,7 @@
   }
 
   function render() {
+    const viewChanged = state.view !== lastRenderedView;
     captureViewScrollState();
     closeSuggestionMenu();
     if (state.view !== "ipad-kiosk") document.body.classList.remove("kiosk-mode");
@@ -1143,6 +1252,12 @@
     else wireNavlog();
     wireSuggestionInputs();
     wireChartPreviewControls();
+    if (viewChanged) {
+      lastRenderedView = state.view;
+      if (!(state.view === "navlog" && state.meta && state.meta.viewScrollState)) {
+        scrollCurrentViewToTop();
+      }
+    }
     if (state.view === "ipad-kiosk") {
       syncKioskGpsTrackingForView();
       return;
@@ -1154,6 +1269,20 @@
     wireBugReportModal();
     wireAnnouncementModal();
     if (state.view === "manual") typesetManualMath();
+  }
+
+  function scrollCurrentViewToTop() {
+    requestAnimationFrame(() => {
+      try {
+        window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      } catch {
+        window.scrollTo(0, 0);
+      }
+      document.querySelectorAll(".sheet-wrap, .additional-info-wrap").forEach((node) => {
+        node.scrollTop = 0;
+        node.scrollLeft = 0;
+      });
+    });
   }
 
   function captureViewScrollState() {
@@ -1358,7 +1487,7 @@
     const groupedCharts = groupChartsByCategory(charts);
     const selectedChart = charts.find((chart) => chart.id === String(model.selectedChartId || "")) || charts[0] || null;
     const selectedUrl = selectedChart ? getAirportChartPublicUrl(selectedChart) : "";
-    const frameUrl = selectedUrl ? `${selectedUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH` : "";
+    const frameUrl = selectedUrl ? `${selectedUrl}#toolbar=0&navpanes=0&scrollbar=0&view=Fit` : "";
     if (model.viewer) {
       return `
         <div class="chart-fullscreen-overlay" id="chart-preview-overlay">
@@ -1563,7 +1692,6 @@
           <div class="top-side">${renderBackButton("back-from-admin-login", "Back to setup")}</div>
           <div class="top-center">
             <h1>Admin Login</h1>
-            <p class="setup-caption">Sign in with your admin email and password</p>
           </div>
           <div class="top-side right"></div>
         </section>
@@ -1622,8 +1750,10 @@
       .map((record) => normalizeRpcRegistryRecord(record))
       .filter((record) => record.registration)
       .sort((left, right) => left.registration.localeCompare(right.registration));
+    const adminChartQuery = normalizeCode(state.admin.chartForm && state.admin.chartForm.airportCode);
     const adminCharts = (Array.isArray(state.admin.charts) ? state.admin.charts : [])
       .map((chart) => normalizeAirportChartRecord(chart))
+      .filter((chart) => adminChartQuery && chart.airportCode === adminChartQuery)
       .sort((left, right) => left.airportCode.localeCompare(right.airportCode) || String(left.category || "").localeCompare(String(right.category || "")) || left.name.localeCompare(right.name));
     const presetLockEnabled = Boolean(state.admin.presetForm.locked);
     const additionalInfoPanel = String(state.admin.additionalInfoPanel || "");
@@ -1854,7 +1984,7 @@
               </div>
             </section>
             <section class="admin-chart-list">
-              ${adminCharts.length ? groupChartsByCategory(adminCharts).map((group) => `
+              ${!adminChartQuery ? '<p class="setup-caption">Enter an airport code to view associated charts.</p>' : adminCharts.length ? groupChartsByCategory(adminCharts).map((group) => `
                 <section class="admin-chart-group">
                   <h4>${escapeHtml(group.category)}</h4>
                   ${group.items.map((chart) => {
@@ -1874,7 +2004,7 @@
                     `;
                   }).join("")}
                 </section>
-              `).join("") : '<p class="setup-caption">No charts uploaded yet.</p>'}
+              `).join("") : `<p class="setup-caption">No charts uploaded for ${escapeHtml(adminChartQuery)} yet.</p>`}
             </section>
           </div>
           <div class="manual-section${panel === "announcements" ? "" : " hidden"}">
@@ -2492,7 +2622,11 @@
     const withUnit = (label, unitText) => `<span class="time-head"><span>${label}</span><span class="head-format-note">(${unitText})</span></span>`;
     let tableHead = "";
     if (isPhoneKiosk) {
-      const headingLabel = variationDeviationEnabled ? "CH" : "TC";
+      const headingField = getKioskPhoneHeadingField();
+      const headingLabel = headingField === "ch" ? "CH" : "TC";
+      const headingHeadMarkup = variationDeviationEnabled
+        ? `<button type="button" class="kiosk-heading-toggle" data-kiosk-heading-toggle>${headingLabel}</button>`
+        : headingLabel;
       const phoneSpeedMode = getKioskPhoneSpeedCellMode();
       const phoneHeadClass = variationDeviationEnabled
         ? "nav-head-grid nav-head-grid-phone nav-head-grid-phone-vd"
@@ -2501,7 +2635,7 @@
         <div class="${phoneHeadClass}">
           <div class="head-cell tall route-head">ROUTE <button class="mini-plus inline" id="add-leg" type="button">+</button></div>
           <div class="head-cell tall alt-head">${withUnit("ALT", altUnitLabel)}</div>
-          <div class="head-cell tall heading-head">${headingLabel}</div>
+          <div class="head-cell tall heading-head">${headingHeadMarkup}</div>
           <div class="head-cell tall speed-head speed-mode-head">
             <div class="kiosk-global-speed-toggle">
               <button type="button" class="kiosk-speed-btn ${phoneSpeedMode === "gs" ? "active" : ""}" data-kiosk-speed-mode="gs">GS</button>
@@ -2675,7 +2809,7 @@
       </div>
     `;
     if (isPhoneKiosk) {
-      const headingField = variationDeviationEnabled ? "ch" : "tc";
+      const headingField = getKioskPhoneHeadingField();
       return `
         <div class="${rowClass}">
           ${routeCellMarkup}
@@ -2746,13 +2880,24 @@
     state.meta.kioskGps.speedCellMode = mode === "ta" ? "ta" : "gs";
   }
 
+  function getKioskPhoneHeadingField() {
+    if (!state.settings.variationDeviationEnabled) return "tc";
+    return state.meta && state.meta.activateHeadingMode === "ch" ? "ch" : "tc";
+  }
+
+  function toggleKioskPhoneHeadingField() {
+    if (!state.settings.variationDeviationEnabled) return;
+    state.meta.activateHeadingMode = getKioskPhoneHeadingField() === "ch" ? "tc" : "ch";
+    render();
+  }
+
   function renderKioskPhoneSpeedCell(leg, index) {
     const mode = getKioskPhoneSpeedCellMode();
     const activeField = mode === "ta" ? "ta" : "gs";
     const activeValue = legFieldValue(leg, activeField);
     return `
       <div class="${legFieldClass(leg, activeField, "kiosk-phone-speed-cell")}">
-        <input data-kiosk-speed-display="${index}" value="${escapeAttr(activeValue)}" readonly />
+        <input data-kiosk-speed-display="${index}" data-leg-field="${index}:${activeField}" value="${escapeAttr(activeValue)}" readonly />
       </div>
     `;
   }
@@ -3106,6 +3251,14 @@
       syncSetupPresetStatus();
     });
     document.getElementById("open-sheet").addEventListener("click", () => {
+      const departure = state.navlog.setup.departure;
+      const destination = state.navlog.setup.destination;
+      if (hasMeaningfulSheetData() && !window.confirm("Are you sure you want to lose current progress and make a new navlog?")) return;
+      if (hasMeaningfulSheetData()) {
+        state.navlog = createBlankNavlog();
+        state.navlog.setup.departure = departure;
+        state.navlog.setup.destination = destination;
+      }
       seedLegs();
       state.settings = createDefaultSettings();
       state.meta.hasOpenedSheet = true;
@@ -3183,13 +3336,10 @@
         state.meta.activateGpsEnabled = Boolean(enableGpsToggle && enableGpsToggle.checked);
         state.meta.activateInfoOpen = false;
         const kioskNavlog = buildActivateNavlogSnapshot();
-        state.navlog.tocTod.tocEditing = false;
-        state.navlog.tocTod.todEditing = false;
+        warmAirportChartsForActivate(kioskNavlog);
         persistKioskPayload({ navlog: kioskNavlog, activateGpsEnabled: state.meta.activateGpsEnabled });
         if (navigator.onLine === false) {
           state.navlog = kioskNavlog;
-          state.navlog.tocTod.tocEditing = false;
-          state.navlog.tocTod.todEditing = false;
           state.meta.routeProgressMarkerSnapshot = null;
           state.view = "ipad-kiosk";
           normalizeActivateRows(false);
@@ -3292,7 +3442,8 @@
         leg._manual = leg._manual || {};
         leg._manual[field] = nextValue.trim() !== "";
         if (field === "distance") leg._distanceAutofillFromCoords = false;
-        if (field === "route") applyCoordinateDistanceAutofillAroundRoute(index);
+        if (field === "tc") leg._tcAutofillFromCoords = false;
+        if (field === "route") applyCoordinateAutofillAroundRoute(index);
         computeRouteMath({ index, field });
         updateComputedCells({ index, field });
         if (index === 0 && field === "alt") syncFirstAltHint();
@@ -3549,6 +3700,16 @@
     });
   }
 
+  function isKioskEditableLegField(field) {
+    return field === "route"
+      || field === "alt"
+      || field === "tc"
+      || field === "ch"
+      || field === "distance"
+      || field === "gs"
+      || field === "ta";
+  }
+
   function wireIpadKiosk() {
     const phoneMode = isPhoneActivateMode();
     normalizeActivateRows(false);
@@ -3558,7 +3719,7 @@
     const activateChartsButton = document.getElementById("open-activate-charts");
     if (activateChartsButton) {
       activateChartsButton.addEventListener("click", () => {
-        openChartPreviewModal(state.navlog.setup.destination || state.navlog.setup.departure || "", "", { activateMode: true, viewer: false });
+        openChartPreviewModal("", "", { activateMode: true, viewer: false });
       });
     }
     document.body.classList.add("kiosk-mode");
@@ -3582,8 +3743,11 @@
         || (node.closest && node.closest(".kiosk-event-stack")),
       );
       const allowAt = legField.endsWith(":at");
+      const [, legFieldName = ""] = legField.split(":");
+      const allowKioskLegEdit = isKioskEditableLegField(legFieldName);
       const allowLocation = radioField.endsWith(":location");
       const allowAtisCode = footerField === "depAtisCode" || footerField === "destinAtisCode";
+      const isHeadingToggle = Boolean(node.getAttribute("data-kiosk-heading-toggle"));
       const isAirportInfoAtisField =
         radioField.endsWith(":cptAtis")
         || radioField.endsWith(":depAap")
@@ -3591,7 +3755,7 @@
         || radioField.endsWith(":gnd")
         || radioField.endsWith(":fss");
       const isDateHeader = String(node.getAttribute("data-header") || "") === "date" || node.hasAttribute("data-date-picker");
-      const keepInteractive = allowAt || allowLocation || allowAtisCode || isKioskUtilityUi || isSpeedToggle || isWhereAmIOpenButton || isActivateChartsButton || isTopScratchpadButton;
+      const keepInteractive = allowAt || allowKioskLegEdit || allowLocation || allowAtisCode || isKioskUtilityUi || isSpeedToggle || isHeadingToggle || isWhereAmIOpenButton || isActivateChartsButton || isTopScratchpadButton;
       if (!keepInteractive && node.tagName === "BUTTON" && !isTocTodTitle) node.style.display = "none";
       if (isAirportInfoAtisField) {
         node.tabIndex = -1;
@@ -3618,17 +3782,56 @@
         node.setAttribute("inputmode", "numeric");
         node.setAttribute("pattern", "[0-9]*");
       }
+      if (allowKioskLegEdit) {
+        if (legFieldName === "route") {
+          node.setAttribute("inputmode", "text");
+          node.removeAttribute("pattern");
+          node.setAttribute("autocomplete", "off");
+          node.setAttribute("spellcheck", "false");
+        } else {
+          node.setAttribute("inputmode", "numeric");
+          node.setAttribute("pattern", "[0-9]*");
+        }
+      }
       node.tabIndex = keepInteractive ? 0 : -1;
     });
     const legInputs = document.querySelectorAll("[data-leg-field]");
     legInputs.forEach((input) => {
       const key = String(input.dataset.legField || "");
       const isAtField = key.endsWith(":at");
+      const [indexText, field] = key.split(":");
+      const index = Number(indexText);
+      const allowKioskLegEdit = isKioskEditableLegField(field);
       if (!isAtField) {
         input.readOnly = true;
-        input.tabIndex = -1;
-        const [indexText, field] = key.split(":");
+        input.tabIndex = allowKioskLegEdit ? 0 : -1;
         if (field === "route") wireKioskRouteEstimateHold(input, Number(indexText));
+        if (!allowKioskLegEdit) return;
+        wireKioskDelayedKeyboard(input);
+        input.addEventListener("input", (event) => {
+          const leg = state.navlog.legs[index];
+          if (!leg) return;
+          let nextValue = event.target.value;
+          if (isDegreeField(field)) {
+            const parsed = num(nextValue);
+            if (parsed != null) {
+              nextValue = String(roundHalfUp(parsed));
+              event.target.value = nextValue;
+            }
+          }
+          leg[field] = nextValue;
+          leg._manual = leg._manual || {};
+          leg._manual[field] = nextValue.trim() !== "";
+          if (field === "distance") leg._distanceAutofillFromCoords = false;
+          if (field === "tc") leg._tcAutofillFromCoords = false;
+          if (field === "route") applyCoordinateAutofillAroundRoute(index);
+          computeRouteMath({ index, field });
+          updateComputedCells({ index, field });
+          if (field === "route") syncRouteHints();
+        });
+        input.addEventListener("blur", () => {
+          persistKioskPayload();
+        });
       } else {
         input.addEventListener("input", (event) => {
           const [indexText] = event.target.dataset.legField.split(":");
@@ -3671,17 +3874,18 @@
     });
 
     if (phoneMode) {
+      document.querySelectorAll("[data-kiosk-heading-toggle]").forEach((button) => {
+        button.addEventListener("click", () => {
+          toggleKioskPhoneHeadingField();
+        });
+      });
       document.querySelectorAll("[data-kiosk-speed-mode]").forEach((button) => {
         button.addEventListener("click", () => {
           const modeText = String(button.getAttribute("data-kiosk-speed-mode") || "");
           const mode = modeText === "ta" ? "ta" : "gs";
           setKioskPhoneSpeedCellMode(mode);
-          document.querySelectorAll("[data-kiosk-speed-mode]").forEach((node) => {
-            const nodeMode = String(node.getAttribute("data-kiosk-speed-mode") || "");
-            node.classList.toggle("active", (nodeMode === mode));
-          });
-          syncKioskPhoneSpeedDisplayValues();
           persistKioskPayload();
+          render();
         });
       });
     }
@@ -5042,6 +5246,29 @@
     }
   }
 
+  function restartKioskGpsWatch() {
+    if (gpsWatchId != null && navigator.geolocation && typeof navigator.geolocation.clearWatch === "function") {
+      try {
+        navigator.geolocation.clearWatch(gpsWatchId);
+      } catch {
+        // ignore
+      }
+    }
+    gpsWatchId = null;
+    gpsLastPoint = null;
+    gpsSpeedSamplesKts = [];
+    startKioskGpsTracking();
+  }
+
+  function watchdogKioskGpsTracking() {
+    if (state.view !== "ipad-kiosk" || !isActivateGpsEnabled()) return;
+    const gps = state.meta && state.meta.kioskGps ? state.meta.kioskGps : null;
+    if (!gps || gps.error || gpsWatchId == null) return;
+    const lastFixMs = Number(gps.lastFixMs);
+    if (!Number.isFinite(lastFixMs)) return;
+    if ((Date.now() - lastFixMs) > GPS_STALE_RESTART_MS) restartKioskGpsWatch();
+  }
+
   function syncKioskWhereAmIButtonStateDom() {
     const button = document.getElementById("kiosk-whereami-open");
     if (!button) return;
@@ -5673,7 +5900,7 @@
       createBlankLeg(""),
       createBlankLeg(state.navlog.setup.destination),
     ];
-    autofillAllCoordinateDistances();
+    autofillAllCoordinateNavigationValues();
     applyRpcAutofillFromHeader(state.navlog.header.rpCNo);
   }
 
@@ -5699,8 +5926,12 @@
     leg._derived = {};
     leg._errors = {};
     Object.entries(fields).forEach(([field, value]) => {
-      if (field === "cas" || field === "tc" || field === "distance") return;
+      if (field === "cas") return;
       leg[field] = String(value);
+      if (field === "tc" || field === "distance") {
+        leg._manual[field] = String(value || "").trim() !== "";
+        return;
+      }
       leg._manual[field] = true;
     });
     return leg;
@@ -6107,6 +6338,9 @@
         const nextPanel = String(button.getAttribute("data-additional-info-panel") || "");
         if (!nextPanel || nextPanel === state.meta.additionalInfoPanel) return;
         state.meta.additionalInfoPanel = nextPanel;
+        state.meta.chartAirportQuery = "";
+        state.meta.chartSearchSubmitted = false;
+        scrollCurrentViewToTop();
         render();
       });
     });
@@ -6121,6 +6355,7 @@
       chartSearchInput.addEventListener("input", () => {
         state.meta.chartAirportQuery = chartSearchInput.value;
         state.meta.chartSearchSubmitted = false;
+        if (!String(chartSearchInput.value || "").trim()) render();
       });
       chartSearchInput.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
@@ -6175,6 +6410,7 @@
     if (searchInput) {
       searchInput.addEventListener("input", () => {
         state.meta.chartPreview.airportCode = String(searchInput.value || "");
+        if (!String(searchInput.value || "").trim()) render();
       });
       searchInput.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") return;
@@ -6287,8 +6523,10 @@
       button.addEventListener("click", () => {
         const nextPanel = String(button.getAttribute("data-admin-panel") || "");
         if (!nextPanel || nextPanel === state.admin.panel) return;
+        clearAdminTransientPanelState(state.admin.panel, nextPanel);
         state.admin.panel = nextPanel;
         if (nextPanel === "additional-info") state.admin.additionalInfoPanel = "";
+        scrollCurrentViewToTop();
         render();
       });
     });
@@ -6503,6 +6741,21 @@
       if (!field) return;
       field.addEventListener("input", () => {
         readAdminChartFormFromInputs();
+        if (id === "admin-chart-airport-code") {
+          state.admin.chartForm.airportCode = normalizeCode(state.admin.chartForm.airportCode);
+          render();
+          requestAnimationFrame(() => {
+            const nextField = document.getElementById("admin-chart-airport-code");
+            if (!nextField) return;
+            nextField.focus({ preventScroll: true });
+            try {
+              const length = String(nextField.value || "").length;
+              nextField.setSelectionRange(length, length);
+            } catch {
+              // ignore unsupported selection APIs
+            }
+          });
+        }
       });
     });
     document.querySelectorAll("[data-admin-chart-select]").forEach((button) => {
@@ -7079,6 +7332,24 @@
     return true;
   }
 
+  function clearAdminTransientPanelState(previousPanel, nextPanel) {
+    const previous = String(previousPanel || "");
+    const next = String(nextPanel || "");
+    if (previous === next) return;
+    if (previous === "coordinates") {
+      state.admin.selectedWaypointName = "";
+      state.admin.waypointForm = createEmptyWaypointForm();
+    }
+    if (previous === "rpc-reg") {
+      state.admin.selectedRpcRegistration = "";
+      state.admin.rpcRegistryForm = createEmptyRpcRegistryForm();
+    }
+    if (previous === "charts") {
+      state.admin.chartForm = createEmptyChartForm();
+      state.admin.chartUploadStatus = "";
+    }
+  }
+
   function syncAdminPresetRowAutofill() {
     const rows = normalizePresetRows(state.admin.presetForm.rows);
     rows.forEach((row, index) => {
@@ -7132,10 +7403,14 @@
     source.forEach((row) => {
       const route = String(row && row.route != null ? row.route : "").trim();
       const coordRaw = String(row && row.coord != null ? row.coord : "").trim();
-      if (!route && !coordRaw) return;
+      const tcRaw = String(row && row.tc != null ? row.tc : "").trim();
+      const distanceRaw = String(row && row.distance != null ? row.distance : "").trim();
+      if (!route && !coordRaw && !tcRaw && !distanceRaw) return;
       const leg = {};
       if (route) leg.route = route;
       if (coordRaw) leg.coord = coordRaw;
+      if (tcRaw) leg.tc = tcRaw;
+      if (distanceRaw) leg.distance = distanceRaw;
       legs.push(leg);
     });
     return legs;
@@ -7242,7 +7517,11 @@
     const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
     rows.forEach((row) => {
       const route = normalizeCode(row.name);
-      if (!route) return;
+      if (!route) {
+        row.coord = "";
+        state.admin.selectedWaypointName = "";
+        return;
+      }
       const known = getWaypointData(route);
       if (known && known.hasCoords && !String(row.coord || "").trim()) {
         row.coord = known.coordText;
@@ -9184,6 +9463,7 @@
 
   function applyRpcAutofillFromHeader(rpcValue) {
     const record = getRpcRegistryRecord(rpcValue);
+    if (!record) return;
     const aircraft = record && record.aircraftType ? String(record.aircraftType || "").trim() : "";
     const fuel = record && record.gph ? String(record.gph || "").trim() : "";
     const aircraftInput = document.querySelector('[data-header="aircraft"]');
@@ -9481,6 +9761,7 @@
     if (state.view === "ipad-kiosk") {
       syncKioskEventTimerDisplay();
       syncKioskRouteEstimateLiveDistanceDisplay();
+      watchdogKioskGpsTracking();
       updateKioskGpsDom();
     }
     syncRouteProgressMarkerDisplay();
@@ -9843,7 +10124,6 @@
       state.view = "ipad-kiosk";
       state.meta.routeProgressMarkerSnapshot = null;
       restoreKioskPayload();
-      applyRpcAutofillFromHeader(state.navlog.header.rpCNo);
       state.navlog.tocTod.tocEditing = false;
       state.navlog.tocTod.todEditing = false;
       normalizeActivateRows(false);

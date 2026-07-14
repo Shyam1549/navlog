@@ -1423,6 +1423,7 @@ body.kiosk-modal-scroll-lock .ipad-kiosk-page {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  margin-top: 14px;
 }
 
 .kiosk-route-symbol-btn {
@@ -3616,19 +3617,21 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   position: fixed;
   inset: 0;
   z-index: 2600;
-  padding: 16px;
+  padding: 8px;
   background: rgba(16, 22, 27, 0.54);
   display: grid;
   place-items: center;
+  overflow: hidden;
 }
 
 .chart-fullscreen-viewer {
-  width: min(1120px, 96vw);
-  height: min(92vh, 980px);
+  width: min(1120px, calc(100vw - 16px));
+  height: min(92vh, calc(100vh - 16px));
   border-radius: 8px;
   overflow: hidden;
   background: #f5f1e8;
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
+  margin: 0 auto;
 }
 
 .chart-fullscreen-frame {
@@ -3687,6 +3690,22 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   min-height: 40px;
   padding: 8px 10px;
   border-radius: 12px;
+  text-transform: uppercase;
+  font-size: 0.76rem;
+  letter-spacing: 0.03em;
+}
+
+.kiosk-heading-toggle {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
 }
 
 .suggestion-option {
@@ -3710,6 +3729,16 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   display: flex;
   flex: 0 0 auto;
   gap: 7px;
+}
+
+.admin-chart-item-actions .action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  font: inherit;
+  text-align: center;
+  text-decoration: none;
 }
 
 .admin-chart-item {
@@ -4408,12 +4437,16 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   }
 
   .additional-info-table {
-    min-width: 560px;
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
   }
 
   .additional-info-table td {
     font-size: 0.8rem;
     height: 38px;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
 }
@@ -4656,13 +4689,17 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   }
 
   .additional-info-table {
-    min-width: 520px;
+    width: 100%;
+    min-width: 0;
+    table-layout: fixed;
   }
 
   .additional-info-table td {
     font-size: 0.78rem;
     height: 36px;
     padding: 3px 4px;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .activate-button {
