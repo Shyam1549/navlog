@@ -222,6 +222,7 @@
   function createEmptyWaypointRow() {
     return {
       name: "",
+      aliases: [],
       coord: "",
       _coordAutofilledFromName: false,
     };
@@ -530,11 +531,15 @@
   function normalizeWaypointRecord(record) {
     const rawName = String(record && (record.name ?? record.code ?? record.route) != null ? (record.name ?? record.code ?? record.route) : "").trim();
     const nameParts = parseWaypointNameParts(rawName);
+    const explicitAliases = Array.isArray(record && record.aliases) ? record.aliases : [];
     return {
       id: String(record && record.id != null ? record.id : ""),
       name: nameParts.primary,
       rawName: nameParts.raw,
-      aliases: nameParts.aliases,
+      aliases: Array.from(new Set([
+        ...nameParts.aliases,
+        ...explicitAliases.map((alias) => normalizeCode(alias)),
+      ].filter((alias) => alias && alias !== nameParts.primary))),
       coord: String(record && (record.coord ?? record.coordinates ?? record.latlon ?? record.coordinate) != null ? (record.coord ?? record.coordinates ?? record.latlon ?? record.coordinate) : ""),
     };
   }
@@ -958,13 +963,17 @@
 
   function buildWaypointDataCatalog() {
     const catalog = new Map();
-    const addEntry = (name, coordRaw = "") => {
+    const addEntry = (name, coordRaw = "", extraAliases = []) => {
       const nameParts = parseWaypointNameParts(name);
       const code = nameParts.primary;
       if (!code) return;
       const current = catalog.get(code) || { code, hasCoords: false, coordText: "", lat: null, lon: null };
       const nextCoordRaw = String(coordRaw || "").trim();
-      const aliases = Array.from(new Set([...(current.aliases || []), ...nameParts.aliases]));
+      const aliases = Array.from(new Set([
+        ...(current.aliases || []),
+        ...nameParts.aliases,
+        ...(Array.isArray(extraAliases) ? extraAliases : []),
+      ].map((alias) => normalizeCode(alias)).filter((alias) => alias && alias !== code)));
       if (!nextCoordRaw) {
         if (!catalog.has(code)) catalog.set(code, { ...current, aliases });
         return;
@@ -985,11 +994,11 @@
     };
 
     const waypointRows = Array.isArray(state.catalog.waypoints) ? state.catalog.waypoints : [];
-    waypointRows.forEach((row) => addEntry(row && row.name, row && row.coord));
+    waypointRows.forEach((row) => addEntry(row && row.name, row && row.coord, row && row.aliases));
     const adminWaypointRows = Array.isArray(state.admin && state.admin.waypointForm && state.admin.waypointForm.rows)
       ? state.admin.waypointForm.rows
       : [];
-    adminWaypointRows.forEach((row) => addEntry(row && row.name, row && row.coord));
+    adminWaypointRows.forEach((row) => addEntry(row && row.name, row && row.coord, row && row.aliases));
 
     const presets = Array.isArray(state.catalog.routePresets) ? state.catalog.routePresets : [];
     presets.forEach((preset) => {
@@ -1291,7 +1300,13 @@
     document.body.classList.remove("iphone-navlog-vd-mode");
     document.body.classList.toggle(
       "kiosk-modal-scroll-lock",
-      state.view === "ipad-kiosk" && Boolean(state.meta?.kioskRouteEstimate?.open),
+      state.view === "ipad-kiosk" && Boolean(
+        state.meta?.kioskRouteEstimate?.open
+        || (Array.isArray(state.meta?.kioskTimerAlerts) && state.meta.kioskTimerAlerts.length > 0)
+        || state.meta?.kioskGps?.whereAmI?.open
+        || state.meta?.gpsPermissionPromptOpen
+        || state.meta?.chartPreview?.open,
+      ),
     );
     document.body.classList.toggle("iphone-ui", isIphoneDevice());
     if (isIpadDevice() && (state.view === "navlog" || state.view === "ipad-kiosk")) {
@@ -1391,7 +1406,7 @@
       adminStatusSignature = "";
       state.meta.adminStatusVisible = true;
       render();
-    }, 2000);
+    }, 1500);
   }
 
   function scrollCurrentViewToTop() {
@@ -1610,7 +1625,7 @@
     const groupedCharts = groupChartsByCategory(charts);
     const selectedChart = charts.find((chart) => chart.id === String(model.selectedChartId || "")) || charts[0] || null;
     const selectedUrl = selectedChart ? getAirportChartPublicUrl(selectedChart) : "";
-    const frameUrl = selectedUrl ? `${selectedUrl}#toolbar=0&navpanes=0&scrollbar=0&view=Fit&zoom=page-fit` : "";
+    const frameUrl = selectedUrl ? `${selectedUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&zoom=page-width` : "";
     if (model.viewer) {
       return `
         <div class="chart-fullscreen-overlay" id="chart-preview-overlay">
@@ -1979,14 +1994,28 @@
               </div>
               <div class="admin-preset-body">
                 ${waypointRows.map((row, index) => {
+                  const aliases = Array.isArray(row.aliases) ? row.aliases : [];
                   return `
                     <div class="admin-preset-row admin-waypoint-row" data-admin-row-index="${index}">
-                      <label class="admin-field-cell" data-label="Waypoint">
-                        <input data-admin-waypoint-row="${index}:name" value="${escapeAttr(row.name)}" data-suggest-source="waypoints" />
-                      </label>
+                      <div class="admin-waypoint-main">
+                        <label class="admin-field-cell" data-label="Waypoint">
+                          <input data-admin-waypoint-row="${index}:name" value="${escapeAttr(row.name)}" data-suggest-source="waypoints" />
+                        </label>
+                        <button class="action admin-add-alias-btn${row.name.trim() ? " active" : ""}" data-admin-waypoint-add-alias="${index}" type="button" ${row.name.trim() ? "" : "disabled"}>Add alias</button>
+                      </div>
                       <label class="admin-field-cell" data-label="Coords">
                         <input data-admin-waypoint-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
                       </label>
+                      ${aliases.length ? `
+                        <div class="admin-waypoint-aliases" data-admin-waypoint-aliases="${index}">
+                          ${aliases.map((alias, aliasIndex) => `
+                            <label class="admin-waypoint-alias-cell" data-label="Alias">
+                              <input data-admin-waypoint-row="${index}:alias:${aliasIndex}" value="${escapeAttr(alias)}" placeholder="Alias ${aliasIndex + 1}" />
+                              <button class="action admin-mini-btn" data-admin-waypoint-remove-alias="${index}:${aliasIndex}" type="button" aria-label="Remove alias">-</button>
+                            </label>
+                          `).join("")}
+                        </div>
+                      ` : ""}
                     </div>
                   `;
                 }).join("")}
@@ -3378,8 +3407,8 @@
         state.navlog.setup.departure = departure;
         state.navlog.setup.destination = destination;
       }
-      seedLegs();
       state.settings = createDefaultSettings();
+      seedLegs();
       state.meta.hasOpenedSheet = true;
       state.view = "navlog";
       render();
@@ -6748,6 +6777,36 @@
         syncAdminWaypointFormUi();
       });
     });
+    document.querySelectorAll("[data-admin-waypoint-add-alias]").forEach((button) => {
+      button.addEventListener("click", () => {
+        readWaypointFormFromInputs({ autofill: false });
+        const index = Number(button.getAttribute("data-admin-waypoint-add-alias"));
+        const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
+        if (!Number.isFinite(index) || !rows[index] || !rows[index].name.trim()) return;
+        rows[index].aliases = Array.isArray(rows[index].aliases) ? rows[index].aliases : [];
+        rows[index].aliases.push("");
+        state.admin.waypointForm.rows = rows;
+        render();
+        requestAnimationFrame(() => {
+          const aliasInputs = document.querySelectorAll(`[data-admin-waypoint-row^="${index}:alias:"]`);
+          const lastAlias = aliasInputs.length ? aliasInputs[aliasInputs.length - 1] : null;
+          if (lastAlias) lastAlias.focus();
+        });
+      });
+    });
+    document.querySelectorAll("[data-admin-waypoint-remove-alias]").forEach((button) => {
+      button.addEventListener("click", () => {
+        readWaypointFormFromInputs({ autofill: false });
+        const [rowIndexText, aliasIndexText] = String(button.getAttribute("data-admin-waypoint-remove-alias") || "").split(":");
+        const rowIndex = Number(rowIndexText);
+        const aliasIndex = Number(aliasIndexText);
+        const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
+        if (!Number.isFinite(rowIndex) || !Number.isFinite(aliasIndex) || !rows[rowIndex]) return;
+        rows[rowIndex].aliases.splice(aliasIndex, 1);
+        state.admin.waypointForm.rows = rows;
+        render();
+      });
+    });
     const waypointSaveButton = document.getElementById("admin-waypoint-save");
     if (waypointSaveButton) {
       waypointSaveButton.addEventListener("click", async () => {
@@ -7549,7 +7608,8 @@
     const source = Array.isArray(records) ? records : [];
     return normalizeWaypointRows(
       source.map((record) => ({
-        name: record && (record.rawName || record.name) != null ? (record.rawName || record.name) : "",
+        name: record && record.name != null ? record.name : "",
+        aliases: record && Array.isArray(record.aliases) ? record.aliases : [],
         coord: record && record.coord != null ? record.coord : "",
       })),
     );
@@ -7623,11 +7683,18 @@
     const rows = [];
     rowInputs.forEach((node) => {
       const key = String(node.getAttribute("data-admin-waypoint-row") || "");
-      const [indexText, field] = key.split(":");
+      const [indexText, field, aliasIndexText] = key.split(":");
       const index = Number(indexText);
       if (!Number.isFinite(index) || index < 0 || !field) return;
       if (!rows[index]) rows[index] = createEmptyWaypointRow();
-      rows[index][field] = String(node.value || "");
+      if (field === "alias") {
+        const aliasIndex = Number(aliasIndexText);
+        if (!Number.isFinite(aliasIndex) || aliasIndex < 0) return;
+        if (!Array.isArray(rows[index].aliases)) rows[index].aliases = [];
+        rows[index].aliases[aliasIndex] = String(node.value || "");
+      } else {
+        rows[index][field] = String(node.value || "");
+      }
       rows[index]._coordAutofilledFromName = Boolean(previousRows[index] && previousRows[index]._coordAutofilledFromName);
     });
     state.admin.waypointForm = {
@@ -7638,11 +7705,19 @@
 
   function normalizeWaypointRows(rows) {
     const source = Array.isArray(rows) ? rows.slice(0, 1) : [];
-    const normalized = source.map((row) => ({
-      name: String(row && row.name != null ? row.name : ""),
+    const normalized = source.map((row) => {
+      const parsedName = parseWaypointNameParts(row && row.name != null ? row.name : "");
+      const explicitAliases = Array.isArray(row && row.aliases) ? row.aliases : [];
+      return {
+      name: parsedName.primary,
+      aliases: Array.from(new Set([
+        ...parsedName.aliases,
+        ...explicitAliases.map((alias) => normalizeCode(alias)),
+      ].filter((alias) => alias && alias !== parsedName.primary))),
       coord: String(row && row.coord != null ? row.coord : ""),
       _coordAutofilledFromName: Boolean(row && row._coordAutofilledFromName),
-    }));
+      };
+    });
     return normalized.length ? normalized : [createEmptyWaypointRow()];
   }
 
@@ -7747,6 +7822,7 @@
       state.admin.waypointForm = {
         rows: normalizeWaypointRows([{
           name: state.admin.selectedWaypointName,
+          aliases: [],
           coord: "",
         }]),
       };
@@ -7754,7 +7830,8 @@
     }
     state.admin.waypointForm = {
       rows: normalizeWaypointRows([{
-        name: selected.rawName || selected.name,
+        name: selected.name,
+        aliases: selected.aliases,
         coord: selected.coord,
       }]),
     };
@@ -8469,6 +8546,16 @@
       const coordNode = document.querySelector(`[data-admin-waypoint-row="${index}:coord"]`);
       if (nameNode && nameNode.value !== String(row.name || "")) nameNode.value = String(row.name || "");
       if (coordNode && coordNode.value !== String(row.coord || "")) coordNode.value = String(row.coord || "");
+      (Array.isArray(row.aliases) ? row.aliases : []).forEach((alias, aliasIndex) => {
+        const aliasNode = document.querySelector(`[data-admin-waypoint-row="${index}:alias:${aliasIndex}"]`);
+        if (aliasNode && aliasNode.value !== String(alias || "")) aliasNode.value = String(alias || "");
+      });
+      const addAliasButton = document.querySelector(`[data-admin-waypoint-add-alias="${index}"]`);
+      if (addAliasButton) {
+        const active = Boolean(String(row.name || "").trim());
+        addAliasButton.disabled = !active;
+        addAliasButton.classList.toggle("active", active);
+      }
     });
   }
 
