@@ -140,6 +140,9 @@
   let gpsSpeedSamplesKts = [];
   let suggestionMenuState = null;
   let lastRenderedView = "";
+  let adminStatusSignature = "";
+  let adminStatusClearTimer = null;
+  let adminStatusRevealTimer = null;
 
   function createBlankLeg(route) {
     return {
@@ -220,6 +223,7 @@
     return {
       name: "",
       coord: "",
+      _coordAutofilledFromName: false,
     };
   }
 
@@ -524,12 +528,34 @@
   }
 
   function normalizeWaypointRecord(record) {
-    const name = normalizeCode(record && (record.name ?? record.code ?? record.route));
+    const rawName = String(record && (record.name ?? record.code ?? record.route) != null ? (record.name ?? record.code ?? record.route) : "").trim();
+    const nameParts = parseWaypointNameParts(rawName);
     return {
       id: String(record && record.id != null ? record.id : ""),
-      name,
+      name: nameParts.primary,
+      rawName: nameParts.raw,
+      aliases: nameParts.aliases,
       coord: String(record && (record.coord ?? record.coordinates ?? record.latlon ?? record.coordinate) != null ? (record.coord ?? record.coordinates ?? record.latlon ?? record.coordinate) : ""),
     };
+  }
+
+  function parseWaypointNameParts(value) {
+    const raw = String(value || "").trim();
+    const parts = raw.split("/").map((part) => normalizeCode(part)).filter(Boolean);
+    const primary = parts[0] || "";
+    return {
+      raw: raw || primary,
+      primary,
+      aliases: Array.from(new Set(parts.slice(1).filter((part) => part && part !== primary))),
+    };
+  }
+
+  function formatWaypointStorageName(record) {
+    const normalized = normalizeWaypointRecord(record);
+    const names = [normalized.name, ...(Array.isArray(normalized.aliases) ? normalized.aliases : [])]
+      .map((part) => normalizeCode(part))
+      .filter(Boolean);
+    return Array.from(new Set(names)).join("/");
   }
 
   function normalizeRpcRegistryRecord(record) {
@@ -601,7 +627,7 @@
 
   function getSuggestionValuesForSource(source) {
     const key = String(source || "").trim().toLowerCase();
-    if (key === "waypoints") return getWaypointCodesForSuggestions();
+    if (key === "waypoints") return getWaypointSuggestionOptions();
     if (key === "airports") return state.catalog.airports.map((airport) => normalizeCode(airport && airport.code)).filter(Boolean).sort();
     if (key === "preset-airports") return collectPresetAirportCodes();
     if (key === "rpc") return getRpcRegistryOptions().map((entry) => entry.registration);
@@ -614,17 +640,46 @@
 
   function filterSuggestionValues(values, query) {
     const needle = normalizeCode(query);
-    const list = Array.from(new Set((Array.isArray(values) ? values : []).map((value) => String(value || "").trim()).filter(Boolean)));
+    const unique = new Map();
+    (Array.isArray(values) ? values : []).forEach((item) => {
+      const option = normalizeSuggestionOption(item);
+      if (!option.value || unique.has(option.value)) return;
+      unique.set(option.value, option);
+    });
+    const list = Array.from(unique.values());
     if (!needle) return list;
     const prefixMatches = [];
     const containsMatches = [];
-    list.forEach((value) => {
-      const normalized = normalizeCode(value);
+    list.forEach((option) => {
+      const normalized = normalizeCode(`${option.value} ${option.search}`);
       if (!normalized.includes(needle)) return;
-      if (normalized.startsWith(needle)) prefixMatches.push(value);
-      else containsMatches.push(value);
+      const primary = normalizeCode(option.value);
+      const searchParts = String(option.search || "").split(" ").map((part) => normalizeCode(part)).filter(Boolean);
+      if (primary.startsWith(needle) || searchParts.some((part) => part.startsWith(needle))) prefixMatches.push(option);
+      else containsMatches.push(option);
     });
     return [...prefixMatches, ...containsMatches];
+  }
+
+  function normalizeSuggestionOption(item) {
+    if (item && typeof item === "object") {
+      const value = String(item.value || item.label || "").trim();
+      return {
+        value,
+        label: String(item.label || value).trim(),
+        search: String(item.search || "").trim(),
+      };
+    }
+    const value = String(item || "").trim();
+    return { value, label: value, search: "" };
+  }
+
+  function getSuggestionCommitValue(item) {
+    return normalizeSuggestionOption(item).value;
+  }
+
+  function getSuggestionDisplayLabel(item) {
+    return normalizeSuggestionOption(item).label;
   }
 
   function closeSuggestionMenu() {
@@ -662,7 +717,7 @@
 
   function commitSuggestionValue(input, value) {
     if (!input) return;
-    input.value = value;
+    input.value = getSuggestionCommitValue(value);
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
     closeSuggestionMenu();
@@ -688,7 +743,7 @@
     const menu = ensureSuggestionMenu();
     suggestionMenuState = { menu, input, values, activeIndex: -1 };
     menu.innerHTML = values.map((value, index) => `
-      <button class="suggestion-option" data-suggestion-index="${index}" type="button">${escapeHtml(value)}</button>
+      <button class="suggestion-option" data-suggestion-index="${index}" type="button">${escapeHtml(getSuggestionDisplayLabel(value))}</button>
     `).join("");
     positionSuggestionMenu(input, menu);
     Array.from(menu.querySelectorAll("[data-suggestion-index]")).forEach((button) => {
@@ -904,21 +959,24 @@
   function buildWaypointDataCatalog() {
     const catalog = new Map();
     const addEntry = (name, coordRaw = "") => {
-      const code = normalizeCode(name);
+      const nameParts = parseWaypointNameParts(name);
+      const code = nameParts.primary;
       if (!code) return;
       const current = catalog.get(code) || { code, hasCoords: false, coordText: "", lat: null, lon: null };
       const nextCoordRaw = String(coordRaw || "").trim();
+      const aliases = Array.from(new Set([...(current.aliases || []), ...nameParts.aliases]));
       if (!nextCoordRaw) {
-        if (!catalog.has(code)) catalog.set(code, current);
+        if (!catalog.has(code)) catalog.set(code, { ...current, aliases });
         return;
       }
       const parsed = parseWaypointCoordinate(nextCoordRaw);
       if (!parsed) {
-        if (!catalog.has(code)) catalog.set(code, current);
+        if (!catalog.has(code)) catalog.set(code, { ...current, aliases });
         return;
       }
       catalog.set(code, {
         code,
+        aliases,
         hasCoords: true,
         lat: parsed.lat,
         lon: parsed.lon,
@@ -942,7 +1000,14 @@
     const navlogLegs = Array.isArray(state.navlog && state.navlog.legs) ? state.navlog.legs : [];
     navlogLegs.forEach((leg) => addEntry(leg && leg.route, leg && (leg.coord ?? leg.coordinates ?? leg.latlon ?? leg.coordinate ?? "")));
 
-    return catalog;
+    const withAliases = new Map(catalog);
+    catalog.forEach((entry) => {
+      (entry.aliases || []).forEach((alias) => {
+        if (!alias || withAliases.has(alias)) return;
+        withAliases.set(alias, { ...entry, aliasFor: entry.code });
+      });
+    });
+    return withAliases;
   }
 
   function buildWaypointCoordinateCatalog() {
@@ -975,26 +1040,32 @@
   function isRecognizedRoute(routeText) {
     const code = normalizeCode(routeText);
     if (!code) return false;
-    const catalog = new Set();
-    const addEntry = (name, coordRaw = "") => {
-      const nextCode = normalizeCode(name);
-      if (!nextCode || catalog.has(nextCode)) return;
-      const nextCoordRaw = String(coordRaw || "").trim();
-      if (parseWaypointCoordinate(nextCoordRaw)) catalog.add(nextCode);
-    };
-    (Array.isArray(state.catalog.waypoints) ? state.catalog.waypoints : []).forEach((row) => addEntry(row && row.name, row && row.coord));
-    (Array.isArray(state.catalog.routePresets) ? state.catalog.routePresets : []).forEach((preset) => {
-      (Array.isArray(preset && preset.legs) ? preset.legs : []).forEach((leg) => addEntry(leg && leg.route, leg && (leg.coord ?? leg.coordinates ?? leg.latlon ?? leg.coordinate ?? "")));
-    });
-    return catalog.has(code);
+    const data = getWaypointData(code);
+    return Boolean(data && data.hasCoords);
   }
 
   function getWaypointCodesForSuggestions() {
-    return Array.from(buildWaypointDataCatalog().keys()).sort();
+    return Array.from(buildWaypointDataCatalog().values())
+      .filter((entry) => entry && !entry.aliasFor)
+      .map((entry) => entry.code)
+      .filter(Boolean)
+      .sort();
+  }
+
+  function getWaypointSuggestionOptions() {
+    return Array.from(buildWaypointDataCatalog().values())
+      .filter((entry) => entry && !entry.aliasFor && entry.code)
+      .map((entry) => ({
+        value: entry.code,
+        label: entry.code,
+        search: (entry.aliases || []).join(" "),
+      }))
+      .sort((left, right) => left.value.localeCompare(right.value));
   }
 
   function getWaypointPickerOptions() {
     return Array.from(buildWaypointDataCatalog().values())
+      .filter((entry) => entry && !entry.aliasFor)
       .map((entry) => ({
         code: String(entry.code || ""),
         hasCoords: Boolean(entry.hasCoords),
@@ -1213,6 +1284,7 @@
     const viewChanged = state.view !== lastRenderedView;
     captureViewScrollState();
     closeSuggestionMenu();
+    prepareAdminStatusForRender();
     if (state.view !== "ipad-kiosk") document.body.classList.remove("kiosk-mode");
     document.body.classList.remove("kiosk-phone-mode");
     document.body.classList.remove("ipad-desktop-scale");
@@ -1269,6 +1341,57 @@
     wireBugReportModal();
     wireAnnouncementModal();
     if (state.view === "manual") typesetManualMath();
+  }
+
+  function getAdminStatusSignature() {
+    if (!state.admin) return "";
+    const type = state.admin.error ? "error" : (state.admin.notice ? "notice" : "");
+    const text = state.admin.error || state.admin.notice || "";
+    return type && text ? `${type}:${text}` : "";
+  }
+
+  function prepareAdminStatusForRender() {
+    const signature = getAdminStatusSignature();
+    if (!signature) {
+      adminStatusSignature = "";
+      state.meta.adminStatusVisible = true;
+      if (adminStatusClearTimer) clearTimeout(adminStatusClearTimer);
+      if (adminStatusRevealTimer) clearTimeout(adminStatusRevealTimer);
+      adminStatusClearTimer = null;
+      adminStatusRevealTimer = null;
+      return;
+    }
+    if (signature !== adminStatusSignature) {
+      const hadStatus = Boolean(adminStatusSignature);
+      adminStatusSignature = signature;
+      if (adminStatusClearTimer) clearTimeout(adminStatusClearTimer);
+      if (adminStatusRevealTimer) clearTimeout(adminStatusRevealTimer);
+      adminStatusClearTimer = null;
+      adminStatusRevealTimer = null;
+      if (hadStatus) {
+        state.meta.adminStatusVisible = false;
+        adminStatusRevealTimer = setTimeout(() => {
+          state.meta.adminStatusVisible = true;
+          scheduleAdminStatusClear(signature);
+          render();
+        }, 60);
+      } else {
+        state.meta.adminStatusVisible = true;
+        scheduleAdminStatusClear(signature);
+      }
+    }
+  }
+
+  function scheduleAdminStatusClear(signature) {
+    if (adminStatusClearTimer) clearTimeout(adminStatusClearTimer);
+    adminStatusClearTimer = setTimeout(() => {
+      if (getAdminStatusSignature() !== signature) return;
+      state.admin.error = "";
+      state.admin.notice = "";
+      adminStatusSignature = "";
+      state.meta.adminStatusVisible = true;
+      render();
+    }, 2000);
   }
 
   function scrollCurrentViewToTop() {
@@ -1487,7 +1610,7 @@
     const groupedCharts = groupChartsByCategory(charts);
     const selectedChart = charts.find((chart) => chart.id === String(model.selectedChartId || "")) || charts[0] || null;
     const selectedUrl = selectedChart ? getAirportChartPublicUrl(selectedChart) : "";
-    const frameUrl = selectedUrl ? `${selectedUrl}#toolbar=0&navpanes=0&scrollbar=0&view=Fit` : "";
+    const frameUrl = selectedUrl ? `${selectedUrl}#toolbar=0&navpanes=0&scrollbar=0&view=Fit&zoom=page-fit` : "";
     if (model.viewer) {
       return `
         <div class="chart-fullscreen-overlay" id="chart-preview-overlay">
@@ -1714,7 +1837,7 @@
             <button class="action primary" id="admin-login-submit" ${(hasSupabaseConfig && !loading) ? "" : "disabled"}>${loading ? "Signing in..." : "Sign in"}</button>
             ${loading ? '<span class="admin-login-spinner" aria-hidden="true"></span>' : ""}
           </div>
-          ${statusText ? `<p class="${statusClass}">${escapeHtml(statusText)}</p>` : ""}
+          ${statusText && state.meta.adminStatusVisible !== false ? `<p class="${statusClass}">${escapeHtml(statusText)}</p>` : ""}
         </section>
         ${renderFrontFooter()}
         ${renderBugReportModal()}
@@ -1814,7 +1937,6 @@
             <section class="admin-preset-table">
               <div class="admin-preset-head admin-preset-head-extended">
                 <div>ROUTE <button class="mini-plus" id="admin-preset-add-row" type="button" aria-label="Add route row">+</button></div>
-                <div>COORDS</div>
                 <div>TC</div>
                 <div>DIST</div>
                 <div></div>
@@ -1825,9 +1947,6 @@
                     <div class="admin-preset-row admin-preset-row-extended" data-admin-row-index="${index}">
                       <label class="admin-field-cell" data-label="Route">
                         <input data-admin-preset-row="${index}:route" value="${escapeAttr(row.route)}" data-suggest-source="waypoints" />
-                      </label>
-                      <label class="admin-field-cell" data-label="Coords">
-                        <input data-admin-preset-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
                       </label>
                       <label class="admin-field-cell admin-field-cell-derived${presetLockEnabled ? " is-locked" : ""}" data-label="TC">
                         <input data-admin-preset-row="${index}:tc" value="${escapeAttr(row.tc)}" ${presetLockEnabled ? 'disabled tabindex="-1"' : ""} placeholder="000" />
@@ -2147,7 +2266,7 @@
           </div>
           </div>
           </div>
-          ${statusText ? `<p class="${statusClass}">${escapeHtml(statusText)}</p>` : ""}
+            ${statusText && state.meta.adminStatusVisible !== false ? `<p class="${statusClass}">${escapeHtml(statusText)}</p>` : ""}
         </section>
         ${renderFrontFooter()}
         ${renderBugReportModal()}
@@ -3554,16 +3673,11 @@
         const index = Number(indexText);
         state.navlog.radios[index][field] = event.target.value;
         if (field === "location" && String(event.target.value || "").trim() === "") {
-          state.navlog.radios[index] = {
-            ...state.navlog.radios[index],
-            cptAtis: "",
-            depAap: "",
-            twr: "",
-            gnd: "",
-            fss: "",
-            remarks: "",
-          };
-          render();
+          autofillAirportRow(index, "", { render: false });
+          return;
+        }
+        if (field === "location") {
+          autofillAirportRow(index, event.target.value, { render: false });
         }
       });
     });
@@ -3809,25 +3923,29 @@
         if (!allowKioskLegEdit) return;
         wireKioskDelayedKeyboard(input);
         input.addEventListener("input", (event) => {
-          const leg = state.navlog.legs[index];
+          const [currentIndexText, currentField] = String(event.target.dataset.legField || "").split(":");
+          const currentIndex = Number(currentIndexText);
+          const activeField = currentField || field;
+          const activeIndex = Number.isFinite(currentIndex) ? currentIndex : index;
+          const leg = state.navlog.legs[activeIndex];
           if (!leg) return;
           let nextValue = event.target.value;
-          if (isDegreeField(field)) {
+          if (isDegreeField(activeField)) {
             const parsed = num(nextValue);
             if (parsed != null) {
               nextValue = String(roundHalfUp(parsed));
               event.target.value = nextValue;
             }
           }
-          leg[field] = nextValue;
+          leg[activeField] = nextValue;
           leg._manual = leg._manual || {};
-          leg._manual[field] = nextValue.trim() !== "";
-          if (field === "distance") leg._distanceAutofillFromCoords = false;
-          if (field === "tc") leg._tcAutofillFromCoords = false;
-          if (field === "route") applyCoordinateAutofillAroundRoute(index);
-          computeRouteMath({ index, field });
-          updateComputedCells({ index, field });
-          if (field === "route") syncRouteHints();
+          leg._manual[activeField] = nextValue.trim() !== "";
+          if (activeField === "distance") leg._distanceAutofillFromCoords = false;
+          if (activeField === "tc") leg._tcAutofillFromCoords = false;
+          if (activeField === "route") applyCoordinateAutofillAroundRoute(activeIndex);
+          computeRouteMath({ index: activeIndex, field: activeField });
+          updateComputedCells({ index: activeIndex, field: activeField });
+          if (activeField === "route") syncRouteHints();
         });
         input.addEventListener("blur", () => {
           persistKioskPayload();
@@ -3884,8 +4002,12 @@
           const modeText = String(button.getAttribute("data-kiosk-speed-mode") || "");
           const mode = modeText === "ta" ? "ta" : "gs";
           setKioskPhoneSpeedCellMode(mode);
+          document.querySelectorAll("[data-kiosk-speed-mode]").forEach((node) => {
+            const nodeMode = String(node.getAttribute("data-kiosk-speed-mode") || "");
+            node.classList.toggle("active", nodeMode === mode);
+          });
+          syncKioskPhoneSpeedDisplayValues();
           persistKioskPayload();
-          render();
         });
       });
     }
@@ -3903,17 +4025,10 @@
         const value = String(event.target.value || "");
         state.navlog.radios[index].location = value;
         if (value.trim() === "") {
-          state.navlog.radios[index] = {
-            ...state.navlog.radios[index],
-            cptAtis: "",
-            depAap: "",
-            twr: "",
-            gnd: "",
-            fss: "",
-            remarks: "",
-          };
-          render();
+          autofillAirportRow(index, "", { render: false });
+          return;
         }
+        autofillAirportRow(index, value, { render: false });
       });
       input.addEventListener("change", (event) => {
         commitAirportLocation(event.target);
@@ -4941,9 +5056,11 @@
   function wireKioskEventTimerControls() {
     document.querySelectorAll("[data-kiosk-timer-clear]").forEach((button) => {
       button.addEventListener("click", () => {
-        if (!window.confirm("Clear timer?")) return;
         const timerId = String(button.dataset.kioskTimerClear || "");
         const timers = Array.isArray(state.meta.kioskEventTimer) ? state.meta.kioskEventTimer : [];
+        const timer = timers.find((item) => String(item.id) === timerId);
+        const prompt = timer && String(timer.kind || "") === "gps-distance" ? "Clear alert?" : "Clear timer?";
+        if (!window.confirm(prompt)) return;
         state.meta.kioskEventTimer = timers.filter((timer) => String(timer.id) !== timerId);
         render();
       });
@@ -5824,6 +5941,7 @@
     }
     state.settings = next;
     if (affectsMathFormatting) {
+      autofillAllCoordinateNavigationValues();
       computeRouteMath();
     }
     render();
@@ -5937,23 +6055,31 @@
     return leg;
   }
 
-  function autofillAirportRow(index, rawValue) {
+  function syncRadioRowDom(index) {
+    const row = state.navlog.radios[index];
+    if (!row) return;
+    ["location", "cptAtis", "depAap", "twr", "gnd", "fss", "remarks"].forEach((field) => {
+      const node = document.querySelector(`[data-radio-field="${index}:${field}"]`);
+      if (node && node.value !== String(row[field] || "")) node.value = String(row[field] || "");
+    });
+  }
+
+  function autofillAirportRow(index, rawValue, options = {}) {
     const code = String(rawValue || "").trim().toUpperCase();
     const airport = state.catalog.airports.find((item) => item.code === code || item.id === code);
     if (!airport) {
-      if (!code) {
-        state.navlog.radios[index] = {
-          ...state.navlog.radios[index],
-          location: "",
-          cptAtis: "",
-          depAap: "",
-          twr: "",
-          gnd: "",
-          fss: "",
-          remarks: "",
-        };
-        render();
-      }
+      state.navlog.radios[index] = {
+        ...state.navlog.radios[index],
+        location: code ? rawValue : "",
+        cptAtis: "",
+        depAap: "",
+        twr: "",
+        gnd: "",
+        fss: "",
+        remarks: "",
+      };
+      if (options.render === false) syncRadioRowDom(index);
+      else render();
       return;
     }
     state.navlog.radios[index] = {
@@ -5966,7 +6092,8 @@
       fss: airport.fss,
       remarks: airport.remarks,
     };
-    render();
+    if (options.render === false) syncRadioRowDom(index);
+    else render();
   }
 
   function computeRouteMath(activeEdit) {
@@ -6615,7 +6742,9 @@
     const waypointRowInputs = Array.from(document.querySelectorAll("[data-admin-waypoint-row]"));
     waypointRowInputs.forEach((node) => {
       node.addEventListener("input", () => {
-        readWaypointFormFromInputs();
+        const key = String(node.getAttribute("data-admin-waypoint-row") || "");
+        const [, field] = key.split(":");
+        readWaypointFormFromInputs({ autofill: field === "name" });
         syncAdminWaypointFormUi();
       });
     });
@@ -6762,7 +6891,7 @@
       button.addEventListener("click", () => {
         const chartId = String(button.getAttribute("data-admin-chart-select") || "");
         if (chartId && chartId === String(state.admin.chartForm.id || "")) {
-          state.admin.chartForm = createEmptyChartForm();
+          state.admin.chartForm = { ...createEmptyChartForm(), airportCode: normalizeCode(state.admin.chartForm.airportCode) };
         } else {
           selectAirportChartForEditing(chartId);
         }
@@ -7420,7 +7549,7 @@
     const source = Array.isArray(records) ? records : [];
     return normalizeWaypointRows(
       source.map((record) => ({
-        name: record && record.name != null ? record.name : "",
+        name: record && (record.rawName || record.name) != null ? (record.rawName || record.name) : "",
         coord: record && record.coord != null ? record.coord : "",
       })),
     );
@@ -7471,24 +7600,26 @@
   }
 
   function selectAirportChartForEditing(chartId) {
+    const currentAirportCode = normalizeCode(state.admin.chartForm && state.admin.chartForm.airportCode);
     const selected = (Array.isArray(state.admin.charts) ? state.admin.charts : [])
       .map((record) => normalizeAirportChartRecord(record))
       .find((record) => record.id === String(chartId || ""));
     if (!selected) {
-      state.admin.chartForm = createEmptyChartForm();
+      state.admin.chartForm = { ...createEmptyChartForm(), airportCode: currentAirportCode };
       return;
     }
     state.admin.chartForm = {
       id: selected.id,
-      airportCode: selected.airportCode,
+      airportCode: currentAirportCode || selected.airportCode,
       name: selected.name,
       category: selected.category,
       storagePath: selected.storagePath,
     };
   }
 
-  function readWaypointFormFromInputs() {
+  function readWaypointFormFromInputs(options = {}) {
     const rowInputs = Array.from(document.querySelectorAll("[data-admin-waypoint-row]"));
+    const previousRows = normalizeWaypointRows(state.admin.waypointForm.rows);
     const rows = [];
     rowInputs.forEach((node) => {
       const key = String(node.getAttribute("data-admin-waypoint-row") || "");
@@ -7497,11 +7628,12 @@
       if (!Number.isFinite(index) || index < 0 || !field) return;
       if (!rows[index]) rows[index] = createEmptyWaypointRow();
       rows[index][field] = String(node.value || "");
+      rows[index]._coordAutofilledFromName = Boolean(previousRows[index] && previousRows[index]._coordAutofilledFromName);
     });
     state.admin.waypointForm = {
       rows: normalizeWaypointRows(rows.length ? rows : state.admin.waypointForm.rows),
     };
-    syncAdminWaypointAutofill();
+    if (options.autofill !== false) syncAdminWaypointAutofill();
   }
 
   function normalizeWaypointRows(rows) {
@@ -7509,6 +7641,7 @@
     const normalized = source.map((row) => ({
       name: String(row && row.name != null ? row.name : ""),
       coord: String(row && row.coord != null ? row.coord : ""),
+      _coordAutofilledFromName: Boolean(row && row._coordAutofilledFromName),
     }));
     return normalized.length ? normalized : [createEmptyWaypointRow()];
   }
@@ -7519,12 +7652,17 @@
       const route = normalizeCode(row.name);
       if (!route) {
         row.coord = "";
+        row._coordAutofilledFromName = false;
         state.admin.selectedWaypointName = "";
         return;
       }
       const known = getWaypointData(route);
-      if (known && known.hasCoords && !String(row.coord || "").trim()) {
+      if (known && known.hasCoords) {
         row.coord = known.coordText;
+        row._coordAutofilledFromName = true;
+      } else if (row._coordAutofilledFromName || !String(row.coord || "").trim()) {
+        row.coord = "";
+        row._coordAutofilledFromName = false;
       }
     });
     state.admin.waypointForm.rows = rows;
@@ -7616,7 +7754,7 @@
     }
     state.admin.waypointForm = {
       rows: normalizeWaypointRows([{
-        name: selected.name,
+        name: selected.rawName || selected.name,
         coord: selected.coord,
       }]),
     };
@@ -7768,7 +7906,8 @@
       render();
       return;
     }
-    const row = normalizeWaypointRecord(normalizeWaypointRows(state.admin.waypointForm.rows)[0]);
+    const draftRow = normalizeWaypointRows(state.admin.waypointForm.rows)[0];
+    const row = normalizeWaypointRecord(draftRow);
     if (!row.name) {
       state.admin.error = "Enter a waypoint before saving.";
       state.admin.notice = "";
@@ -7779,11 +7918,17 @@
     state.admin.notice = "";
     try {
       const payload = {
-        name: row.name,
+        name: formatWaypointStorageName(draftRow),
         coord: row.coord,
       };
       if (row.id) payload.id = row.id;
-      const result = await supabaseClient.from("waypoints").upsert(payload, { onConflict: "name" });
+      const originalName = normalizeCode(state.admin.selectedWaypointName);
+      const existingRecord = originalName
+        ? (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : []).find((waypoint) => normalizeCode(waypoint.name) === originalName)
+        : null;
+      const result = existingRecord
+        ? await supabaseClient.from("waypoints").update(payload).eq("name", existingRecord.rawName || existingRecord.name)
+        : await supabaseClient.from("waypoints").upsert(payload, { onConflict: "name" });
       if (result.error) throw result.error;
       state.admin.selectedWaypointName = row.name;
       await loadAdminData();
@@ -7803,8 +7948,8 @@
       render();
       return;
     }
-    const exists = (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : []).some((waypoint) => normalizeCode(waypoint.name) === row.name);
-    if (!exists) {
+    const existingRecord = (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : []).find((waypoint) => normalizeCode(waypoint.name) === row.name);
+    if (!existingRecord) {
       state.admin.waypointForm = createEmptyWaypointForm();
       state.admin.selectedWaypointName = "";
       syncAdminWaypointFormUi();
@@ -7818,7 +7963,7 @@
     }
     if (!window.confirm("Delete this waypoint?")) return;
     try {
-      const result = await supabaseClient.from("waypoints").delete().eq("name", row.name);
+      const result = await supabaseClient.from("waypoints").delete().eq("name", existingRecord.rawName || existingRecord.name);
       if (result.error) throw result.error;
       state.admin.selectedWaypointName = "";
       state.admin.waypointForm = createEmptyWaypointForm();
@@ -8098,7 +8243,7 @@
         await supabaseClient.storage.from(AIRPORT_CHARTS_BUCKET).remove([previousStoragePath]);
       }
       await loadAdminData();
-      state.admin.chartForm = createEmptyChartForm();
+      state.admin.chartForm = { ...createEmptyChartForm(), airportCode };
       if (fileInput) fileInput.value = "";
       if (!String(state.admin.chartUploadStatus || "").trim()) state.admin.chartUploadStatus = existingChart ? "Chart saved." : "Chart uploaded.";
       render();
@@ -8126,7 +8271,9 @@
       const deleteResult = await supabaseClient.from("airport_charts").delete().eq("id", chart.id);
       if (deleteResult.error) throw deleteResult.error;
       await loadAdminData();
-      if (state.admin.chartForm.id === chart.id) state.admin.chartForm = createEmptyChartForm();
+      if (state.admin.chartForm.id === chart.id) {
+        state.admin.chartForm = { ...createEmptyChartForm(), airportCode: normalizeCode(state.admin.chartForm.airportCode || chart.airportCode) };
+      }
       state.admin.chartUploadStatus = "Chart deleted.";
       render();
     } catch (error) {
@@ -8993,7 +9140,14 @@
     state.navlog.legs.forEach((leg, index) => {
       const node = document.querySelector(`[data-kiosk-speed-display="${index}"]`);
       if (!node) return;
-      node.value = mode === "ta" ? legFieldValue(leg, "ta") : legFieldValue(leg, "gs");
+      const field = mode === "ta" ? "ta" : "gs";
+      node.value = legFieldValue(leg, field);
+      node.setAttribute("data-leg-field", `${index}:${field}`);
+      const wrapper = node.closest(".field");
+      if (wrapper) {
+        wrapper.classList.toggle("derived", Boolean(leg._derived && leg._derived[field]));
+        wrapper.classList.toggle("error", Boolean(leg._errors && leg._errors[field]));
+      }
     });
   }
 

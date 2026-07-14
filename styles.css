@@ -870,7 +870,7 @@ body.kiosk-mode .time-head {
 
 .admin-preset-head-extended,
 .admin-preset-row-extended {
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(88px, 0.7fr) minmax(88px, 0.8fr) calc(var(--admin-row-height) + 2px);
+  grid-template-columns: minmax(0, 1.6fr) minmax(88px, 0.7fr) minmax(88px, 0.8fr) calc(var(--admin-row-height) + 2px);
 }
 
 .admin-preset-lock-rail {
@@ -1184,6 +1184,11 @@ body.iphone-ui .back-link .back-link-icon {
 
 body.kiosk-mode .ipad-kiosk-page {
   background: #efe3cf;
+}
+
+body.kiosk-mode .ipad-kiosk-wrap {
+  position: relative;
+  z-index: 1;
 }
 
 body.kiosk-modal-scroll-lock {
@@ -1748,6 +1753,8 @@ body.kiosk-phone-mode .toc-tod-card.resolved .toc-tod-title {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  position: relative;
+  z-index: 30;
 }
 
 .kiosk-whereami-btn {
@@ -1764,6 +1771,7 @@ body.kiosk-phone-mode .toc-tod-card.resolved .toc-tod-title {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  touch-action: manipulation;
 }
 
 .kiosk-whereami-btn.is-error {
@@ -2176,29 +2184,9 @@ body.kiosk-mode .nav-table {
   -webkit-text-fill-color: transparent;
 }
 
-body.kiosk-mode .header-box .date-input-wrap input[data-header="date"] {
-  display: none !important;
-}
-
 body.kiosk-mode .date-picker-proxy {
-  position: static;
-  inset: auto;
-  width: 100%;
-  height: auto;
-  min-height: 56px !important;
-  opacity: 1;
+  opacity: 0;
   pointer-events: none;
-  border: 0;
-  padding: 8px 14px 14px;
-  cursor: default;
-  z-index: 1;
-  color: #111;
-  -webkit-text-fill-color: #111;
-  caret-color: auto;
-  background: transparent;
-  clip-path: none;
-  text-align: left;
-  text-align: -webkit-left;
 }
 
 body.kiosk-mode .date-picker-proxy::-webkit-datetime-edit,
@@ -3617,7 +3605,7 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   position: fixed;
   inset: 0;
   z-index: 2600;
-  padding: 8px;
+  padding: 4px;
   background: rgba(16, 22, 27, 0.54);
   display: grid;
   place-items: center;
@@ -3626,7 +3614,7 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
 
 .chart-fullscreen-viewer {
   width: min(1120px, calc(100vw - 16px));
-  height: min(92vh, calc(100vh - 16px));
+  height: min(98vh, calc(100vh - 8px));
   border-radius: 8px;
   overflow: hidden;
   background: #f5f1e8;
@@ -3681,7 +3669,7 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
 
 .kiosk-chart-launch-btn {
   min-width: 220px;
-  font-weight: 800;
+  font-weight: 400;
 }
 
 .kiosk-chart-launch-btn-top {
@@ -4345,18 +4333,17 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   }
 
   body.iphone-ui .admin-preset-row-extended .admin-field-cell:nth-child(1),
-  body.iphone-ui .admin-preset-row-extended .admin-field-cell:nth-child(2),
   body.iphone-ui .admin-rpc-row .admin-field-cell:nth-child(1),
   body.iphone-ui .admin-rpc-row .admin-field-cell:nth-child(2),
   body.iphone-ui .admin-airport-row .admin-field-cell:last-child {
     grid-column: 1 / -1;
   }
 
-  body.iphone-ui .admin-preset-row-extended .admin-field-cell:nth-child(3) {
+  body.iphone-ui .admin-preset-row-extended .admin-field-cell:nth-child(2) {
     grid-column: 1;
   }
 
-  body.iphone-ui .admin-preset-row-extended .admin-field-cell:nth-child(4) {
+  body.iphone-ui .admin-preset-row-extended .admin-field-cell:nth-child(3) {
     grid-column: 2;
   }
 
@@ -4437,16 +4424,12 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   }
 
   .additional-info-table {
-    width: 100%;
-    min-width: 0;
-    table-layout: fixed;
+    min-width: 560px;
   }
 
   .additional-info-table td {
     font-size: 0.8rem;
     height: 38px;
-    overflow-wrap: anywhere;
-    white-space: normal;
   }
 
 }
@@ -4483,6 +4466,15 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   .chart-preview-viewer-simple,
   .chart-preview-viewer-simple .chart-preview-frame {
     min-height: 46vh;
+  }
+
+  .chart-fullscreen-overlay {
+    padding: 2px;
+  }
+
+  .chart-fullscreen-viewer {
+    width: calc(100vw - 4px);
+    height: calc(100vh - 4px);
   }
 
   .setup-card,
@@ -4689,17 +4681,13 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   }
 
   .additional-info-table {
-    width: 100%;
-    min-width: 0;
-    table-layout: fixed;
+    min-width: 520px;
   }
 
   .additional-info-table td {
     font-size: 0.78rem;
     height: 36px;
     padding: 3px 4px;
-    overflow-wrap: anywhere;
-    white-space: normal;
   }
 
   .activate-button {
