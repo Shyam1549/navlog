@@ -73,6 +73,10 @@
       presetForm: createEmptyPresetForm(),
       presetManualMode: false,
       waypointForm: createEmptyWaypointForm(),
+      waypointAliasEditor: {
+        open: false,
+        rowIndex: 0,
+      },
       rpcRegistryForm: createEmptyRpcRegistryForm(),
       airportForm: createEmptyAirportForm(),
       chartForm: createEmptyChartForm(),
@@ -1234,6 +1238,26 @@
     return changedDistance || changedCourse;
   }
 
+  function invalidatePresetNavigationAroundRoute(routeIndex) {
+    if (!state.meta.usingPresetRoute) return;
+    const index = Number(routeIndex);
+    if (!Number.isFinite(index)) return;
+    [index, index + 1].forEach((legIndex) => {
+      const leg = state.navlog.legs[legIndex];
+      if (!leg) return;
+      leg.tc = "";
+      leg.distance = "";
+      leg._manual = leg._manual || {};
+      leg._manual.tc = false;
+      leg._manual.distance = false;
+      leg._tcAutofillFromCoords = false;
+      leg._distanceAutofillFromCoords = false;
+      leg._derived = leg._derived || {};
+      delete leg._derived.tc;
+      delete leg._derived.distance;
+    });
+  }
+
   function autofillAllCoordinateDistances() {
     if (!Array.isArray(state.navlog.legs) || state.navlog.legs.length < 2) return;
     for (let index = 1; index < state.navlog.legs.length; index += 1) {
@@ -1317,6 +1341,9 @@
       document.body.classList.add("iphone-navlog-vd-mode");
     }
     evaluateAnnouncementsPrompt();
+    if (state.view === "navlog" || state.view === "ipad-kiosk") {
+      autofillAllCoordinateNavigationValues();
+    }
     computeRouteMath();
     if (state.view === "access") app.innerHTML = renderAccessScreen();
     else if (state.view === "setup") app.innerHTML = renderSetupScreen();
@@ -1862,6 +1889,37 @@
     `;
   }
 
+  function renderAdminWaypointAliasModal() {
+    const editor = state.admin && state.admin.waypointAliasEditor ? state.admin.waypointAliasEditor : { open: false, rowIndex: 0 };
+    if (!editor.open) return "";
+    const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
+    const rowIndex = Number.isFinite(Number(editor.rowIndex)) ? Number(editor.rowIndex) : 0;
+    const row = rows[rowIndex] || createEmptyWaypointRow();
+    const aliases = Array.isArray(row.aliases) ? row.aliases : [];
+    return `
+      <div class="admin-alias-overlay" id="admin-waypoint-alias-overlay">
+        <section class="admin-alias-panel" role="dialog" aria-modal="true" aria-label="Waypoint aliases">
+          <div class="admin-alias-head">
+            <div>
+              <span class="admin-alias-kicker">Waypoint</span>
+              <h3>${escapeHtml(row.name || "Waypoint")}</h3>
+            </div>
+            <button class="action admin-alias-close" id="admin-waypoint-alias-close" type="button" aria-label="Close aliases">Close</button>
+          </div>
+          <div class="admin-alias-list">
+            ${aliases.length ? aliases.map((alias, aliasIndex) => `
+              <div class="admin-alias-row">
+                <input data-admin-waypoint-alias-input="${rowIndex}:${aliasIndex}" value="${escapeAttr(alias)}" placeholder="Alias ${aliasIndex + 1}" />
+                <button class="action admin-mini-btn" data-admin-waypoint-alias-remove="${rowIndex}:${aliasIndex}" type="button" aria-label="Remove alias">-</button>
+              </div>
+            `).join("") : '<p class="admin-alias-empty">No aliases</p>'}
+          </div>
+          <button class="action admin-alias-add" id="admin-waypoint-alias-add" type="button">Add alias</button>
+        </section>
+      </div>
+    `;
+  }
+
   function renderAdminScreen() {
     if (!state.admin.session) return renderAdminLoginScreen();
     const statusText = state.admin.error || state.admin.notice;
@@ -1888,6 +1946,10 @@
       .map((record) => normalizeRpcRegistryRecord(record))
       .filter((record) => record.registration)
       .sort((left, right) => left.registration.localeCompare(right.registration));
+    const existingWaypointRecords = (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : [])
+      .map((record) => normalizeWaypointRecord(record))
+      .filter((record) => record.name)
+      .sort((left, right) => left.name.localeCompare(right.name));
     const adminChartQuery = normalizeCode(state.admin.chartForm && state.admin.chartForm.airportCode);
     const adminCharts = (Array.isArray(state.admin.charts) ? state.admin.charts : [])
       .map((chart) => normalizeAirportChartRecord(chart))
@@ -1994,7 +2056,6 @@
               </div>
               <div class="admin-preset-body">
                 ${waypointRows.map((row, index) => {
-                  const aliases = Array.isArray(row.aliases) ? row.aliases : [];
                   return `
                     <div class="admin-preset-row admin-waypoint-row" data-admin-row-index="${index}">
                       <div class="admin-waypoint-main">
@@ -2006,16 +2067,6 @@
                       <label class="admin-field-cell" data-label="Coords">
                         <input data-admin-waypoint-row="${index}:coord" value="${escapeAttr(row.coord)}" placeholder="+/-lat, +/-long" />
                       </label>
-                      ${aliases.length ? `
-                        <div class="admin-waypoint-aliases" data-admin-waypoint-aliases="${index}">
-                          ${aliases.map((alias, aliasIndex) => `
-                            <label class="admin-waypoint-alias-cell" data-label="Alias">
-                              <input data-admin-waypoint-row="${index}:alias:${aliasIndex}" value="${escapeAttr(alias)}" placeholder="Alias ${aliasIndex + 1}" />
-                              <button class="action admin-mini-btn" data-admin-waypoint-remove-alias="${index}:${aliasIndex}" type="button" aria-label="Remove alias">-</button>
-                            </label>
-                          `).join("")}
-                        </div>
-                      ` : ""}
                     </div>
                   `;
                 }).join("")}
@@ -2025,6 +2076,17 @@
               <button class="action primary" id="admin-waypoint-save">Save</button>
               <button class="action" id="admin-waypoint-delete">Delete</button>
             </div>
+            <section class="admin-record-picker">
+              <h4>Existing waypoints</h4>
+              <div class="admin-record-picker-grid">
+                ${existingWaypointRecords.length ? existingWaypointRecords.map((record) => `
+                  <button class="admin-record-picker-item${normalizeCode(state.admin.selectedWaypointName) === record.name ? " active" : ""}" data-admin-waypoint-select="${escapeAttr(record.name)}" type="button">
+                    <strong>${escapeHtml(record.name)}</strong>
+                    <span>${escapeHtml(record.aliases.length ? record.aliases.join(", ") : record.coord || "No aliases")}</span>
+                  </button>
+                `).join("") : '<p class="setup-caption">No waypoints saved yet.</p>'}
+              </div>
+            </section>
           </div>
           <div class="manual-section${panel === "rpc-reg" ? "" : " hidden"}">
             <h3>Aircraft</h3><br>
@@ -2355,6 +2417,7 @@
         ${renderBugReportModal()}
         ${renderAnnouncementModal()}
         ${renderChartPreviewModal()}
+        ${renderAdminWaypointAliasModal()}
       </main>
       </div>
     `;
@@ -2695,7 +2758,7 @@
             <p class="cockpit-info-recommend">Recommended: Turn on Guided Access and DND.</p>
             <ul class="cockpit-info-list">
               <li>Press and hold Actual Time (AT) for 2 seconds to auto-enter current ZULU time.</li>
-              <li>To use keyboard entry for interactive fields (AT, ATIS, LOCATION), tap the respective table cell 2 times.</li>
+              <li>To use keyboard entry for interactive fields (AT, ATIS, LOCATION), tap the respective table cell 3 times.</li>
               <li>For inbound/outbound time estimate, press and hold the route for 2 seconds.</li>
             </ul>
             <label class="settings-item cockpit-gps-toggle">
@@ -3522,16 +3585,21 @@
     document.querySelectorAll("[data-remove-leg]").forEach((button) => {
       button.addEventListener("click", () => {
         const removeIndex = Number(button.dataset.removeLeg);
-        const shouldResetSuccessorTc = state.meta.usingPresetRoute;
+        const shouldResetSuccessorOverrides = state.meta.usingPresetRoute;
         state.navlog.legs.splice(removeIndex, 1);
-        if (shouldResetSuccessorTc && state.navlog.legs[removeIndex]) {
+        if (shouldResetSuccessorOverrides && state.navlog.legs[removeIndex]) {
           const successorLeg = state.navlog.legs[removeIndex];
           successorLeg.tc = "";
           successorLeg._manual = successorLeg._manual || {};
           successorLeg._manual.tc = false;
           successorLeg._derived = successorLeg._derived || {};
           delete successorLeg._derived.tc;
+          successorLeg.distance = "";
+          successorLeg._manual.distance = false;
+          successorLeg._distanceAutofillFromCoords = false;
+          delete successorLeg._derived.distance;
         }
+        applyCoordinateAutofillAroundRoute(Math.max(1, removeIndex));
         render();
       });
     });
@@ -3591,7 +3659,10 @@
         leg._manual[field] = nextValue.trim() !== "";
         if (field === "distance") leg._distanceAutofillFromCoords = false;
         if (field === "tc") leg._tcAutofillFromCoords = false;
-        if (field === "route") applyCoordinateAutofillAroundRoute(index);
+        if (field === "route") {
+          invalidatePresetNavigationAroundRoute(index);
+          applyCoordinateAutofillAroundRoute(index);
+        }
         computeRouteMath({ index, field });
         updateComputedCells({ index, field });
         if (index === 0 && field === "alt") syncFirstAltHint();
@@ -6730,6 +6801,15 @@
       node.addEventListener("input", () => {
         const key = String(node.getAttribute("data-admin-preset-row") || "");
         const [, field] = key.split(":");
+        if (field === "route") {
+          const [indexText] = key.split(":");
+          const index = Number(indexText);
+          const row = Number.isFinite(index) && index >= 0 ? state.admin.presetForm.rows[index] : null;
+          if (row) {
+            row._manual = row._manual || {};
+            row._manual.coord = false;
+          }
+        }
         if (field === "coord") {
           const [indexText] = key.split(":");
           const index = Number(indexText);
@@ -6776,6 +6856,14 @@
         readWaypointFormFromInputs({ autofill: field === "name" });
         syncAdminWaypointFormUi();
       });
+      node.addEventListener("change", () => {
+        const key = String(node.getAttribute("data-admin-waypoint-row") || "");
+        const [, field] = key.split(":");
+        if (field !== "name" || state.admin.selectedWaypointName) return;
+        const code = normalizeCode(node.value);
+        const existing = state.admin.waypoints.find((waypoint) => normalizeCode(waypoint.name) === code);
+        if (existing) state.admin.selectedWaypointName = existing.name;
+      });
     });
     document.querySelectorAll("[data-admin-waypoint-add-alias]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -6783,21 +6871,25 @@
         const index = Number(button.getAttribute("data-admin-waypoint-add-alias"));
         const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
         if (!Number.isFinite(index) || !rows[index] || !rows[index].name.trim()) return;
-        rows[index].aliases = Array.isArray(rows[index].aliases) ? rows[index].aliases : [];
-        rows[index].aliases.push("");
         state.admin.waypointForm.rows = rows;
+        state.admin.waypointAliasEditor = { open: true, rowIndex: index };
         render();
-        requestAnimationFrame(() => {
-          const aliasInputs = document.querySelectorAll(`[data-admin-waypoint-row^="${index}:alias:"]`);
-          const lastAlias = aliasInputs.length ? aliasInputs[aliasInputs.length - 1] : null;
-          if (lastAlias) lastAlias.focus();
-        });
       });
     });
-    document.querySelectorAll("[data-admin-waypoint-remove-alias]").forEach((button) => {
+    document.querySelectorAll("[data-admin-waypoint-alias-input]").forEach((input) => {
+      input.addEventListener("input", () => {
+        const [rowIndexText, aliasIndexText] = String(input.getAttribute("data-admin-waypoint-alias-input") || "").split(":");
+        const rowIndex = Number(rowIndexText);
+        const aliasIndex = Number(aliasIndexText);
+        const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
+        if (!Number.isFinite(rowIndex) || !Number.isFinite(aliasIndex) || !rows[rowIndex]) return;
+        rows[rowIndex].aliases[aliasIndex] = String(input.value || "");
+        state.admin.waypointForm.rows = rows;
+      });
+    });
+    document.querySelectorAll("[data-admin-waypoint-alias-remove]").forEach((button) => {
       button.addEventListener("click", () => {
-        readWaypointFormFromInputs({ autofill: false });
-        const [rowIndexText, aliasIndexText] = String(button.getAttribute("data-admin-waypoint-remove-alias") || "").split(":");
+        const [rowIndexText, aliasIndexText] = String(button.getAttribute("data-admin-waypoint-alias-remove") || "").split(":");
         const rowIndex = Number(rowIndexText);
         const aliasIndex = Number(aliasIndexText);
         const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
@@ -6807,6 +6899,50 @@
         render();
       });
     });
+    document.querySelectorAll("[data-admin-waypoint-select]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const name = normalizeCode(button.getAttribute("data-admin-waypoint-select"));
+        if (name && name === normalizeCode(state.admin.selectedWaypointName)) {
+          state.admin.selectedWaypointName = "";
+          state.admin.waypointForm = createEmptyWaypointForm();
+        } else {
+          selectWaypointForEditing(name);
+        }
+        render();
+      });
+    });
+    const aliasAddButton = document.getElementById("admin-waypoint-alias-add");
+    if (aliasAddButton) {
+      aliasAddButton.addEventListener("click", () => {
+        const editor = state.admin.waypointAliasEditor;
+        const rowIndex = Number(editor && editor.rowIndex);
+        const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
+        if (!Number.isFinite(rowIndex) || !rows[rowIndex] || !rows[rowIndex].name.trim()) return;
+        rows[rowIndex].aliases.push("");
+        state.admin.waypointForm.rows = rows;
+        render();
+        requestAnimationFrame(() => {
+          const inputs = document.querySelectorAll(`[data-admin-waypoint-alias-input^="${rowIndex}:"]`);
+          const last = inputs.length ? inputs[inputs.length - 1] : null;
+          if (last) last.focus();
+        });
+      });
+    }
+    const aliasCloseButton = document.getElementById("admin-waypoint-alias-close");
+    if (aliasCloseButton) {
+      aliasCloseButton.addEventListener("click", () => {
+        state.admin.waypointAliasEditor.open = false;
+        render();
+      });
+    }
+    const aliasOverlay = document.getElementById("admin-waypoint-alias-overlay");
+    if (aliasOverlay) {
+      aliasOverlay.addEventListener("click", (event) => {
+        if (event.target !== aliasOverlay) return;
+        state.admin.waypointAliasEditor.open = false;
+        render();
+      });
+    }
     const waypointSaveButton = document.getElementById("admin-waypoint-save");
     if (waypointSaveButton) {
       waypointSaveButton.addEventListener("click", async () => {
@@ -7253,6 +7389,7 @@
     state.admin.selectedRpcRegistration = "";
     state.admin.presetForm = createEmptyPresetForm();
     state.admin.waypointForm = createEmptyWaypointForm();
+    state.admin.waypointAliasEditor = { open: false, rowIndex: 0 };
     state.admin.rpcRegistryForm = createEmptyRpcRegistryForm();
     state.admin.chartForm = createEmptyChartForm();
     state.admin.notice = "Signed out.";
@@ -7440,10 +7577,6 @@
       row._manual = {
         ...(previousRows[index] && previousRows[index]._manual ? previousRows[index]._manual : createEmptyPresetRow()._manual),
       };
-      if (state.admin.presetForm.locked) {
-        row._manual.tc = false;
-        row._manual.distance = false;
-      }
     });
     syncAdminPresetRowAutofill();
   }
@@ -7527,6 +7660,7 @@
     if (previous === "coordinates") {
       state.admin.selectedWaypointName = "";
       state.admin.waypointForm = createEmptyWaypointForm();
+      state.admin.waypointAliasEditor = { open: false, rowIndex: 0 };
     }
     if (previous === "rpc-reg") {
       state.admin.selectedRpcRegistration = "";
@@ -7542,10 +7676,17 @@
     const rows = normalizePresetRows(state.admin.presetForm.rows);
     rows.forEach((row, index) => {
       const route = normalizeCode(row.route);
-      if (!route) return;
+      if (!route) {
+        if (!row._manual.coord) row.coord = "";
+        if (!row._manual.tc) row.tc = "";
+        if (!row._manual.distance) row.distance = "";
+        return;
+      }
       const known = getWaypointData(route);
       if (known && known.hasCoords && !row._manual.coord) {
         row.coord = known.coordText;
+      } else if (!row._manual.coord) {
+        row.coord = "";
       }
       const derived = computeAdminPresetRowDerivedValues(rows, index);
       if (!row._manual.tc && derived.tc != null) row.tc = formatHeadingDisplay(derived.tc);
@@ -7581,6 +7722,13 @@
       legs.map((leg) => ({
         route: leg && leg.route != null ? leg.route : "",
         coord: leg && (leg.coord ?? leg.coordinates ?? leg.latlon) != null ? (leg.coord ?? leg.coordinates ?? leg.latlon) : "",
+        tc: leg && leg.tc != null ? leg.tc : "",
+        distance: leg && leg.distance != null ? leg.distance : "",
+        _manual: {
+          coord: false,
+          tc: String(leg && leg.tc != null ? leg.tc : "").trim() !== "",
+          distance: String(leg && leg.distance != null ? leg.distance : "").trim() !== "",
+        },
       })),
     );
   }
@@ -7687,6 +7835,9 @@
       const index = Number(indexText);
       if (!Number.isFinite(index) || index < 0 || !field) return;
       if (!rows[index]) rows[index] = createEmptyWaypointRow();
+      rows[index].aliases = Array.isArray(previousRows[index] && previousRows[index].aliases)
+        ? previousRows[index].aliases.slice()
+        : [];
       if (field === "alias") {
         const aliasIndex = Number(aliasIndexText);
         if (!Number.isFinite(aliasIndex) || aliasIndex < 0) return;
@@ -9715,6 +9866,9 @@
     if (fuelInput) fuelInput.value = fuel;
     applyDefaultCasForAircraft(record || null);
     syncAircraftFuelDefaults();
+    if (state.view === "navlog" || state.view === "ipad-kiosk") {
+      autofillAllCoordinateNavigationValues();
+    }
     computeRouteMath();
     updateComputedCells();
   }
