@@ -5145,3 +5145,323 @@ body.ipad-desktop-scale .route-inline-hint {
   line-height: 1.05 !important;
   padding: 0 2px !important;
 }
+
+/* Activate overlays use one fixed interaction layer so transformed navlog content cannot steal taps. */
+.activate-modal-layer {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 6000 !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 14px !important;
+  background: rgba(16, 22, 27, 0.58) !important;
+  isolation: isolate;
+  pointer-events: auto !important;
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+.activate-modal-card {
+  position: relative;
+  z-index: 1;
+  width: min(620px, calc(100vw - 28px));
+  max-height: calc(100vh - 28px);
+  overflow: hidden;
+  padding: 18px;
+  border: 2px solid rgba(33, 76, 90, 0.22);
+  border-radius: 14px;
+  background: #fbf7ef;
+  box-shadow: 0 24px 54px rgba(15, 28, 35, 0.3);
+  pointer-events: auto !important;
+  touch-action: auto;
+}
+
+#kiosk-route-estimate-overlay,
+#kiosk-timer-alert-overlay,
+#activate-gps-prompt-overlay {
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+#kiosk-route-estimate-overlay > *,
+#kiosk-timer-alert-overlay > *,
+#activate-gps-prompt-overlay > * {
+  touch-action: auto;
+}
+
+.activate-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.activate-modal-header h3 {
+  margin: 2px 0 0;
+  color: #142d36;
+  font-size: 1.24rem;
+}
+
+.activate-modal-kicker,
+.activate-modal-field > span,
+.whereami-quick-action span,
+.whereami-result-grid span {
+  color: #55707a;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.activate-modal-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.activate-modal-header-actions button,
+.activate-modal-header > button,
+.whereami-quick-action,
+.chart-preview-select {
+  position: relative;
+  z-index: 2;
+  pointer-events: auto !important;
+  touch-action: manipulation;
+}
+
+.activate-modal-field {
+  display: grid;
+  gap: 6px;
+}
+
+.activate-modal-field input {
+  width: 100%;
+  min-height: 48px;
+  border: 2px solid rgba(33, 76, 90, 0.24);
+  border-radius: 8px;
+  padding: 8px 11px;
+  background: #fffdf9;
+  color: #122f3a;
+  pointer-events: auto !important;
+  touch-action: manipulation;
+}
+
+.whereami-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.whereami-quick-action {
+  display: grid;
+  justify-items: start;
+  gap: 3px;
+  min-height: 54px;
+  padding: 8px 11px;
+  border: 1px solid rgba(33, 76, 90, 0.22);
+  border-radius: 8px;
+  background: #fffdf9;
+  color: #122f3a;
+  text-align: left;
+}
+
+.whereami-quick-action strong {
+  overflow: hidden;
+  max-width: 100%;
+  color: #122f3a;
+  font-size: 0.94rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.whereami-result-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.whereami-result-grid article {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  min-height: 78px;
+  padding: 10px;
+  border: 1px solid rgba(33, 76, 90, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.74);
+  text-align: center;
+}
+
+.whereami-result-grid strong {
+  color: #102f3b;
+  font-size: 1.08rem;
+}
+
+.activate-modal-error {
+  margin: 12px 0 0;
+  padding: 9px 10px;
+  border-left: 3px solid #c51f1f;
+  background: rgba(197, 31, 31, 0.08);
+  color: #9d1a1a;
+  font-weight: 700;
+}
+
+.admin-alias-editor-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.admin-alias-editor-actions button {
+  flex: 1;
+}
+
+.admin-alias-list {
+  max-height: 240px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.admin-alias-item {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid rgba(46, 41, 35, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--ink);
+  text-align: left;
+  pointer-events: auto !important;
+  touch-action: manipulation;
+}
+
+.admin-alias-item.active {
+  border-color: rgba(33, 76, 90, 0.48);
+  background: rgba(33, 76, 90, 0.1);
+}
+
+.chart-preview-card,
+.chart-preview-modal {
+  width: min(760px, calc(100vw - 28px));
+}
+
+.chart-preview-simple {
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.chart-preview-choice-list {
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.chart-preview-viewer-shell {
+  height: min(74vh, 760px);
+  min-height: 280px;
+  overflow: hidden;
+  border: 1px solid rgba(33, 76, 90, 0.18);
+  border-radius: 8px;
+  background: #f5f1e8;
+}
+
+.chart-preview-viewer-frame {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #f5f1e8;
+  pointer-events: auto;
+  touch-action: auto;
+}
+
+@media (max-width: 640px) {
+  .activate-modal-layer { padding: 8px !important; }
+  .activate-modal-card { width: calc(100vw - 16px); padding: 14px; }
+  .whereami-result-grid { grid-template-columns: 1fr 1fr; }
+  .chart-preview-viewer-shell { height: calc(100vh - 128px); min-height: 260px; }
+}
+
+@supports (height: 1dvh) {
+  .activate-modal-card { max-height: calc(100dvh - 28px); }
+  .chart-preview-simple,
+  .chart-preview-choice-list { max-height: calc(100dvh - 190px); }
+  .chart-preview-viewer-shell { height: min(74dvh, 760px); }
+  @media (max-width: 640px) {
+    .chart-preview-viewer-shell { height: calc(100dvh - 128px); }
+  }
+}
+
+/* Keep the public aircraft table readable on touch screens; its width is intentional. */
+.additional-info-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+}
+
+.additional-info-table {
+  width: max-content;
+  min-width: 1120px;
+  table-layout: auto;
+}
+
+.additional-info-table td {
+  min-width: 150px;
+  max-width: 280px;
+  overflow: visible;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.additional-info-table td.additional-info-row-action {
+  min-width: calc(var(--admin-row-height) + 2px);
+  max-width: calc(var(--admin-row-height) + 2px);
+}
+
+.additional-info-table.editable {
+  width: max-content;
+}
+
+.additional-info-table.editable td:not(.additional-info-row-action) {
+  min-width: 150px;
+}
+
+.front-footer-slot {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: clamp(18px, 3vh, 36px);
+}
+
+.front-footer-slot .front-footer {
+  margin-top: 0;
+}
+
+body.kiosk-mode:not(.kiosk-phone-mode):not(.kiosk-vertical-scroll-needed) {
+  overflow-y: hidden !important;
+}
+
+.suggestion-menu {
+  z-index: 7000 !important;
+}
+
+@supports (height: 100dvh) {
+  @media (max-width: 1280px) {
+    .entry-page,
+    .page { min-height: calc(100dvh - 36px); }
+  }
+
+  @media (max-width: 720px) {
+    .entry-page,
+    .page { min-height: calc(100dvh - 30px); }
+  }
+}

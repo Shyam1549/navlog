@@ -76,6 +76,8 @@
       waypointAliasEditor: {
         open: false,
         rowIndex: 0,
+        selectedAliasIndex: -1,
+        draft: "",
       },
       rpcRegistryForm: createEmptyRpcRegistryForm(),
       airportForm: createEmptyAirportForm(),
@@ -144,6 +146,9 @@
   let gpsSpeedSamplesKts = [];
   let suggestionMenuState = null;
   let lastRenderedView = "";
+  let kioskModalScrollLocked = false;
+  let kioskModalScrollY = 0;
+  let kioskModalBodyStyles = null;
   let adminStatusSignature = "";
   let adminStatusClearTimer = null;
   let adminStatusRevealTimer = null;
@@ -821,6 +826,9 @@
     const code = normalizeCode(activateMode && !chartId ? airportCode : (airportCode || state.meta.chartAirportQuery || state.meta.chartPreview.airportCode));
     const charts = getChartsForAirportCode(code);
     const selected = charts.find((chart) => chart.id === String(chartId || "")) || charts[0] || null;
+    if (state.meta.kioskGps && state.meta.kioskGps.whereAmI) {
+      state.meta.kioskGps.whereAmI.open = false;
+    }
     state.meta.chartPreview = {
       open: true,
       airportCode: code,
@@ -1066,13 +1074,15 @@
   }
 
   function getWaypointSuggestionOptions() {
-    return Array.from(buildWaypointDataCatalog().values())
-      .filter((entry) => entry && !entry.aliasFor && entry.code)
-      .map((entry) => ({
-        value: entry.code,
-        label: entry.code,
-        search: (entry.aliases || []).join(" "),
-      }))
+    const records = new Map();
+    (Array.isArray(state.catalog.waypoints) ? state.catalog.waypoints : []).forEach((record) => {
+      const normalized = normalizeWaypointRecord(record);
+      if (!normalized.name) return;
+      const current = records.get(normalized.name) || { value: normalized.name, label: normalized.name, search: "" };
+      current.search = Array.from(new Set(`${current.search} ${(normalized.aliases || []).join(" ")}`.trim().split(/\s+/).filter(Boolean))).join(" ");
+      records.set(normalized.name, current);
+    });
+    return Array.from(records.values())
       .sort((left, right) => left.value.localeCompare(right.value));
   }
 
@@ -1181,7 +1191,11 @@
     }
     const distanceNm = computeGreatCircleDistanceNm(fromCoord.lat, fromCoord.lon, toCoord.lat, toCoord.lon);
     if (!Number.isFinite(distanceNm) || distanceNm <= 0) return false;
-    targetLeg.distance = formatDistanceDisplay(distanceNm);
+    targetLeg.distance = formatDistanceDisplayWithRounding(
+      distanceNm,
+      Boolean(state.settings.roundDistanceValues),
+      state.settings.distanceUnit,
+    );
     targetLeg._manual = targetLeg._manual || {};
     targetLeg._manual.distance = true;
     targetLeg._distanceAutofillFromCoords = true;
@@ -1333,11 +1347,13 @@
   }
 
   function render() {
-    const viewChanged = state.view !== lastRenderedView;
+    const navigationKey = getCurrentNavigationKey();
+    const viewChanged = navigationKey !== lastRenderedView;
     captureViewScrollState();
     closeSuggestionMenu();
     prepareAdminStatusForRender();
     if (state.view !== "ipad-kiosk") document.body.classList.remove("kiosk-mode");
+    if (state.view !== "ipad-kiosk") document.body.classList.remove("kiosk-vertical-scroll-needed");
     document.body.classList.remove("kiosk-phone-mode");
     document.body.classList.remove("ipad-desktop-scale");
     document.body.classList.remove("iphone-navlog-vd-mode");
@@ -1348,8 +1364,7 @@
       || state.meta?.gpsPermissionPromptOpen
       || state.meta?.chartPreview?.open,
     );
-    document.documentElement.classList.toggle("kiosk-modal-scroll-lock", kioskModalScrollLock);
-    document.body.classList.toggle("kiosk-modal-scroll-lock", kioskModalScrollLock);
+    syncKioskModalScrollLock(kioskModalScrollLock);
     document.body.classList.toggle("iphone-ui", isIphoneDevice());
     if (isIpadDevice() && (state.view === "navlog" || state.view === "ipad-kiosk")) {
       document.body.classList.add("ipad-desktop-scale");
@@ -1389,22 +1404,28 @@
     wireSuggestionInputs();
     wireChartPreviewControls();
     if (viewChanged) {
-      lastRenderedView = state.view;
-      if (!(state.view === "navlog" && state.meta && state.meta.viewScrollState)) {
-        scrollCurrentViewToTop();
-      }
+      lastRenderedView = navigationKey;
+      state.meta.viewScrollState = null;
+      scrollCurrentViewToTop();
     }
     if (state.view === "ipad-kiosk") {
       syncKioskGpsTrackingForView();
       return;
     }
     syncKioskGpsTrackingForView();
-    restoreViewScrollState();
+    if (!viewChanged) restoreViewScrollState();
     wireUtcAdminTrigger();
     wireFooterActions();
     wireBugReportModal();
     wireAnnouncementModal();
     if (state.view === "manual") typesetManualMath();
+  }
+
+  function getCurrentNavigationKey() {
+    const view = String(state.view || "");
+    if (view === "admin") return `${view}:${String(state.admin.panel || "dashboard")}`;
+    if (view === "additional-info") return `${view}:${String(state.meta.additionalInfoPanel || "")}`;
+    return view;
   }
 
   function getAdminStatusSignature() {
@@ -1465,11 +1486,46 @@
       } catch {
         window.scrollTo(0, 0);
       }
-      document.querySelectorAll(".sheet-wrap, .additional-info-wrap").forEach((node) => {
+      document.querySelectorAll(".sheet-wrap, .additional-info-wrap, .ipad-kiosk-wrap, .kiosk-phone-scroll-part, .chart-preview-choice-list").forEach((node) => {
         node.scrollTop = 0;
         node.scrollLeft = 0;
       });
     });
+  }
+
+  function syncKioskModalScrollLock(locked) {
+    const root = document.documentElement;
+    const body = document.body;
+    if (!root || !body) return;
+    if (locked && !kioskModalScrollLocked) {
+      kioskModalScrollY = Math.max(0, Number(window.scrollY) || 0);
+      kioskModalBodyStyles = {
+        position: body.style.position,
+        top: body.style.top,
+        left: body.style.left,
+        right: body.style.right,
+        width: body.style.width,
+      };
+      if (document.activeElement && typeof document.activeElement.blur === "function") document.activeElement.blur();
+      body.style.position = "fixed";
+      body.style.top = `-${kioskModalScrollY}px`;
+      body.style.left = "0";
+      body.style.right = "0";
+      body.style.width = "100%";
+      kioskModalScrollLocked = true;
+    } else if (!locked && kioskModalScrollLocked) {
+      const styles = kioskModalBodyStyles || {};
+      body.style.position = styles.position || "";
+      body.style.top = styles.top || "";
+      body.style.left = styles.left || "";
+      body.style.right = styles.right || "";
+      body.style.width = styles.width || "";
+      kioskModalBodyStyles = null;
+      kioskModalScrollLocked = false;
+      requestAnimationFrame(() => window.scrollTo(0, kioskModalScrollY));
+    }
+    root.classList.toggle("kiosk-modal-scroll-lock", locked);
+    body.classList.toggle("kiosk-modal-scroll-lock", locked);
   }
 
   function captureViewScrollState() {
@@ -1565,15 +1621,17 @@
   function renderFrontFooter() {
     const year = new Date().getUTCFullYear();
     return `
-      <footer class="front-footer">
-        <div class="front-footer-links">
-          <button class="footer-link" id="open-bug-report" type="button">Bug report</button>
-          <button class="footer-link" id="open-manual" type="button">User manual</button>
-          <button class="footer-link" id="open-additional-info" type="button">Additional Information</button>
-          <button class="footer-link" id="open-privacy" type="button">Privacy policy</button>
-        </div>
-        <p class="front-footer-copy">© ${year} Navlog. All rights reserved.</p>
-      </footer>
+      <div class="front-footer-slot">
+        <footer class="front-footer">
+          <div class="front-footer-links">
+            <button class="footer-link" id="open-bug-report" type="button">Bug report</button>
+            <button class="footer-link" id="open-manual" type="button">User manual</button>
+            <button class="footer-link" id="open-additional-info" type="button">Additional Information</button>
+            <button class="footer-link" id="open-privacy" type="button">Privacy policy</button>
+          </div>
+          <p class="front-footer-copy">© ${year} Navlog. All rights reserved.</p>
+        </footer>
+      </div>
     `;
   }
 
@@ -1677,24 +1735,39 @@
     const frameUrl = selectedUrl ? `${selectedUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&zoom=page-width` : "";
     if (model.viewer) {
       return `
-        <div class="chart-fullscreen-overlay" id="chart-preview-overlay">
-          <section class="chart-fullscreen-viewer" role="dialog" aria-modal="true" aria-label="Chart preview">
-            ${
-              frameUrl
-                ? `<iframe class="chart-fullscreen-frame" title="${escapeAttr(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}" src="${escapeAttr(frameUrl)}"></iframe>`
-                : '<p class="chart-search-message">Chart preview unavailable.</p>'
-            }
+        <div class="activate-modal-layer chart-preview-layer" id="chart-preview-overlay">
+          <section class="activate-modal-card chart-preview-modal chart-viewer-card" role="dialog" aria-modal="true" aria-label="Chart preview">
+            <header class="activate-modal-header">
+              <div>
+                <span class="activate-modal-kicker">Navigation charts</span>
+                <h3>${escapeHtml(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}</h3>
+              </div>
+              <div class="activate-modal-header-actions">
+                <button class="action" id="chart-preview-back" type="button">Back</button>
+                <button class="action" id="chart-preview-close" type="button">Close</button>
+              </div>
+            </header>
+            <div class="chart-preview-viewer-shell">
+              ${
+                frameUrl
+                  ? `<iframe class="chart-preview-viewer-frame" title="${escapeAttr(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}" src="${escapeAttr(frameUrl)}"></iframe>`
+                  : '<p class="chart-search-message">Chart preview unavailable.</p>'
+              }
+            </div>
           </section>
         </div>
       `;
     }
     return `
-      <div class="bug-report-overlay" id="chart-preview-overlay">
-        <section class="bug-report-modal chart-preview-modal" role="dialog" aria-modal="true" aria-label="Chart preview">
-          <div class="bug-report-head">
-            <h3>Charts</h3>
-            <button class="action bug-report-close" id="chart-preview-close" type="button">Close</button>
-          </div>
+      <div class="activate-modal-layer chart-preview-layer" id="chart-preview-overlay">
+        <section class="activate-modal-card chart-preview-modal" role="dialog" aria-modal="true" aria-label="Chart preview">
+          <header class="activate-modal-header">
+            <div>
+              <span class="activate-modal-kicker">Navigation charts</span>
+              <h3>Charts</h3>
+            </div>
+            <button class="action" id="chart-preview-close" type="button">Close</button>
+          </header>
           <section class="chart-search-card chart-search-card-modal">
             <label class="setup-field chart-search-field">
               <span>Airport code</span>
@@ -1918,26 +1991,33 @@
     const rowIndex = Number.isFinite(Number(editor.rowIndex)) ? Number(editor.rowIndex) : 0;
     const row = rows[rowIndex] || createEmptyWaypointRow();
     const aliases = Array.isArray(row.aliases) ? row.aliases : [];
-    const editableAliases = aliases.length ? aliases : [""];
+    const selectedAliasIndex = Number(editor.selectedAliasIndex);
+    const draft = String(editor.draft || "");
     return `
-      <div class="admin-alias-overlay" id="admin-waypoint-alias-overlay">
-        <section class="admin-alias-panel" role="dialog" aria-modal="true" aria-label="Waypoint aliases">
-          <div class="admin-alias-head">
+      <div class="activate-modal-layer admin-alias-overlay" id="admin-waypoint-alias-overlay">
+        <section class="activate-modal-card admin-alias-panel" role="dialog" aria-modal="true" aria-label="Waypoint aliases">
+          <header class="activate-modal-header">
             <div>
-              <span class="admin-alias-kicker">Waypoint</span>
+              <span class="activate-modal-kicker">Waypoint aliases</span>
               <h3>${escapeHtml(row.name || "Waypoint")}</h3>
             </div>
-            <button class="action admin-alias-close" id="admin-waypoint-alias-close" type="button" aria-label="Close aliases">Close</button>
+            <button class="action" id="admin-waypoint-alias-close" type="button" aria-label="Close aliases">Close</button>
+          </header>
+          <label class="activate-modal-field">
+            <span>Alias</span>
+            <input id="admin-waypoint-alias-draft" value="${escapeAttr(draft)}" placeholder="Type an alias" autocomplete="off" />
+          </label>
+          <div class="admin-alias-editor-actions">
+            <button class="action primary" id="admin-waypoint-alias-submit" type="button">${selectedAliasIndex >= 0 ? "Update alias" : "Add alias"}</button>
+            <button class="action" id="admin-waypoint-alias-delete" type="button" ${selectedAliasIndex >= 0 ? "" : "disabled"}>Delete</button>
           </div>
-          <div class="admin-alias-list">
-            ${editableAliases.map((alias, aliasIndex) => `
-              <div class="admin-alias-row">
-                <input data-admin-waypoint-alias-input="${rowIndex}:${aliasIndex}" value="${escapeAttr(alias)}" placeholder="Enter alias ${aliasIndex + 1}" />
-                <button class="action admin-mini-btn" data-admin-waypoint-alias-remove="${rowIndex}:${aliasIndex}" type="button" aria-label="Remove alias">-</button>
-              </div>
-            `).join("")}
+          <div class="admin-alias-list" aria-live="polite">
+            ${aliases.length ? aliases.map((alias, aliasIndex) => `
+              <button class="admin-alias-item${selectedAliasIndex === aliasIndex ? " active" : ""}" data-admin-waypoint-alias-select="${rowIndex}:${aliasIndex}" type="button">
+                ${escapeHtml(alias)}
+              </button>
+            `).join("") : '<p class="admin-alias-empty">No aliases added yet.</p>'}
           </div>
-          <button class="action admin-alias-add" id="admin-waypoint-alias-add" type="button">Add alias</button>
         </section>
       </div>
     `;
@@ -2454,7 +2534,7 @@
           ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
           <div class="header-box dark static planning-box">PREFLIGHT PLANNER</div>
           ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
-           ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
+           ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date, { hidePlaceholder: true }), "date-box")}
           ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
           <div class="header-box static navlog-box">NAVIGATION LOG</div>
           ${renderHeaderInputBox("UTC TIME", `<input data-header="timeUtc" value="${escapeAttr(h.timeUtc)}" />`, "utc-box")}
@@ -2663,23 +2743,25 @@
       ? `${String(result.gpsEstimateHhmm).trim()}Z`
       : "--";
     return `
-      <div class="bug-report-overlay" id="kiosk-whereami-overlay">
-        <section class="bug-report-modal kiosk-whereami-modal" role="dialog" aria-modal="true" aria-label="Where am I">
-          <div class="bug-report-head">
-            <h3>Where am I</h3>
-            <button class="action bug-report-close" id="kiosk-whereami-close" type="button">Close</button>
-          </div>
-          <p class="kiosk-whereami-subtitle">Compute distance, quadrant and TH</p>
-          <label class="setup-field kiosk-whereami-input">
+      <div class="activate-modal-layer whereami-layer" id="kiosk-whereami-overlay">
+        <section class="activate-modal-card whereami-card" role="dialog" aria-modal="true" aria-label="Where am I">
+          <header class="activate-modal-header">
+            <div>
+              <span class="activate-modal-kicker">GPS position</span>
+              <h3>Where am I?</h3>
+            </div>
+            <button class="action" id="kiosk-whereami-close" type="button">Close</button>
+          </header>
+          <label class="activate-modal-field kiosk-whereami-input">
             <span>Waypoint</span>
             <input id="kiosk-whereami-query" value="${escapeAttr(model.query || "")}" placeholder="Type waypoint" data-suggest-source="waypoints" />
           </label>
-          <div class="kiosk-distance-presets kiosk-whereami-quick">
-            <button class="kiosk-preset-btn kiosk-whereami-preset" id="kiosk-whereami-use-departure" type="button">${escapeHtml(depLabel)}</button>
-            <button class="kiosk-preset-btn kiosk-whereami-preset" id="kiosk-whereami-use-destination" type="button">${escapeHtml(destLabel)}</button>
+          <div class="whereami-quick-actions kiosk-whereami-quick">
+            <button class="whereami-quick-action" id="kiosk-whereami-use-departure" type="button"><span>Departure</span><strong>${escapeHtml(depLabel)}</strong></button>
+            <button class="whereami-quick-action" id="kiosk-whereami-use-destination" type="button"><span>Destination</span><strong>${escapeHtml(destLabel)}</strong></button>
           </div>
-          <p class="kiosk-estimate-error${model.error ? "" : " hidden"}" id="kiosk-whereami-error">${escapeHtml(model.error || "")}</p>
-          <div class="kiosk-whereami-results">
+          <p class="activate-modal-error${model.error ? "" : " hidden"}" id="kiosk-whereami-error">${escapeHtml(model.error || "")}</p>
+          <div class="whereami-result-grid kiosk-whereami-results">
             <article>
               <span>Distance</span>
               <strong id="kiosk-whereami-distance">${escapeHtml(distanceLabel)}</strong>
@@ -2689,11 +2771,11 @@
               <strong id="kiosk-whereami-quadrant">${escapeHtml(quadrantLabel)}</strong>
             </article>
             <article>
-              <span>TH To</span>
+              <span>True heading</span>
               <strong id="kiosk-whereami-heading">${escapeHtml(headingLabel)}</strong>
             </article>
             <article>
-              <span>GPS Estimate</span>
+              <span>GPS estimate</span>
               <strong id="kiosk-whereami-estimate">${escapeHtml(gpsEstimateLabel)}</strong>
             </article>
           </div>
@@ -2959,6 +3041,16 @@
   function legFieldValue(leg, field) {
     if (leg._errors && leg._errors[field] && !(leg._manual && leg._manual[field])) {
       return "";
+    }
+    if (field === "distance" && leg && leg._distanceAutofillFromCoords === true) {
+      const distanceNm = parseDistanceInputWithUnit(leg.distance, state.settings.distanceUnit);
+      if (distanceNm != null) {
+        return formatDistanceDisplayWithRounding(
+          distanceNm,
+          Boolean(state.settings.roundDistanceValues),
+          state.settings.distanceUnit,
+        );
+      }
     }
     return leg[field];
   }
@@ -3983,6 +4075,10 @@
         node.tabIndex = -1;
         node.style.pointerEvents = "none";
       }
+      if (allowLocation) {
+        node.style.pointerEvents = "auto";
+        node.style.touchAction = "manipulation";
+      }
       if (isTocTodTitle) {
         node.classList.add("kiosk-static-toc");
         node.style.pointerEvents = "none";
@@ -4171,8 +4267,21 @@
     setupKioskScratchPad();
     requestAnimationFrame(() => {
       if (!phoneMode) fitSheetToViewport(".ipad-kiosk-wrap");
+      syncKioskVerticalScrollState();
       requestAnimationFrame(() => syncRouteProgressMarkerDisplay());
     });
+  }
+
+  function syncKioskVerticalScrollState() {
+    if (state.view !== "ipad-kiosk" || isPhoneActivateMode()) {
+      document.body.classList.remove("kiosk-vertical-scroll-needed");
+      return;
+    }
+    const page = document.querySelector(".ipad-kiosk-page");
+    if (!page) return;
+    const viewportHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
+    const needsScroll = page.scrollHeight > viewportHeight + 2;
+    document.body.classList.toggle("kiosk-vertical-scroll-needed", needsScroll);
   }
 
   function wireKioskDelayedKeyboard(input) {
@@ -4181,7 +4290,7 @@
     let unlocked = false;
     let tapCount = 0;
     let lastTapAt = 0;
-    const tapWindowMs = 900;
+    const tapWindowMs = 520;
 
     const unlockKeyboard = () => {
       unlocked = true;
@@ -5063,6 +5172,8 @@
     const openButton = document.getElementById("kiosk-whereami-open");
     if (openButton) {
       openButton.addEventListener("click", () => {
+        closeSuggestionMenu();
+        state.meta.chartPreview = createEmptyChartPreviewState();
         const current = state.meta.kioskGps && state.meta.kioskGps.whereAmI ? state.meta.kioskGps.whereAmI : null;
         setKioskWhereAmIState({
           open: true,
@@ -5659,12 +5770,14 @@
     let lastY = 0;
     page.addEventListener("touchend", (event) => {
       if (state.view !== "ipad-kiosk") return;
+      const target = event.target;
+      if (target && target.closest && target.closest("button, input, select, textarea, a, #kiosk-whereami-overlay, #chart-preview-overlay, #kiosk-route-estimate-overlay")) return;
       const touch = event.changedTouches && event.changedTouches[0];
       if (!touch) return;
       const now = Date.now();
       const dx = Math.abs(touch.clientX - lastX);
       const dy = Math.abs(touch.clientY - lastY);
-      if ((now - lastTouchEnd) <= 330 && dx < 24 && dy < 24) {
+      if ((now - lastTouchEnd) <= 260 && dx < 24 && dy < 24) {
         event.preventDefault();
       }
       lastTouchEnd = now;
@@ -5682,6 +5795,7 @@
     let trackingId = null;
     const onTouchStart = (event) => {
       if (state.view !== "ipad-kiosk") return;
+      if (kioskModalScrollLocked || (event.target && event.target.closest && event.target.closest(".activate-modal-layer, #kiosk-route-estimate-overlay, #kiosk-timer-alert-overlay, #activate-gps-prompt-overlay"))) return;
       if (!event.touches || !event.touches.length) return;
       const first = event.touches[0];
       startY = first.clientY;
@@ -5691,6 +5805,7 @@
 
     const onTouchMove = (event) => {
       if (state.view !== "ipad-kiosk") return;
+      if (kioskModalScrollLocked || (event.target && event.target.closest && event.target.closest(".activate-modal-layer, #kiosk-route-estimate-overlay, #kiosk-timer-alert-overlay, #activate-gps-prompt-overlay"))) return;
       if (!tracking || !event.touches || !event.touches.length) return;
       let activeTouch = event.touches[0];
       if (trackingId != null) {
@@ -6015,12 +6130,14 @@
       window.addEventListener("resize", () => {
         if (state.view === "navlog") fitSheetToViewport(".sheet-wrap");
         if (state.view === "ipad-kiosk") fitSheetToViewport(".ipad-kiosk-wrap");
+        syncKioskVerticalScrollState();
         requestAnimationFrame(() => syncRouteProgressMarkerDisplay());
       });
       window.addEventListener("orientationchange", () => {
         setTimeout(() => {
           if (state.view === "navlog") fitSheetToViewport(".sheet-wrap");
           if (state.view === "ipad-kiosk") fitSheetToViewport(".ipad-kiosk-wrap");
+          syncKioskVerticalScrollState();
           syncRouteProgressMarkerDisplay();
         }, 80);
       });
@@ -6575,7 +6692,6 @@
         state.meta.additionalInfoPanel = nextPanel;
         state.meta.chartAirportQuery = "";
         state.meta.chartSearchSubmitted = false;
-        scrollCurrentViewToTop();
         render();
       });
     });
@@ -6631,6 +6747,7 @@
     if (!overlay) return;
     const model = state.meta && state.meta.chartPreview ? state.meta.chartPreview : createEmptyChartPreviewState();
     const closeButton = document.getElementById("chart-preview-close");
+    const backButton = document.getElementById("chart-preview-back");
     const searchInput = document.getElementById("chart-preview-airport-search");
     const searchButton = document.getElementById("chart-preview-search-button");
     const submitSearch = () => {
@@ -6641,6 +6758,10 @@
       render();
     };
     if (closeButton) closeButton.addEventListener("click", closeChartPreviewModal);
+    if (backButton) backButton.addEventListener("click", () => {
+      state.meta.chartPreview.viewer = false;
+      render();
+    });
     if (searchButton) searchButton.addEventListener("click", submitSearch);
     if (searchInput) {
       searchInput.addEventListener("input", () => {
@@ -6761,7 +6882,6 @@
         clearAdminTransientPanelState(state.admin.panel, nextPanel);
         state.admin.panel = nextPanel;
         if (nextPanel === "additional-info") state.admin.additionalInfoPanel = "";
-        scrollCurrentViewToTop();
         render();
       });
     });
@@ -6865,6 +6985,11 @@
         const key = String(node.getAttribute("data-admin-waypoint-row") || "");
         const [, field] = key.split(":");
         readWaypointFormFromInputs({ autofill: field === "name" });
+        if (field === "name" && !state.admin.selectedWaypointName) {
+          const typedName = normalizeCode(node.value);
+          const existing = state.admin.waypoints.find((waypoint) => normalizeCode(waypoint.name) === typedName);
+          if (existing) state.admin.selectedWaypointName = existing.name;
+        }
         syncAdminWaypointFormUi();
       });
       node.addEventListener("change", () => {
@@ -6883,30 +7008,7 @@
         const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
         if (!Number.isFinite(index) || !rows[index] || !rows[index].name.trim()) return;
         state.admin.waypointForm.rows = rows;
-        state.admin.waypointAliasEditor = { open: true, rowIndex: index };
-        render();
-      });
-    });
-    document.querySelectorAll("[data-admin-waypoint-alias-input]").forEach((input) => {
-      input.addEventListener("input", () => {
-        const [rowIndexText, aliasIndexText] = String(input.getAttribute("data-admin-waypoint-alias-input") || "").split(":");
-        const rowIndex = Number(rowIndexText);
-        const aliasIndex = Number(aliasIndexText);
-        const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
-        if (!Number.isFinite(rowIndex) || !Number.isFinite(aliasIndex) || !rows[rowIndex]) return;
-        rows[rowIndex].aliases[aliasIndex] = String(input.value || "");
-        state.admin.waypointForm.rows = rows;
-      });
-    });
-    document.querySelectorAll("[data-admin-waypoint-alias-remove]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const [rowIndexText, aliasIndexText] = String(button.getAttribute("data-admin-waypoint-alias-remove") || "").split(":");
-        const rowIndex = Number(rowIndexText);
-        const aliasIndex = Number(aliasIndexText);
-        const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
-        if (!Number.isFinite(rowIndex) || !Number.isFinite(aliasIndex) || !rows[rowIndex]) return;
-        rows[rowIndex].aliases.splice(aliasIndex, 1);
-        state.admin.waypointForm.rows = rows;
+        state.admin.waypointAliasEditor = { open: true, rowIndex: index, selectedAliasIndex: -1, draft: "" };
         render();
       });
     });
@@ -6922,21 +7024,63 @@
         render();
       });
     });
-    const aliasAddButton = document.getElementById("admin-waypoint-alias-add");
-    if (aliasAddButton) {
-      aliasAddButton.addEventListener("click", () => {
+    const aliasDraftInput = document.getElementById("admin-waypoint-alias-draft");
+    if (aliasDraftInput) {
+      aliasDraftInput.addEventListener("input", () => {
+        state.admin.waypointAliasEditor.draft = String(aliasDraftInput.value || "");
+      });
+      aliasDraftInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        document.getElementById("admin-waypoint-alias-submit")?.click();
+      });
+    }
+    document.querySelectorAll("[data-admin-waypoint-alias-select]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const [rowIndexText, aliasIndexText] = String(button.getAttribute("data-admin-waypoint-alias-select") || "").split(":");
+        const rowIndex = Number(rowIndexText);
+        const aliasIndex = Number(aliasIndexText);
+        const row = normalizeWaypointRows(state.admin.waypointForm.rows)[rowIndex];
+        if (!row || !Number.isFinite(aliasIndex) || !row.aliases[aliasIndex]) return;
+        state.admin.waypointAliasEditor.selectedAliasIndex = aliasIndex;
+        state.admin.waypointAliasEditor.draft = row.aliases[aliasIndex];
+        render();
+      });
+    });
+    const aliasSubmitButton = document.getElementById("admin-waypoint-alias-submit");
+    if (aliasSubmitButton) {
+      aliasSubmitButton.addEventListener("click", () => {
         const editor = state.admin.waypointAliasEditor;
         const rowIndex = Number(editor && editor.rowIndex);
+        const alias = normalizeCode(editor && editor.draft);
         const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
-        if (!Number.isFinite(rowIndex) || !rows[rowIndex] || !rows[rowIndex].name.trim()) return;
-        rows[rowIndex].aliases.push("");
+        const row = rows[rowIndex];
+        if (!row || !row.name || !alias) return;
+        const selectedIndex = Number(editor.selectedAliasIndex);
+        if (selectedIndex >= 0 && selectedIndex < row.aliases.length) {
+          row.aliases[selectedIndex] = alias;
+        } else if (!row.aliases.includes(alias)) {
+          row.aliases.push(alias);
+        }
         state.admin.waypointForm.rows = rows;
+        state.admin.waypointAliasEditor.selectedAliasIndex = -1;
+        state.admin.waypointAliasEditor.draft = "";
         render();
-        requestAnimationFrame(() => {
-          const inputs = document.querySelectorAll(`[data-admin-waypoint-alias-input^="${rowIndex}:"]`);
-          const last = inputs.length ? inputs[inputs.length - 1] : null;
-          if (last) last.focus();
-        });
+      });
+    }
+    const aliasDeleteButton = document.getElementById("admin-waypoint-alias-delete");
+    if (aliasDeleteButton) {
+      aliasDeleteButton.addEventListener("click", () => {
+        const editor = state.admin.waypointAliasEditor;
+        const rowIndex = Number(editor && editor.rowIndex);
+        const aliasIndex = Number(editor && editor.selectedAliasIndex);
+        const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
+        if (!rows[rowIndex] || aliasIndex < 0 || aliasIndex >= rows[rowIndex].aliases.length) return;
+        rows[rowIndex].aliases.splice(aliasIndex, 1);
+        state.admin.waypointForm.rows = rows;
+        state.admin.waypointAliasEditor.selectedAliasIndex = -1;
+        state.admin.waypointAliasEditor.draft = "";
+        render();
       });
     }
     const aliasCloseButton = document.getElementById("admin-waypoint-alias-close");
@@ -7400,7 +7544,7 @@
     state.admin.selectedRpcRegistration = "";
     state.admin.presetForm = createEmptyPresetForm();
     state.admin.waypointForm = createEmptyWaypointForm();
-    state.admin.waypointAliasEditor = { open: false, rowIndex: 0 };
+    state.admin.waypointAliasEditor = { open: false, rowIndex: 0, selectedAliasIndex: -1, draft: "" };
     state.admin.rpcRegistryForm = createEmptyRpcRegistryForm();
     state.admin.chartForm = createEmptyChartForm();
     state.admin.notice = "Signed out.";
@@ -7671,7 +7815,7 @@
     if (previous === "coordinates") {
       state.admin.selectedWaypointName = "";
       state.admin.waypointForm = createEmptyWaypointForm();
-      state.admin.waypointAliasEditor = { open: false, rowIndex: 0 };
+      state.admin.waypointAliasEditor = { open: false, rowIndex: 0, selectedAliasIndex: -1, draft: "" };
     }
     if (previous === "rpc-reg") {
       state.admin.selectedRpcRegistration = "";
@@ -7701,7 +7845,15 @@
       }
       const derived = computeAdminPresetRowDerivedValues(rows, index);
       if (!row._manual.tc) row.tc = derived.tc == null ? "" : formatHeadingDisplay(derived.tc);
-      if (!row._manual.distance) row.distance = derived.distance == null ? "" : formatDistanceDisplay(derived.distance);
+      if (!row._manual.distance) {
+        row.distance = derived.distance == null
+          ? ""
+          : formatDistanceDisplayWithRounding(
+            derived.distance,
+            Boolean(state.settings.roundDistanceValues),
+            state.settings.distanceUnit,
+          );
+      }
     });
     state.admin.presetForm.rows = rows;
   }
@@ -10365,12 +10517,13 @@
     return `${year}-${month}-${day}`;
   }
 
-  function renderDateHeaderControl(displayDateValue) {
+  function renderDateHeaderControl(displayDateValue, options = {}) {
     const normalizedDisplay = normalizeDisplayDate(displayDateValue);
     const isoValue = normalizeDateInputValue(normalizedDisplay);
+    const placeholder = options.hidePlaceholder ? "" : "yy/mm/dd";
     return `
       <span class="date-input-wrap">
-        <input data-header="date" value="${escapeAttr(normalizedDisplay)}" placeholder="yy/mm/dd" readonly />
+        <input data-header="date" value="${escapeAttr(normalizedDisplay)}" placeholder="${escapeAttr(placeholder)}" readonly />
         <input type="date" class="date-picker-proxy" data-date-picker value="${escapeAttr(isoValue)}" tabindex="-1" aria-hidden="true" />
       </span>
     `;
