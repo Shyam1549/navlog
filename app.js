@@ -1277,6 +1277,25 @@
     autofillAllCoordinateCourses();
   }
 
+  function refreshCoordinateDerivedDistanceDisplays() {
+    if (!Array.isArray(state.navlog.legs)) return;
+    state.navlog.legs.forEach((leg, index) => {
+      if (!leg || leg._distanceAutofillFromCoords !== true || index <= 0) return;
+      const fromCoord = getWaypointCoordinate(state.navlog.legs[index - 1]?.route);
+      const toCoord = getWaypointCoordinate(leg.route);
+      if (!fromCoord || !toCoord) return;
+      const distanceNm = computeGreatCircleDistanceNm(fromCoord.lat, fromCoord.lon, toCoord.lat, toCoord.lon);
+      if (!Number.isFinite(distanceNm)) return;
+      leg.distance = formatDistanceDisplayWithRounding(
+        distanceNm,
+        Boolean(state.settings.roundDistanceValues),
+        state.settings.distanceUnit,
+      );
+      leg._manual = leg._manual || {};
+      leg._manual.distance = true;
+    });
+  }
+
   function computeGreatCircleDistanceNm(fromLatDeg, fromLonDeg, toLatDeg, toLonDeg) {
     const toRad = (value) => value * Math.PI / 180;
     const lat1 = toRad(Number(fromLatDeg));
@@ -1322,16 +1341,15 @@
     document.body.classList.remove("kiosk-phone-mode");
     document.body.classList.remove("ipad-desktop-scale");
     document.body.classList.remove("iphone-navlog-vd-mode");
-    document.body.classList.toggle(
-      "kiosk-modal-scroll-lock",
-      state.view === "ipad-kiosk" && Boolean(
-        state.meta?.kioskRouteEstimate?.open
-        || (Array.isArray(state.meta?.kioskTimerAlerts) && state.meta.kioskTimerAlerts.length > 0)
-        || state.meta?.kioskGps?.whereAmI?.open
-        || state.meta?.gpsPermissionPromptOpen
-        || state.meta?.chartPreview?.open,
-      ),
+    const kioskModalScrollLock = state.view === "ipad-kiosk" && Boolean(
+      state.meta?.kioskRouteEstimate?.open
+      || (Array.isArray(state.meta?.kioskTimerAlerts) && state.meta.kioskTimerAlerts.length > 0)
+      || state.meta?.kioskGps?.whereAmI?.open
+      || state.meta?.gpsPermissionPromptOpen
+      || state.meta?.chartPreview?.open,
     );
+    document.documentElement.classList.toggle("kiosk-modal-scroll-lock", kioskModalScrollLock);
+    document.body.classList.toggle("kiosk-modal-scroll-lock", kioskModalScrollLock);
     document.body.classList.toggle("iphone-ui", isIphoneDevice());
     if (isIpadDevice() && (state.view === "navlog" || state.view === "ipad-kiosk")) {
       document.body.classList.add("ipad-desktop-scale");
@@ -1345,6 +1363,10 @@
       autofillAllCoordinateNavigationValues();
     }
     computeRouteMath();
+    if (state.view === "navlog" || state.view === "ipad-kiosk") {
+      autofillAllCoordinateNavigationValues();
+      refreshCoordinateDerivedDistanceDisplays();
+    }
     if (state.view === "access") app.innerHTML = renderAccessScreen();
     else if (state.view === "setup") app.innerHTML = renderSetupScreen();
     else if (state.view === "manual") app.innerHTML = renderManualScreen();
@@ -1504,7 +1526,7 @@
       : "";
     return `
       <div class="ui-scale">
-      <main class="entry-page">
+      <main class="entry-page${isIpadDevice() ? " ipad-home-page" : ""}">
         <section class="entry-hero entry-hero-centered">
           <div class="top-center">
             <h1>Navlog</h1>
@@ -1896,6 +1918,7 @@
     const rowIndex = Number.isFinite(Number(editor.rowIndex)) ? Number(editor.rowIndex) : 0;
     const row = rows[rowIndex] || createEmptyWaypointRow();
     const aliases = Array.isArray(row.aliases) ? row.aliases : [];
+    const editableAliases = aliases.length ? aliases : [""];
     return `
       <div class="admin-alias-overlay" id="admin-waypoint-alias-overlay">
         <section class="admin-alias-panel" role="dialog" aria-modal="true" aria-label="Waypoint aliases">
@@ -1907,12 +1930,12 @@
             <button class="action admin-alias-close" id="admin-waypoint-alias-close" type="button" aria-label="Close aliases">Close</button>
           </div>
           <div class="admin-alias-list">
-            ${aliases.length ? aliases.map((alias, aliasIndex) => `
+            ${editableAliases.map((alias, aliasIndex) => `
               <div class="admin-alias-row">
-                <input data-admin-waypoint-alias-input="${rowIndex}:${aliasIndex}" value="${escapeAttr(alias)}" placeholder="Alias ${aliasIndex + 1}" />
+                <input data-admin-waypoint-alias-input="${rowIndex}:${aliasIndex}" value="${escapeAttr(alias)}" placeholder="Enter alias ${aliasIndex + 1}" />
                 <button class="action admin-mini-btn" data-admin-waypoint-alias-remove="${rowIndex}:${aliasIndex}" type="button" aria-label="Remove alias">-</button>
               </div>
-            `).join("") : '<p class="admin-alias-empty">No aliases</p>'}
+            `).join("")}
           </div>
           <button class="action admin-alias-add" id="admin-waypoint-alias-add" type="button">Add alias</button>
         </section>
@@ -1946,10 +1969,6 @@
       .map((record) => normalizeRpcRegistryRecord(record))
       .filter((record) => record.registration)
       .sort((left, right) => left.registration.localeCompare(right.registration));
-    const existingWaypointRecords = (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : [])
-      .map((record) => normalizeWaypointRecord(record))
-      .filter((record) => record.name)
-      .sort((left, right) => left.name.localeCompare(right.name));
     const adminChartQuery = normalizeCode(state.admin.chartForm && state.admin.chartForm.airportCode);
     const adminCharts = (Array.isArray(state.admin.charts) ? state.admin.charts : [])
       .map((chart) => normalizeAirportChartRecord(chart))
@@ -2076,17 +2095,6 @@
               <button class="action primary" id="admin-waypoint-save">Save</button>
               <button class="action" id="admin-waypoint-delete">Delete</button>
             </div>
-            <section class="admin-record-picker">
-              <h4>Existing waypoints</h4>
-              <div class="admin-record-picker-grid">
-                ${existingWaypointRecords.length ? existingWaypointRecords.map((record) => `
-                  <button class="admin-record-picker-item${normalizeCode(state.admin.selectedWaypointName) === record.name ? " active" : ""}" data-admin-waypoint-select="${escapeAttr(record.name)}" type="button">
-                    <strong>${escapeHtml(record.name)}</strong>
-                    <span>${escapeHtml(record.aliases.length ? record.aliases.join(", ") : record.coord || "No aliases")}</span>
-                  </button>
-                `).join("") : '<p class="setup-caption">No waypoints saved yet.</p>'}
-              </div>
-            </section>
           </div>
           <div class="manual-section${panel === "rpc-reg" ? "" : " hidden"}">
             <h3>Aircraft</h3><br>
@@ -2363,6 +2371,7 @@
         ${renderBugReportModal()}
         ${renderAnnouncementModal()}
         ${renderChartPreviewModal()}
+        ${renderAdminWaypointAliasModal()}
       </main>
       </div>
     `;
@@ -2417,7 +2426,6 @@
         ${renderBugReportModal()}
         ${renderAnnouncementModal()}
         ${renderChartPreviewModal()}
-        ${renderAdminWaypointAliasModal()}
       </main>
       </div>
     `;
@@ -6792,6 +6800,8 @@
         if (!Number.isFinite(index)) return;
         if (state.admin.presetForm.rows.length <= 1) state.admin.presetForm.rows = [createEmptyPresetRow()];
         else state.admin.presetForm.rows.splice(index, 1);
+        clearAdminPresetNavigationAroundRoute(index);
+        syncAdminPresetRowAutofill();
         render();
       });
     });
@@ -6804,6 +6814,7 @@
         if (field === "route") {
           const [indexText] = key.split(":");
           const index = Number(indexText);
+          clearAdminPresetNavigationAroundRoute(index);
           const row = Number.isFinite(index) && index >= 0 ? state.admin.presetForm.rows[index] : null;
           if (row) {
             row._manual = row._manual || {};
@@ -7689,8 +7700,24 @@
         row.coord = "";
       }
       const derived = computeAdminPresetRowDerivedValues(rows, index);
-      if (!row._manual.tc && derived.tc != null) row.tc = formatHeadingDisplay(derived.tc);
-      if (!row._manual.distance && derived.distance != null) row.distance = formatDistanceDisplay(derived.distance);
+      if (!row._manual.tc) row.tc = derived.tc == null ? "" : formatHeadingDisplay(derived.tc);
+      if (!row._manual.distance) row.distance = derived.distance == null ? "" : formatDistanceDisplay(derived.distance);
+    });
+    state.admin.presetForm.rows = rows;
+  }
+
+  function clearAdminPresetNavigationAroundRoute(routeIndex) {
+    const index = Number(routeIndex);
+    if (!Number.isFinite(index)) return;
+    const rows = normalizePresetRows(state.admin.presetForm.rows);
+    [index, index + 1].forEach((rowIndex) => {
+      const row = rows[rowIndex];
+      if (!row) return;
+      row.tc = "";
+      row.distance = "";
+      row._manual = row._manual || {};
+      row._manual.tc = false;
+      row._manual.distance = false;
     });
     state.admin.presetForm.rows = rows;
   }

@@ -302,6 +302,17 @@ body.kiosk-mode .time-head {
   margin-left: auto;
 }
 
+.ipad-home-page {
+  height: calc(100vh - 36px);
+  min-height: 0;
+}
+
+@supports (height: 100dvh) {
+  .ipad-home-page {
+    height: calc(100dvh - 36px);
+  }
+}
+
 .bug-report-overlay {
   position: fixed;
   inset: 0;
@@ -1345,6 +1356,12 @@ body.kiosk-mode .ipad-kiosk-wrap {
 
 body.kiosk-modal-scroll-lock {
   overflow: hidden !important;
+  overscroll-behavior: none !important;
+}
+
+html.kiosk-modal-scroll-lock {
+  overflow: hidden !important;
+  overscroll-behavior: none !important;
 }
 
 body.kiosk-modal-scroll-lock .ipad-kiosk-page {
@@ -1354,6 +1371,8 @@ body.kiosk-modal-scroll-lock .ipad-kiosk-page {
 
 body.kiosk-modal-scroll-lock .ipad-kiosk-wrap {
   pointer-events: none;
+  overflow: hidden !important;
+  touch-action: none !important;
 }
 
 .kiosk-utc {
@@ -2048,6 +2067,11 @@ body.kiosk-mode:not(.kiosk-phone-mode) .toc-tod-card {
 
 body.kiosk-mode:not(.kiosk-phone-mode) .header-box {
   background: rgba(247, 242, 231, 0.84);
+}
+
+body.kiosk-mode:not(.kiosk-phone-mode) .header-box.dark.planning-box {
+  background: var(--ink) !important;
+  color: var(--paper) !important;
 }
 
 .ipad-kiosk-page .route-inline-hint,
