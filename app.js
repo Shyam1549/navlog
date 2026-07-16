@@ -145,15 +145,7 @@
   let gpsLastPoint = null;
   let gpsSpeedSamplesKts = [];
   let suggestionMenuState = null;
-  let suggestionViewportBound = false;
   let lastRenderedView = "";
-  let kioskModalScrollLocked = false;
-  let kioskModalScrollY = 0;
-  let kioskModalBodyStyles = null;
-  let kioskModalScrollSnapshot = null;
-  let kioskModalScrollHandler = null;
-  let kioskModalTouchHandler = null;
-  let kioskModalWheelHandler = null;
   let adminStatusSignature = "";
   let adminStatusClearTimer = null;
   let adminStatusRevealTimer = null;
@@ -767,13 +759,6 @@
     positionSuggestionMenu(input, menu);
     Array.from(menu.querySelectorAll("[data-suggestion-index]")).forEach((button) => {
       button.addEventListener("mousedown", (event) => {
-        if (window.PointerEvent) return;
-        event.preventDefault();
-        const rawIndex = Number(button.getAttribute("data-suggestion-index"));
-        const nextValue = suggestionMenuState && Number.isFinite(rawIndex) ? suggestionMenuState.values[rawIndex] : "";
-        commitSuggestionValue(input, nextValue);
-      });
-      button.addEventListener("pointerdown", (event) => {
         event.preventDefault();
         const rawIndex = Number(button.getAttribute("data-suggestion-index"));
         const nextValue = suggestionMenuState && Number.isFinite(rawIndex) ? suggestionMenuState.values[rawIndex] : "";
@@ -796,22 +781,10 @@
   }
 
   function wireSuggestionInputs() {
-    if (!suggestionViewportBound && window.visualViewport) {
-      const repositionSuggestionMenu = () => {
-        if (!suggestionMenuState || !suggestionMenuState.input || !suggestionMenuState.menu) return;
-        positionSuggestionMenu(suggestionMenuState.input, suggestionMenuState.menu);
-      };
-      window.visualViewport.addEventListener("resize", repositionSuggestionMenu);
-      window.visualViewport.addEventListener("scroll", repositionSuggestionMenu);
-      suggestionViewportBound = true;
-    }
     document.querySelectorAll("[data-suggest-source]").forEach((input) => {
       input.setAttribute("autocomplete", "off");
       if (!input.hasAttribute("spellcheck")) input.setAttribute("spellcheck", "false");
       input.addEventListener("focus", () => {
-        renderSuggestionMenu(input);
-      });
-      input.addEventListener("pointerdown", () => {
         renderSuggestionMenu(input);
       });
       input.addEventListener("input", () => {
@@ -1374,7 +1347,6 @@
     closeSuggestionMenu();
     prepareAdminStatusForRender();
     if (state.view !== "ipad-kiosk") document.body.classList.remove("kiosk-mode");
-    if (state.view !== "ipad-kiosk") document.body.classList.remove("kiosk-vertical-scroll-needed");
     document.body.classList.remove("kiosk-phone-mode");
     document.body.classList.remove("ipad-desktop-scale");
     document.body.classList.remove("iphone-navlog-vd-mode");
@@ -1385,7 +1357,8 @@
       || state.meta?.gpsPermissionPromptOpen
       || state.meta?.chartPreview?.open,
     );
-    syncKioskModalScrollLock(kioskModalScrollLock);
+    document.documentElement.classList.toggle("kiosk-modal-scroll-lock", kioskModalScrollLock);
+    document.body.classList.toggle("kiosk-modal-scroll-lock", kioskModalScrollLock);
     document.body.classList.toggle("iphone-ui", isIphoneDevice());
     if (isIpadDevice() && (state.view === "navlog" || state.view === "ipad-kiosk")) {
       document.body.classList.add("ipad-desktop-scale");
@@ -1522,93 +1495,6 @@
     resetScroll();
     requestAnimationFrame(resetScroll);
     requestAnimationFrame(() => requestAnimationFrame(resetScroll));
-  }
-
-  function syncKioskModalScrollLock(locked) {
-    const root = document.documentElement;
-    const body = document.body;
-    if (!root || !body) return;
-    const scrollSelectors = [".ipad-kiosk-page", ".ipad-kiosk-wrap", ".sheet-wrap", ".kiosk-phone-scroll-part"];
-    const restoreNestedScrollPositions = () => {
-      const snapshot = kioskModalScrollSnapshot;
-      if (!snapshot) return;
-      scrollSelectors.forEach((selector) => {
-        const saved = snapshot.nodes.find((entry) => entry.selector === selector);
-        if (!saved) return;
-        document.querySelectorAll(selector).forEach((node) => {
-          node.scrollTop = saved.top;
-          node.scrollLeft = saved.left;
-        });
-      });
-    };
-    if (locked && !kioskModalScrollLocked) {
-      kioskModalScrollY = Math.max(0, Number(window.scrollY) || 0);
-      kioskModalBodyStyles = {
-        position: body.style.position,
-        top: body.style.top,
-        left: body.style.left,
-        right: body.style.right,
-        width: body.style.width,
-      };
-      kioskModalScrollSnapshot = {
-        windowY: kioskModalScrollY,
-        nodes: scrollSelectors.map((selector) => {
-          const node = document.querySelector(selector);
-          return {
-            selector,
-            top: node ? node.scrollTop : 0,
-            left: node ? node.scrollLeft : 0,
-          };
-        }),
-      };
-      body.style.position = "fixed";
-      body.style.top = `-${kioskModalScrollY}px`;
-      body.style.left = "0";
-      body.style.right = "0";
-      body.style.width = "100%";
-      kioskModalScrollLocked = true;
-      kioskModalScrollHandler = () => restoreNestedScrollPositions();
-      kioskModalTouchHandler = (event) => {
-        if (!kioskModalScrollLocked) return;
-        const target = event.target;
-        if (target && target.closest && target.closest(".bug-report-modal, .chart-fullscreen-viewer, .suggestion-menu")) return;
-        event.preventDefault();
-      };
-      kioskModalWheelHandler = (event) => {
-        if (!kioskModalScrollLocked) return;
-        const target = event.target;
-        if (target && target.closest && target.closest(".bug-report-modal, .chart-fullscreen-viewer, .suggestion-menu")) return;
-        event.preventDefault();
-      };
-      document.addEventListener("scroll", kioskModalScrollHandler, true);
-      document.addEventListener("touchmove", kioskModalTouchHandler, { capture: true, passive: false });
-      document.addEventListener("wheel", kioskModalWheelHandler, { capture: true, passive: false });
-      requestAnimationFrame(restoreNestedScrollPositions);
-    } else if (!locked && kioskModalScrollLocked) {
-      if (kioskModalScrollHandler) document.removeEventListener("scroll", kioskModalScrollHandler, true);
-      if (kioskModalTouchHandler) document.removeEventListener("touchmove", kioskModalTouchHandler, { capture: true });
-      if (kioskModalWheelHandler) document.removeEventListener("wheel", kioskModalWheelHandler, { capture: true });
-      const styles = kioskModalBodyStyles || {};
-      body.style.position = styles.position || "";
-      body.style.top = styles.top || "";
-      body.style.left = styles.left || "";
-      body.style.right = styles.right || "";
-      body.style.width = styles.width || "";
-      kioskModalBodyStyles = null;
-      kioskModalScrollLocked = false;
-      requestAnimationFrame(() => {
-        restoreNestedScrollPositions();
-        window.scrollTo(0, kioskModalScrollY);
-        kioskModalScrollSnapshot = null;
-      });
-      kioskModalScrollHandler = null;
-      kioskModalTouchHandler = null;
-      kioskModalWheelHandler = null;
-    } else if (locked && kioskModalScrollLocked) {
-      requestAnimationFrame(restoreNestedScrollPositions);
-    }
-    root.classList.toggle("kiosk-modal-scroll-lock", locked);
-    body.classList.toggle("kiosk-modal-scroll-lock", locked);
   }
 
   function captureViewScrollState() {
@@ -2602,7 +2488,7 @@
           ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
           <div class="header-box dark static planning-box">PREFLIGHT PLANNER</div>
           ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
-           ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date, { hidePlaceholder: true }), "date-box")}
+          ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
           ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
           <div class="header-box static navlog-box">NAVIGATION LOG</div>
           ${renderHeaderInputBox("UTC TIME", `<input data-header="timeUtc" value="${escapeAttr(h.timeUtc)}" />`, "utc-box")}
@@ -2820,7 +2706,7 @@
           <p class="kiosk-whereami-subtitle">Compute distance, quadrant and TH</p>
           <label class="setup-field kiosk-whereami-input">
             <span>Waypoint</span>
-            <input id="kiosk-whereami-query" value="${escapeAttr(model.query || "")}" placeholder="Type waypoint" data-suggest-source="waypoints" data-suggest-open-on-focus="true" />
+            <input id="kiosk-whereami-query" value="${escapeAttr(model.query || "")}" placeholder="Type waypoint" data-suggest-source="waypoints" />
           </label>
           <div class="kiosk-distance-presets kiosk-whereami-quick">
             <button class="kiosk-preset-btn kiosk-whereami-preset" id="kiosk-whereami-use-departure" type="button">${escapeHtml(depLabel)}</button>
@@ -2987,6 +2873,7 @@
           : "C";
     const eeUnitLabel = state.settings.roundTimeValues ? "mins" : "min+sec";
     const withUnit = (label, unitText) => `<span class="time-head"><span>${label}</span><span class="head-format-note">(${unitText})</span></span>`;
+    const withEeTotal = () => `${withUnit("EE", eeUnitLabel)}${state.view === "navlog" ? `<span class="ee-total-head">${escapeHtml(getTotalEeDisplay())}</span>` : ""}`;
     let tableHead = "";
     if (isPhoneKiosk) {
       const headingField = getKioskPhoneHeadingField();
@@ -3010,7 +2897,7 @@
             </div>
           </div>
           <div class="head-cell tall dis-head">${withUnit("DIS", distanceUnitLabel)}</div>
-          <div class="head-cell tall ee-head">${withUnit("EE", eeUnitLabel)}</div>
+          <div class="head-cell tall ee-head">${withEeTotal()}</div>
           <div class="head-cell tall et-head"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
           <div class="head-cell tall at-head"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
         </div>
@@ -3034,7 +2921,7 @@
             <div class="head-cell tall ta-head-vd">${withUnit("TA", speedUnitLabel)}</div>
             <div class="head-cell tall gs-head-vd">${withUnit("GS", speedUnitLabel)}</div>
             <div class="head-cell tall dis-head-vd">${withUnit("DIS", distanceUnitLabel)}</div>
-            <div class="head-cell tall ee-head-vd">${withUnit("EE", eeUnitLabel)}</div>
+            <div class="head-cell tall ee-head-vd">${withEeTotal()}</div>
             <div class="head-cell tall et-head-vd"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
             <div class="head-cell tall at-head-vd"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
             ${showCasColumn ? `<div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>` : ""}
@@ -3057,7 +2944,7 @@
             <div class="head-cell tall ta-head">${withUnit("TA", speedUnitLabel)}</div>
             <div class="head-cell tall gs-head">${withUnit("GS", speedUnitLabel)}</div>
             <div class="head-cell tall dis-head">${withUnit("DIS", distanceUnitLabel)}</div>
-            <div class="head-cell tall ee-head">${withUnit("EE", eeUnitLabel)}</div>
+            <div class="head-cell tall ee-head">${withEeTotal()}</div>
             <div class="head-cell tall et-head"><span class="time-head"><span>ET</span><span class="head-format-note">(HHMM)</span></span></div>
             <div class="head-cell tall at-head"><span class="time-head"><span>AT</span><span class="head-format-note">(HHMM)</span></span></div>
             ${showCasColumn ? `<div class="head-cell sub cas-head">${withUnit("CAS", speedUnitLabel)}</div>` : ""}
@@ -3108,7 +2995,7 @@
     if (leg._errors && leg._errors[field] && !(leg._manual && leg._manual[field])) {
       return "";
     }
-    if (field === "distance" && leg && leg._distanceAutofillFromCoords === true) {
+    if (state.view !== "ipad-kiosk" && field === "distance" && leg) {
       const distanceNm = parseDistanceInputWithUnit(leg.distance, state.settings.distanceUnit);
       if (distanceNm != null) {
         return formatDistanceDisplayWithRounding(
@@ -3132,11 +3019,6 @@
       hasValue = true;
     });
     return hasValue ? formatEeDisplay(totalMinutes) : "";
-  }
-
-  function displayedLegFieldValue(leg, index, field) {
-    if (state.view === "navlog" && field === "ee" && Number(index) === 0) return getTotalEeDisplay();
-    return legFieldValue(leg, field);
   }
 
   function getDistanceToGoDisplay(index) {
@@ -3212,7 +3094,7 @@
           <div class="${legFieldClass(leg, headingField, "kiosk-phone-heading-cell")}"><input data-leg-field="${index}:${headingField}" value="${escapeAttr(legFieldValue(leg, headingField))}" /></div>
           ${renderKioskPhoneSpeedCell(leg, index)}
           <div class="${legFieldClass(leg, "distance")}"><input data-leg-field="${index}:distance" value="${escapeAttr(legFieldValue(leg, "distance"))}" /></div>
-          <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(displayedLegFieldValue(leg, index, "ee"))}"${state.view === "navlog" && index === 0 ? " readonly aria-label=\"Total estimated enroute time\"" : ""} /></div>
+          <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(legFieldValue(leg, "ee"))}" /></div>
           <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(legFieldValue(leg, "et"))}" /></div>
           <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" ${index === 0 ? 'placeholder="AB TIME"' : ""} ${state.view === "ipad-kiosk" ? 'inputmode="numeric" pattern="[0-9]*"' : ""} /></div>
         </div>
@@ -3256,7 +3138,7 @@
         <div class="${legFieldClass(leg, "ta")}"><input data-leg-field="${index}:ta" value="${escapeAttr(legFieldValue(leg, "ta"))}" /></div>
         <div class="${legFieldClass(leg, "gs")}"><input data-leg-field="${index}:gs" value="${escapeAttr(legFieldValue(leg, "gs"))}" /></div>
         <div class="${legFieldClass(leg, "distance")}"><input data-leg-field="${index}:distance" value="${escapeAttr(legFieldValue(leg, "distance"))}" /></div>
-        <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(displayedLegFieldValue(leg, index, "ee"))}"${state.view === "navlog" && index === 0 ? " readonly aria-label=\"Total estimated enroute time\"" : ""} /></div>
+        <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(legFieldValue(leg, "ee"))}" /></div>
         <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(legFieldValue(leg, "et"))}" /></div>
         <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" ${index === 0 ? 'placeholder="AB TIME"' : ""} ${state.view === "ipad-kiosk" ? 'inputmode="numeric" pattern="[0-9]*"' : ""} /></div>
       </div>
@@ -4159,10 +4041,6 @@
         node.tabIndex = -1;
         node.style.pointerEvents = "none";
       }
-      if (allowLocation) {
-        node.style.pointerEvents = "auto";
-        node.style.touchAction = "manipulation";
-      }
       if (isTocTodTitle) {
         node.classList.add("kiosk-static-toc");
         node.style.pointerEvents = "none";
@@ -4176,9 +4054,6 @@
       }
       if (!isKioskUtilityUi && node.tagName !== "BUTTON" && "readOnly" in node) node.readOnly = true;
       if (!isKioskUtilityUi && node.tagName !== "BUTTON" && "disabled" in node) node.disabled = false;
-      if (isKioskUtilityUi && node.tagName !== "BUTTON" && "readOnly" in node) node.readOnly = false;
-      if (isKioskUtilityUi && node.tagName !== "BUTTON" && "disabled" in node) node.disabled = false;
-      if (isKioskUtilityUi) node.style.pointerEvents = "auto";
       if (!isKioskUtilityUi && "placeholder" in node) node.placeholder = "";
       if (allowAt) {
         const [rowText] = legField.split(":");
@@ -4354,21 +4229,8 @@
     setupKioskScratchPad();
     requestAnimationFrame(() => {
       if (!phoneMode) fitSheetToViewport(".ipad-kiosk-wrap");
-      syncKioskVerticalScrollState();
       requestAnimationFrame(() => syncRouteProgressMarkerDisplay());
     });
-  }
-
-  function syncKioskVerticalScrollState() {
-    if (state.view !== "ipad-kiosk" || isPhoneActivateMode()) {
-      document.body.classList.remove("kiosk-vertical-scroll-needed");
-      return;
-    }
-    const page = document.querySelector(".ipad-kiosk-page");
-    if (!page) return;
-    const viewportHeight = Math.max(window.innerHeight || 0, document.documentElement.clientHeight || 0);
-    const needsScroll = page.scrollHeight > viewportHeight + 2;
-    document.body.classList.toggle("kiosk-vertical-scroll-needed", needsScroll);
   }
 
   function wireKioskDelayedKeyboard(input) {
@@ -4377,8 +4239,7 @@
     let unlocked = false;
     let tapCount = 0;
     let lastTapAt = 0;
-    let lastTapEventAt = 0;
-    const tapWindowMs = 420;
+    const tapWindowMs = 900;
 
     const unlockKeyboard = () => {
       unlocked = true;
@@ -4403,24 +4264,20 @@
         return;
       }
       const now = Date.now();
-      if ((now - lastTapEventAt) < 80) return;
-      lastTapEventAt = now;
       if ((now - lastTapAt) > tapWindowMs) tapCount = 0;
       tapCount += 1;
       lastTapAt = now;
-      if (tapCount >= 3) {
+      if (tapCount >= 2) {
         tapCount = 0;
         unlockKeyboard();
       }
     };
 
-    input.addEventListener("pointerup", registerTap);
-    input.addEventListener("touchend", registerTap, { passive: true });
-    input.addEventListener("mouseup", registerTap);
-    input.addEventListener("dblclick", (event) => {
-      if (!input.readOnly) return;
-      event.preventDefault();
-    });
+    if (window.PointerEvent) input.addEventListener("pointerup", registerTap);
+    else {
+      input.addEventListener("touchend", registerTap, { passive: true });
+      input.addEventListener("mouseup", registerTap);
+    }
     input.addEventListener("click", (event) => {
       if (input.readOnly) event.preventDefault();
     });
@@ -5860,14 +5717,12 @@
     let lastY = 0;
     page.addEventListener("touchend", (event) => {
       if (state.view !== "ipad-kiosk") return;
-      const target = event.target;
-      if (target && target.closest && target.closest("button, input, select, textarea, a, #kiosk-whereami-overlay, #chart-preview-overlay, #kiosk-route-estimate-overlay")) return;
       const touch = event.changedTouches && event.changedTouches[0];
       if (!touch) return;
       const now = Date.now();
       const dx = Math.abs(touch.clientX - lastX);
       const dy = Math.abs(touch.clientY - lastY);
-      if ((now - lastTouchEnd) <= 260 && dx < 24 && dy < 24) {
+      if ((now - lastTouchEnd) <= 330 && dx < 24 && dy < 24) {
         event.preventDefault();
       }
       lastTouchEnd = now;
@@ -5885,7 +5740,6 @@
     let trackingId = null;
     const onTouchStart = (event) => {
       if (state.view !== "ipad-kiosk") return;
-      if (kioskModalScrollLocked || (event.target && event.target.closest && event.target.closest(".activate-modal-layer, #kiosk-route-estimate-overlay, #kiosk-timer-alert-overlay, #activate-gps-prompt-overlay"))) return;
       if (!event.touches || !event.touches.length) return;
       const first = event.touches[0];
       startY = first.clientY;
@@ -5895,7 +5749,6 @@
 
     const onTouchMove = (event) => {
       if (state.view !== "ipad-kiosk") return;
-      if (kioskModalScrollLocked || (event.target && event.target.closest && event.target.closest(".activate-modal-layer, #kiosk-route-estimate-overlay, #kiosk-timer-alert-overlay, #activate-gps-prompt-overlay"))) return;
       if (!tracking || !event.touches || !event.touches.length) return;
       let activeTouch = event.touches[0];
       if (trackingId != null) {
@@ -6220,14 +6073,12 @@
       window.addEventListener("resize", () => {
         if (state.view === "navlog") fitSheetToViewport(".sheet-wrap");
         if (state.view === "ipad-kiosk") fitSheetToViewport(".ipad-kiosk-wrap");
-        syncKioskVerticalScrollState();
         requestAnimationFrame(() => syncRouteProgressMarkerDisplay());
       });
       window.addEventListener("orientationchange", () => {
         setTimeout(() => {
           if (state.view === "navlog") fitSheetToViewport(".sheet-wrap");
           if (state.view === "ipad-kiosk") fitSheetToViewport(".ipad-kiosk-wrap");
-          syncKioskVerticalScrollState();
           syncRouteProgressMarkerDisplay();
         }, 80);
       });
@@ -8017,7 +7868,7 @@
     const source = Array.isArray(rows) ? rows : [];
     const legs = [];
     source.forEach((row) => {
-      const route = String(row && row.route != null ? row.route : "").trim();
+      const route = normalizeCode(row && row.route != null ? row.route : "");
       const coordRaw = String(row && row.coord != null ? row.coord : "").trim();
       const tcRaw = String(row && row.tc != null ? row.tc : "").trim();
       const distanceRaw = String(row && row.distance != null ? row.distance : "").trim();
@@ -8440,16 +8291,21 @@
         coord: row.coord,
       };
       if (row.id) payload.id = row.id;
-      const originalName = normalizeCode(state.admin.selectedWaypointName);
+      const originalName = normalizeCode(state.admin.selectedWaypointName || row.name);
+      const waypointRecords = [
+        ...(Array.isArray(state.admin.waypoints) ? state.admin.waypoints : []),
+        ...(Array.isArray(state.catalog.waypoints) ? state.catalog.waypoints : []),
+      ];
       const existingRecord = originalName
-        ? (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : []).find((waypoint) => normalizeCode(waypoint.name) === originalName)
+        ? waypointRecords.find((waypoint) => normalizeCode(waypoint.name) === originalName)
         : null;
       const result = existingRecord
         ? existingRecord.id
-          ? await supabaseClient.from("waypoints").update(payload).eq("id", existingRecord.id)
-          : await supabaseClient.from("waypoints").update(payload).eq("name", existingRecord.rawName || existingRecord.name)
+          ? await supabaseClient.from("waypoints").update(payload).eq("id", existingRecord.id).select("*").maybeSingle()
+          : await supabaseClient.from("waypoints").update(payload).eq("name", existingRecord.rawName || existingRecord.name).select("*").maybeSingle()
         : await supabaseClient.from("waypoints").upsert(payload, { onConflict: "name" });
       if (result.error) throw result.error;
+      if (existingRecord && !result.data) throw new Error("The waypoint record was not updated.");
       state.admin.selectedWaypointName = row.name;
       await loadAdminData();
       state.admin.notice = silent ? "" : "Waypoint saved.";
@@ -9662,6 +9518,9 @@
     if (todTime) todTime.value = state.navlog.tocTod.todTime;
     syncKioskPhoneSpeedDisplayValues();
     syncRouteProgressMarkerDisplay();
+    document.querySelectorAll(".ee-total-head").forEach((node) => {
+      node.textContent = getTotalEeDisplay();
+    });
   }
 
   function syncKioskPhoneSpeedDisplayValues() {
@@ -9850,11 +9709,9 @@
     const node = document.querySelector(`[data-leg-field="${index}:${field}"]`);
     if (!node) return;
     const displayValue =
-      state.view === "navlog" && field === "ee" && Number(index) === 0
-        ? getTotalEeDisplay()
-        : leg && leg._errors && leg._errors[field] && !(leg._manual && leg._manual[field])
-          ? ""
-          : value;
+      leg && leg._errors && leg._errors[field] && !(leg._manual && leg._manual[field])
+        ? ""
+        : value;
     node.value = displayValue;
   }
 
@@ -10643,13 +10500,12 @@
     return `${year}-${month}-${day}`;
   }
 
-  function renderDateHeaderControl(displayDateValue, options = {}) {
+  function renderDateHeaderControl(displayDateValue) {
     const normalizedDisplay = normalizeDisplayDate(displayDateValue);
     const isoValue = normalizeDateInputValue(normalizedDisplay);
-    const placeholder = options.hidePlaceholder ? "" : "yy/mm/dd";
     return `
       <span class="date-input-wrap">
-        <input data-header="date" value="${escapeAttr(normalizedDisplay)}" placeholder="${escapeAttr(placeholder)}" readonly />
+        <input data-header="date" value="${escapeAttr(normalizedDisplay)}" placeholder="yy/mm/dd" readonly />
         <input type="date" class="date-picker-proxy" data-date-picker value="${escapeAttr(isoValue)}" tabindex="-1" aria-hidden="true" />
       </span>
     `;
