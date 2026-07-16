@@ -145,10 +145,14 @@
   let gpsLastPoint = null;
   let gpsSpeedSamplesKts = [];
   let suggestionMenuState = null;
+  let suggestionViewportBound = false;
   let lastRenderedView = "";
   let kioskModalScrollLocked = false;
   let kioskModalScrollY = 0;
   let kioskModalBodyStyles = null;
+  let kioskModalScrollSnapshot = null;
+  let kioskModalScrollHandler = null;
+  let kioskModalTouchHandler = null;
   let adminStatusSignature = "";
   let adminStatusClearTimer = null;
   let adminStatusRevealTimer = null;
@@ -784,6 +788,15 @@
   }
 
   function wireSuggestionInputs() {
+    if (!suggestionViewportBound && window.visualViewport) {
+      const repositionSuggestionMenu = () => {
+        if (!suggestionMenuState || !suggestionMenuState.input || !suggestionMenuState.menu) return;
+        positionSuggestionMenu(suggestionMenuState.input, suggestionMenuState.menu);
+      };
+      window.visualViewport.addEventListener("resize", repositionSuggestionMenu);
+      window.visualViewport.addEventListener("scroll", repositionSuggestionMenu);
+      suggestionViewportBound = true;
+    }
     document.querySelectorAll("[data-suggest-source]").forEach((input) => {
       input.setAttribute("autocomplete", "off");
       if (!input.hasAttribute("spellcheck")) input.setAttribute("spellcheck", "false");
@@ -1401,6 +1414,11 @@
     wireSuggestionInputs();
     wireChartPreviewControls();
     if (viewChanged) {
+      try {
+        if (window.history && "scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
+      } catch {
+        // ignore unsupported browser history controls
+      }
       lastRenderedView = navigationKey;
       state.meta.viewScrollState = null;
       scrollCurrentViewToTop();
@@ -1499,6 +1517,19 @@
     const root = document.documentElement;
     const body = document.body;
     if (!root || !body) return;
+    const scrollSelectors = [".ipad-kiosk-page", ".ipad-kiosk-wrap", ".sheet-wrap", ".kiosk-phone-scroll-part"];
+    const restoreNestedScrollPositions = () => {
+      const snapshot = kioskModalScrollSnapshot;
+      if (!snapshot) return;
+      scrollSelectors.forEach((selector) => {
+        const saved = snapshot.nodes.find((entry) => entry.selector === selector);
+        if (!saved) return;
+        document.querySelectorAll(selector).forEach((node) => {
+          node.scrollTop = saved.top;
+          node.scrollLeft = saved.left;
+        });
+      });
+    };
     if (locked && !kioskModalScrollLocked) {
       kioskModalScrollY = Math.max(0, Number(window.scrollY) || 0);
       kioskModalBodyStyles = {
@@ -1508,13 +1539,36 @@
         right: body.style.right,
         width: body.style.width,
       };
+      kioskModalScrollSnapshot = {
+        windowY: kioskModalScrollY,
+        nodes: scrollSelectors.map((selector) => {
+          const node = document.querySelector(selector);
+          return {
+            selector,
+            top: node ? node.scrollTop : 0,
+            left: node ? node.scrollLeft : 0,
+          };
+        }),
+      };
       body.style.position = "fixed";
       body.style.top = `-${kioskModalScrollY}px`;
       body.style.left = "0";
       body.style.right = "0";
       body.style.width = "100%";
       kioskModalScrollLocked = true;
+      kioskModalScrollHandler = () => restoreNestedScrollPositions();
+      kioskModalTouchHandler = (event) => {
+        if (!kioskModalScrollLocked) return;
+        const target = event.target;
+        if (target && target.closest && target.closest(".bug-report-modal, .chart-fullscreen-viewer, .suggestion-menu")) return;
+        event.preventDefault();
+      };
+      document.addEventListener("scroll", kioskModalScrollHandler, true);
+      document.addEventListener("touchmove", kioskModalTouchHandler, { capture: true, passive: false });
+      requestAnimationFrame(restoreNestedScrollPositions);
     } else if (!locked && kioskModalScrollLocked) {
+      if (kioskModalScrollHandler) document.removeEventListener("scroll", kioskModalScrollHandler, true);
+      if (kioskModalTouchHandler) document.removeEventListener("touchmove", kioskModalTouchHandler, { capture: true });
       const styles = kioskModalBodyStyles || {};
       body.style.position = styles.position || "";
       body.style.top = styles.top || "";
@@ -1523,7 +1577,15 @@
       body.style.width = styles.width || "";
       kioskModalBodyStyles = null;
       kioskModalScrollLocked = false;
-      requestAnimationFrame(() => window.scrollTo(0, kioskModalScrollY));
+      requestAnimationFrame(() => {
+        restoreNestedScrollPositions();
+        window.scrollTo(0, kioskModalScrollY);
+        kioskModalScrollSnapshot = null;
+      });
+      kioskModalScrollHandler = null;
+      kioskModalTouchHandler = null;
+    } else if (locked && kioskModalScrollLocked) {
+      requestAnimationFrame(restoreNestedScrollPositions);
     }
     root.classList.toggle("kiosk-modal-scroll-lock", locked);
     body.classList.toggle("kiosk-modal-scroll-lock", locked);
@@ -2738,7 +2800,7 @@
           <p class="kiosk-whereami-subtitle">Compute distance, quadrant and TH</p>
           <label class="setup-field kiosk-whereami-input">
             <span>Waypoint</span>
-            <input id="kiosk-whereami-query" value="${escapeAttr(model.query || "")}" placeholder="Type waypoint" data-suggest-source="waypoints" />
+            <input id="kiosk-whereami-query" value="${escapeAttr(model.query || "")}" placeholder="Type waypoint" data-suggest-source="waypoints" data-suggest-open-on-focus="true" />
           </label>
           <div class="kiosk-distance-presets kiosk-whereami-quick">
             <button class="kiosk-preset-btn kiosk-whereami-preset" id="kiosk-whereami-use-departure" type="button">${escapeHtml(depLabel)}</button>
@@ -4274,6 +4336,7 @@
     let unlocked = false;
     let tapCount = 0;
     let lastTapAt = 0;
+    let lastTapEventAt = 0;
     const tapWindowMs = 900;
 
     const unlockKeyboard = () => {
@@ -4299,6 +4362,8 @@
         return;
       }
       const now = Date.now();
+      if ((now - lastTapEventAt) < 80) return;
+      lastTapEventAt = now;
       if ((now - lastTapAt) > tapWindowMs) tapCount = 0;
       tapCount += 1;
       lastTapAt = now;
@@ -4308,11 +4373,15 @@
       }
     };
 
-    if (window.PointerEvent) input.addEventListener("pointerup", registerTap);
-    else {
-      input.addEventListener("touchend", registerTap, { passive: true });
-      input.addEventListener("mouseup", registerTap);
-    }
+    input.addEventListener("pointerup", registerTap);
+    input.addEventListener("touchend", registerTap, { passive: true });
+    input.addEventListener("mouseup", registerTap);
+    input.addEventListener("dblclick", (event) => {
+      if (!input.readOnly) return;
+      event.preventDefault();
+      tapCount = 0;
+      unlockKeyboard();
+    });
     input.addEventListener("click", (event) => {
       if (input.readOnly) event.preventDefault();
     });
@@ -7050,8 +7119,10 @@
         state.admin.waypointForm.rows = rows;
         state.admin.waypointAliasEditor.selectedAliasIndex = -1;
         state.admin.waypointAliasEditor.draft = "";
+        state.admin.notice = "";
+        state.admin.error = "";
         render();
-        await saveWaypointsFromAdmin();
+        await saveWaypointsFromAdmin({ silent: true });
       });
     }
     const aliasDeleteButton = document.getElementById("admin-waypoint-alias-delete");
@@ -7066,8 +7137,10 @@
         state.admin.waypointForm.rows = rows;
         state.admin.waypointAliasEditor.selectedAliasIndex = -1;
         state.admin.waypointAliasEditor.draft = "";
+        state.admin.notice = "";
+        state.admin.error = "";
         render();
-        await saveWaypointsFromAdmin();
+        await saveWaypointsFromAdmin({ silent: true });
       });
     }
     const aliasCloseButton = document.getElementById("admin-waypoint-alias-close");
@@ -7835,11 +7908,7 @@
       if (!row._manual.distance) {
         row.distance = derived.distance == null
           ? ""
-          : formatDistanceDisplayWithRounding(
-            derived.distance,
-            Boolean(state.settings.roundDistanceValues),
-            state.settings.distanceUnit,
-          );
+          : formatDistanceDisplayUnrounded(derived.distance, state.settings.distanceUnit);
       }
     });
     state.admin.presetForm.rows = rows;
@@ -8011,8 +8080,16 @@
         rows[index].aliases[aliasIndex] = String(node.value || "");
       } else {
         rows[index][field] = String(node.value || "");
+        if (field === "name" && previousRows[index] && previousRows[index]._coordAutofilledFromName
+          && normalizeCode(previousRows[index].name) !== normalizeCode(node.value)) {
+          rows[index].coord = "";
+          rows[index]._coordAutofilledFromName = false;
+        }
       }
-      rows[index]._coordAutofilledFromName = Boolean(previousRows[index] && previousRows[index]._coordAutofilledFromName);
+      if (!(field === "name" && previousRows[index] && previousRows[index]._coordAutofilledFromName
+        && normalizeCode(previousRows[index].name) !== normalizeCode(node.value))) {
+        rows[index]._coordAutofilledFromName = Boolean(previousRows[index] && previousRows[index]._coordAutofilledFromName);
+      }
     });
     state.admin.waypointForm = {
       rows: normalizeWaypointRows(rows.length ? rows : state.admin.waypointForm.rows),
@@ -8294,7 +8371,8 @@
     }
   }
 
-  async function saveWaypointsFromAdmin() {
+  async function saveWaypointsFromAdmin(options = {}) {
+    const silent = Boolean(options.silent);
     const ok = await connectSupabaseClient(false);
     if (!ok) {
       render();
@@ -8321,15 +8399,17 @@
         ? (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : []).find((waypoint) => normalizeCode(waypoint.name) === originalName)
         : null;
       const result = existingRecord
-        ? await supabaseClient.from("waypoints").update(payload).eq("name", existingRecord.rawName || existingRecord.name)
+        ? existingRecord.id
+          ? await supabaseClient.from("waypoints").update(payload).eq("id", existingRecord.id)
+          : await supabaseClient.from("waypoints").update(payload).eq("name", existingRecord.rawName || existingRecord.name)
         : await supabaseClient.from("waypoints").upsert(payload, { onConflict: "name" });
       if (result.error) throw result.error;
       state.admin.selectedWaypointName = row.name;
       await loadAdminData();
-      state.admin.notice = "Waypoint saved.";
+      state.admin.notice = silent ? "" : "Waypoint saved.";
       render();
     } catch (error) {
-      state.admin.error = error && error.message ? error.message : "Could not save waypoints.";
+      state.admin.error = silent ? "" : (error && error.message ? error.message : "Could not save waypoints.");
       render();
     }
   }
@@ -9957,6 +10037,17 @@
 
   function formatDistanceDisplay(valueNm) {
     return formatDistanceDisplayWithRounding(valueNm, state.settings.roundDistanceValues);
+  }
+
+  function formatDistanceDisplayUnrounded(valueNm, unit = state.settings.distanceUnit) {
+    if (valueNm == null || !Number.isFinite(valueNm)) return "";
+    const display =
+      unit === "km"
+        ? valueNm / NM_PER_KM
+        : unit === "sm"
+          ? valueNm / NM_PER_SM
+          : valueNm;
+    return String(display);
   }
 
   function formatDistanceDisplayWithRounding(valueNm, roundDistanceValues, unit = state.settings.distanceUnit) {

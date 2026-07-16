@@ -5329,6 +5329,7 @@ body.ipad-desktop-scale .route-inline-hint {
 }
 
 .admin-alias-list {
+  margin-top: 14px;
   max-height: 240px;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -5353,25 +5354,6 @@ body.ipad-desktop-scale .route-inline-hint {
   background: rgba(33, 76, 90, 0.1);
 }
 
-.chart-preview-viewer-shell {
-  height: min(74vh, 760px);
-  min-height: 280px;
-  overflow: hidden;
-  border: 1px solid rgba(33, 76, 90, 0.18);
-  border-radius: 8px;
-  background: #f5f1e8;
-}
-
-.chart-preview-viewer-frame {
-  display: block;
-  width: 100%;
-  height: 100%;
-  border: 0;
-  background: #f5f1e8;
-  pointer-events: auto;
-  touch-action: auto;
-}
-
 @media (max-width: 640px) {
   .activate-modal-layer { padding: 8px !important; }
   .activate-modal-card { width: calc(100vw - 16px); padding: 14px; }
@@ -5380,7 +5362,6 @@ body.ipad-desktop-scale .route-inline-hint {
 
 @supports (height: 1dvh) {
   .activate-modal-card { max-height: calc(100dvh - 28px); }
-  .chart-preview-viewer-shell { height: min(74dvh, 760px); }
 }
 
 /* Keep the public aircraft table readable on touch screens; its width is intentional. */
