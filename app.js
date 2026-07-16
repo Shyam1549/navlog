@@ -1707,7 +1707,7 @@
           <section class="chart-fullscreen-viewer" role="dialog" aria-modal="true" aria-label="Chart preview">
             ${
               frameUrl
-                ? `<iframe class="chart-fullscreen-frame" title="${escapeAttr(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}" src="${escapeAttr(frameUrl)}"></iframe>`
+                ? `<iframe class="chart-fullscreen-frame" title="${escapeAttr(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}" src="${escapeAttr(frameUrl)}" scrolling="no"></iframe>`
                 : '<p class="chart-search-message">Chart preview unavailable.</p>'
             }
           </section>
@@ -2850,7 +2850,13 @@
           : "C";
     const eeUnitLabel = state.settings.roundTimeValues ? "mins" : "min+sec";
     const withUnit = (label, unitText) => `<span class="time-head"><span>${label}</span><span class="head-format-note">(${unitText})</span></span>`;
-    const withEeTotal = () => `${withUnit("EE", eeUnitLabel)}${state.view === "navlog" ? `<span class="ee-total-head">${escapeHtml(getTotalEeDisplay())}</span>` : ""}`;
+    const withEeTotal = () => `
+      <span class="time-head ee-time-head">
+        <span>EE</span>
+        <span class="head-format-note">(${eeUnitLabel})</span>
+        ${state.view === "navlog" ? `<span class="ee-total-head"><span class="ee-total-number">${escapeHtml(getTotalEeDisplay())}</span><span class="ee-total-unit">mins</span></span>` : ""}
+      </span>
+    `;
     let tableHead = "";
     if (isPhoneKiosk) {
       const headingField = getKioskPhoneHeadingField();
@@ -2995,7 +3001,9 @@
       totalMinutes += Math.max(0, minutes);
       hasValue = true;
     });
-    return hasValue ? formatEeDisplay(totalMinutes) : "";
+    // The header total is always a whole number, independent of the input
+    // display setting used for individual EE fields.
+    return hasValue ? String(Math.ceil(totalMinutes)) : "";
   }
 
   function getDistanceToGoDisplay(index) {
@@ -4018,6 +4026,10 @@
         node.tabIndex = -1;
         node.style.pointerEvents = "none";
       }
+      if (allowLocation) {
+        node.style.pointerEvents = "auto";
+        node.style.touchAction = "manipulation";
+      }
       if (isTocTodTitle) {
         node.classList.add("kiosk-static-toc");
         node.style.pointerEvents = "none";
@@ -4216,7 +4228,7 @@
     let tapCount = 0;
     let lastTapAt = 0;
     let lastTapEventAt = 0;
-    const tapWindowMs = 420;
+    const tapWindowMs = 280;
     const requiredTapCount = 3;
 
     const unlockKeyboard = () => {
@@ -4254,10 +4266,10 @@
       }
     };
 
-    if (window.PointerEvent) input.addEventListener("pointerup", registerTap, { passive: false });
+    if (window.PointerEvent) input.addEventListener("pointerdown", registerTap, { passive: false });
     else {
-      input.addEventListener("touchend", registerTap, { passive: false });
-      input.addEventListener("mouseup", registerTap);
+      input.addEventListener("touchstart", registerTap, { passive: false });
+      input.addEventListener("mousedown", registerTap);
     }
     input.addEventListener("click", (event) => {
       if (input.readOnly) event.preventDefault();
@@ -9495,7 +9507,7 @@
     if (todTime) todTime.value = state.navlog.tocTod.todTime;
     syncKioskPhoneSpeedDisplayValues();
     syncRouteProgressMarkerDisplay();
-    document.querySelectorAll(".ee-total-head").forEach((node) => {
+    document.querySelectorAll(".ee-total-number").forEach((node) => {
       node.textContent = getTotalEeDisplay();
     });
   }
