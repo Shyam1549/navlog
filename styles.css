@@ -2858,17 +2858,37 @@ body.kiosk-phone-mode .route-progress-dot {
 .stack-field {
   display: grid;
   grid-template-rows: 1fr 1fr;
+  border-radius: 0 !important;
+  overflow: visible;
+  box-sizing: border-box;
 }
 
 .stack-field input {
   min-height: 43px;
   height: 43px;
   border-bottom: 1.5px solid var(--line);
+  border-radius: 0;
   padding: 8px 8px;
 }
 
 .stack-field input:last-child {
   border-bottom: 0;
+}
+
+.stack-field input:first-child {
+  border-bottom: 1.5px solid var(--line) !important;
+}
+
+/* Keep phone value separators straight across the full stack width. */
+.leg-row.leg-row-phone .stack-field,
+.leg-row.leg-row-phone .stack-field input {
+  border-radius: 0 !important;
+  overflow: visible;
+  box-sizing: border-box;
+}
+
+.leg-row.leg-row-phone .stack-field input:first-child {
+  border-bottom: 1.5px solid var(--line) !important;
 }
 
 .field.derived input {
@@ -4739,7 +4759,7 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
     height: calc(100dvh - 12px);
     min-height: 0;
     max-height: calc(100dvh - 12px);
-    border: 2.25px solid rgba(46, 41, 35, 0.55);
+    border: 3.375px solid rgba(46, 41, 35, 0.55);
     border-radius: 2px;
     overflow-x: hidden;
     overflow-y: auto;
