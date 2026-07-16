@@ -826,9 +826,6 @@
     const code = normalizeCode(activateMode && !chartId ? airportCode : (airportCode || state.meta.chartAirportQuery || state.meta.chartPreview.airportCode));
     const charts = getChartsForAirportCode(code);
     const selected = charts.find((chart) => chart.id === String(chartId || "")) || charts[0] || null;
-    if (state.meta.kioskGps && state.meta.kioskGps.whereAmI) {
-      state.meta.kioskGps.whereAmI.open = false;
-    }
     state.meta.chartPreview = {
       open: true,
       airportCode: code,
@@ -1480,17 +1477,22 @@
   }
 
   function scrollCurrentViewToTop() {
-    requestAnimationFrame(() => {
+    const resetScroll = () => {
       try {
         window.scrollTo({ top: 0, left: 0, behavior: "auto" });
       } catch {
         window.scrollTo(0, 0);
       }
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
       document.querySelectorAll(".sheet-wrap, .additional-info-wrap, .ipad-kiosk-wrap, .kiosk-phone-scroll-part, .chart-preview-choice-list").forEach((node) => {
         node.scrollTop = 0;
         node.scrollLeft = 0;
       });
-    });
+    };
+    resetScroll();
+    requestAnimationFrame(resetScroll);
+    requestAnimationFrame(() => requestAnimationFrame(resetScroll));
   }
 
   function syncKioskModalScrollLock(locked) {
@@ -1506,7 +1508,6 @@
         right: body.style.right,
         width: body.style.width,
       };
-      if (document.activeElement && typeof document.activeElement.blur === "function") document.activeElement.blur();
       body.style.position = "fixed";
       body.style.top = `-${kioskModalScrollY}px`;
       body.style.left = "0";
@@ -1735,39 +1736,24 @@
     const frameUrl = selectedUrl ? `${selectedUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&zoom=page-width` : "";
     if (model.viewer) {
       return `
-        <div class="activate-modal-layer chart-preview-layer" id="chart-preview-overlay">
-          <section class="activate-modal-card chart-preview-modal chart-viewer-card" role="dialog" aria-modal="true" aria-label="Chart preview">
-            <header class="activate-modal-header">
-              <div>
-                <span class="activate-modal-kicker">Navigation charts</span>
-                <h3>${escapeHtml(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}</h3>
-              </div>
-              <div class="activate-modal-header-actions">
-                <button class="action" id="chart-preview-back" type="button">Back</button>
-                <button class="action" id="chart-preview-close" type="button">Close</button>
-              </div>
-            </header>
-            <div class="chart-preview-viewer-shell">
-              ${
-                frameUrl
-                  ? `<iframe class="chart-preview-viewer-frame" title="${escapeAttr(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}" src="${escapeAttr(frameUrl)}"></iframe>`
-                  : '<p class="chart-search-message">Chart preview unavailable.</p>'
-              }
-            </div>
+        <div class="chart-fullscreen-overlay" id="chart-preview-overlay">
+          <section class="chart-fullscreen-viewer" role="dialog" aria-modal="true" aria-label="Chart preview">
+            ${
+              frameUrl
+                ? `<iframe class="chart-fullscreen-frame" title="${escapeAttr(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}" src="${escapeAttr(frameUrl)}"></iframe>`
+                : '<p class="chart-search-message">Chart preview unavailable.</p>'
+            }
           </section>
         </div>
       `;
     }
     return `
-      <div class="activate-modal-layer chart-preview-layer" id="chart-preview-overlay">
-        <section class="activate-modal-card chart-preview-modal" role="dialog" aria-modal="true" aria-label="Chart preview">
-          <header class="activate-modal-header">
-            <div>
-              <span class="activate-modal-kicker">Navigation charts</span>
-              <h3>Charts</h3>
-            </div>
-            <button class="action" id="chart-preview-close" type="button">Close</button>
-          </header>
+      <div class="bug-report-overlay" id="chart-preview-overlay">
+        <section class="bug-report-modal chart-preview-modal" role="dialog" aria-modal="true" aria-label="Chart preview">
+          <div class="bug-report-head">
+            <h3>Charts</h3>
+            <button class="action bug-report-close" id="chart-preview-close" type="button">Close</button>
+          </div>
           <section class="chart-search-card chart-search-card-modal">
             <label class="setup-field chart-search-field">
               <span>Airport code</span>
@@ -2743,25 +2729,23 @@
       ? `${String(result.gpsEstimateHhmm).trim()}Z`
       : "--";
     return `
-      <div class="activate-modal-layer whereami-layer" id="kiosk-whereami-overlay">
-        <section class="activate-modal-card whereami-card" role="dialog" aria-modal="true" aria-label="Where am I">
-          <header class="activate-modal-header">
-            <div>
-              <span class="activate-modal-kicker">GPS position</span>
-              <h3>Where am I?</h3>
-            </div>
-            <button class="action" id="kiosk-whereami-close" type="button">Close</button>
-          </header>
-          <label class="activate-modal-field kiosk-whereami-input">
+      <div class="bug-report-overlay" id="kiosk-whereami-overlay">
+        <section class="bug-report-modal kiosk-whereami-modal" role="dialog" aria-modal="true" aria-label="Where am I">
+          <div class="bug-report-head">
+            <h3>Where am I</h3>
+            <button class="action bug-report-close" id="kiosk-whereami-close" type="button">Close</button>
+          </div>
+          <p class="kiosk-whereami-subtitle">Compute distance, quadrant and TH</p>
+          <label class="setup-field kiosk-whereami-input">
             <span>Waypoint</span>
             <input id="kiosk-whereami-query" value="${escapeAttr(model.query || "")}" placeholder="Type waypoint" data-suggest-source="waypoints" />
           </label>
-          <div class="whereami-quick-actions kiosk-whereami-quick">
-            <button class="whereami-quick-action" id="kiosk-whereami-use-departure" type="button"><span>Departure</span><strong>${escapeHtml(depLabel)}</strong></button>
-            <button class="whereami-quick-action" id="kiosk-whereami-use-destination" type="button"><span>Destination</span><strong>${escapeHtml(destLabel)}</strong></button>
+          <div class="kiosk-distance-presets kiosk-whereami-quick">
+            <button class="kiosk-preset-btn kiosk-whereami-preset" id="kiosk-whereami-use-departure" type="button">${escapeHtml(depLabel)}</button>
+            <button class="kiosk-preset-btn kiosk-whereami-preset" id="kiosk-whereami-use-destination" type="button">${escapeHtml(destLabel)}</button>
           </div>
-          <p class="activate-modal-error${model.error ? "" : " hidden"}" id="kiosk-whereami-error">${escapeHtml(model.error || "")}</p>
-          <div class="whereami-result-grid kiosk-whereami-results">
+          <p class="kiosk-estimate-error${model.error ? "" : " hidden"}" id="kiosk-whereami-error">${escapeHtml(model.error || "")}</p>
+          <div class="kiosk-whereami-results">
             <article>
               <span>Distance</span>
               <strong id="kiosk-whereami-distance">${escapeHtml(distanceLabel)}</strong>
@@ -2771,11 +2755,11 @@
               <strong id="kiosk-whereami-quadrant">${escapeHtml(quadrantLabel)}</strong>
             </article>
             <article>
-              <span>True heading</span>
+              <span>TH To</span>
               <strong id="kiosk-whereami-heading">${escapeHtml(headingLabel)}</strong>
             </article>
             <article>
-              <span>GPS estimate</span>
+              <span>GPS Estimate</span>
               <strong id="kiosk-whereami-estimate">${escapeHtml(gpsEstimateLabel)}</strong>
             </article>
           </div>
@@ -4290,7 +4274,7 @@
     let unlocked = false;
     let tapCount = 0;
     let lastTapAt = 0;
-    const tapWindowMs = 520;
+    const tapWindowMs = 900;
 
     const unlockKeyboard = () => {
       unlocked = true;
@@ -5172,8 +5156,6 @@
     const openButton = document.getElementById("kiosk-whereami-open");
     if (openButton) {
       openButton.addEventListener("click", () => {
-        closeSuggestionMenu();
-        state.meta.chartPreview = createEmptyChartPreviewState();
         const current = state.meta.kioskGps && state.meta.kioskGps.whereAmI ? state.meta.kioskGps.whereAmI : null;
         setKioskWhereAmIState({
           open: true,
@@ -6747,7 +6729,6 @@
     if (!overlay) return;
     const model = state.meta && state.meta.chartPreview ? state.meta.chartPreview : createEmptyChartPreviewState();
     const closeButton = document.getElementById("chart-preview-close");
-    const backButton = document.getElementById("chart-preview-back");
     const searchInput = document.getElementById("chart-preview-airport-search");
     const searchButton = document.getElementById("chart-preview-search-button");
     const submitSearch = () => {
@@ -6758,10 +6739,6 @@
       render();
     };
     if (closeButton) closeButton.addEventListener("click", closeChartPreviewModal);
-    if (backButton) backButton.addEventListener("click", () => {
-      state.meta.chartPreview.viewer = false;
-      render();
-    });
     if (searchButton) searchButton.addEventListener("click", submitSearch);
     if (searchInput) {
       searchInput.addEventListener("input", () => {
@@ -7042,6 +7019,12 @@
         const aliasIndex = Number(aliasIndexText);
         const row = normalizeWaypointRows(state.admin.waypointForm.rows)[rowIndex];
         if (!row || !Number.isFinite(aliasIndex) || !row.aliases[aliasIndex]) return;
+        if (state.admin.waypointAliasEditor.selectedAliasIndex === aliasIndex) {
+          state.admin.waypointAliasEditor.selectedAliasIndex = -1;
+          state.admin.waypointAliasEditor.draft = "";
+          render();
+          return;
+        }
         state.admin.waypointAliasEditor.selectedAliasIndex = aliasIndex;
         state.admin.waypointAliasEditor.draft = row.aliases[aliasIndex];
         render();
@@ -7049,7 +7032,7 @@
     });
     const aliasSubmitButton = document.getElementById("admin-waypoint-alias-submit");
     if (aliasSubmitButton) {
-      aliasSubmitButton.addEventListener("click", () => {
+      aliasSubmitButton.addEventListener("click", async () => {
         const editor = state.admin.waypointAliasEditor;
         const rowIndex = Number(editor && editor.rowIndex);
         const alias = normalizeCode(editor && editor.draft);
@@ -7058,19 +7041,22 @@
         if (!row || !row.name || !alias) return;
         const selectedIndex = Number(editor.selectedAliasIndex);
         if (selectedIndex >= 0 && selectedIndex < row.aliases.length) {
+          const duplicateIndex = row.aliases.findIndex((value, index) => index !== selectedIndex && normalizeCode(value) === alias);
+          if (duplicateIndex >= 0) return;
           row.aliases[selectedIndex] = alias;
-        } else if (!row.aliases.includes(alias)) {
+        } else if (!row.aliases.some((value) => normalizeCode(value) === alias)) {
           row.aliases.push(alias);
         }
         state.admin.waypointForm.rows = rows;
         state.admin.waypointAliasEditor.selectedAliasIndex = -1;
         state.admin.waypointAliasEditor.draft = "";
         render();
+        await saveWaypointsFromAdmin();
       });
     }
     const aliasDeleteButton = document.getElementById("admin-waypoint-alias-delete");
     if (aliasDeleteButton) {
-      aliasDeleteButton.addEventListener("click", () => {
+      aliasDeleteButton.addEventListener("click", async () => {
         const editor = state.admin.waypointAliasEditor;
         const rowIndex = Number(editor && editor.rowIndex);
         const aliasIndex = Number(editor && editor.selectedAliasIndex);
@@ -7081,6 +7067,7 @@
         state.admin.waypointAliasEditor.selectedAliasIndex = -1;
         state.admin.waypointAliasEditor.draft = "";
         render();
+        await saveWaypointsFromAdmin();
       });
     }
     const aliasCloseButton = document.getElementById("admin-waypoint-alias-close");

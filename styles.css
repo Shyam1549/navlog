@@ -242,7 +242,7 @@ body.kiosk-mode .time-head {
 
 .front-footer {
   margin-top: auto;
-  margin-bottom: 8px;
+  margin-bottom: 0;
   padding: 12px 16px;
   border: 2px solid rgba(46, 41, 35, 0.16);
   border-radius: 16px;
@@ -311,6 +311,14 @@ body.kiosk-mode .time-head {
   .ipad-home-page {
     height: calc(100dvh - 36px);
   }
+}
+
+@media (max-width: 1280px) {
+  .front-footer-slot { margin-bottom: -24px; }
+}
+
+@media (max-width: 720px) {
+  .front-footer-slot { margin-bottom: -22px; }
 }
 
 .bug-report-overlay {
@@ -927,9 +935,9 @@ body.kiosk-mode .time-head {
 }
 
 .admin-add-alias-btn.active {
-  border-color: rgba(197, 31, 31, 0.52);
-  background: rgba(197, 31, 31, 0.1);
-  color: #9d1a1a;
+  border-color: rgba(33, 76, 90, 0.56);
+  background: rgba(33, 76, 90, 0.12);
+  color: #214c5a;
 }
 
 .admin-add-alias-btn:disabled {
@@ -5345,25 +5353,6 @@ body.ipad-desktop-scale .route-inline-hint {
   background: rgba(33, 76, 90, 0.1);
 }
 
-.chart-preview-card,
-.chart-preview-modal {
-  width: min(760px, calc(100vw - 28px));
-}
-
-.chart-preview-simple {
-  max-height: calc(100vh - 190px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  touch-action: pan-y;
-}
-
-.chart-preview-choice-list {
-  max-height: calc(100vh - 190px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  touch-action: pan-y;
-}
-
 .chart-preview-viewer-shell {
   height: min(74vh, 760px);
   min-height: 280px;
@@ -5387,17 +5376,11 @@ body.ipad-desktop-scale .route-inline-hint {
   .activate-modal-layer { padding: 8px !important; }
   .activate-modal-card { width: calc(100vw - 16px); padding: 14px; }
   .whereami-result-grid { grid-template-columns: 1fr 1fr; }
-  .chart-preview-viewer-shell { height: calc(100vh - 128px); min-height: 260px; }
 }
 
 @supports (height: 1dvh) {
   .activate-modal-card { max-height: calc(100dvh - 28px); }
-  .chart-preview-simple,
-  .chart-preview-choice-list { max-height: calc(100dvh - 190px); }
   .chart-preview-viewer-shell { height: min(74dvh, 760px); }
-  @media (max-width: 640px) {
-    .chart-preview-viewer-shell { height: calc(100dvh - 128px); }
-  }
 }
 
 /* Keep the public aircraft table readable on touch screens; its width is intentional. */
