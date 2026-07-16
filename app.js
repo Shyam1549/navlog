@@ -144,6 +144,7 @@
   let gpsLastPoint = null;
   let gpsSpeedSamplesKts = [];
   let suggestionMenuState = null;
+  let chartPdfRenderToken = 0;
   let lastRenderedView = "";
   let adminStatusSignature = "";
   let adminStatusClearTimer = null;
@@ -1700,16 +1701,13 @@
     const groupedCharts = groupChartsByCategory(charts);
     const selectedChart = charts.find((chart) => chart.id === String(model.selectedChartId || "")) || charts[0] || null;
     const selectedUrl = selectedChart ? getAirportChartPublicUrl(selectedChart) : "";
-    const frameUrl = selectedUrl ? `${selectedUrl}#toolbar=0&navpanes=0&view=FitH&zoom=page-width` : "";
     if (model.viewer) {
       return `
         <div class="chart-fullscreen-overlay" id="chart-preview-overlay">
           <section class="chart-fullscreen-viewer" role="dialog" aria-modal="true" aria-label="Chart preview">
-            ${
-              frameUrl
-                ? `<iframe class="chart-fullscreen-frame" title="${escapeAttr(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}" src="${escapeAttr(frameUrl)}"></iframe>`
-                : '<p class="chart-search-message">Chart preview unavailable.</p>'
-            }
+            <div class="chart-pdf-scroll" id="chart-pdf-scroll" aria-live="polite">
+              ${selectedUrl ? '<p class="chart-search-message">Loading chart...</p>' : '<p class="chart-search-message">Chart preview unavailable.</p>'}
+            </div>
           </section>
         </div>
       `;
@@ -6621,6 +6619,8 @@
     const overlay = document.getElementById("chart-preview-overlay");
     if (!overlay) return;
     const model = state.meta && state.meta.chartPreview ? state.meta.chartPreview : createEmptyChartPreviewState();
+    const selectedChart = getChartsForAirportCode(normalizeCode(model.airportCode))
+      .find((chart) => chart.id === String(model.selectedChartId || ""));
     const closeButton = document.getElementById("chart-preview-close");
     const searchInput = document.getElementById("chart-preview-airport-search");
     const searchButton = document.getElementById("chart-preview-search-button");
@@ -6631,6 +6631,7 @@
       state.meta.chartPreview.selectedChartId = charts[0] ? charts[0].id : "";
       render();
     };
+    if (model.viewer && selectedChart) renderChartPdfPreview(getAirportChartPublicUrl(selectedChart));
     if (closeButton) closeButton.addEventListener("click", closeChartPreviewModal);
     if (searchButton) searchButton.addEventListener("click", submitSearch);
     if (searchInput) {
@@ -6656,6 +6657,56 @@
         render();
       });
     });
+  }
+
+  function renderChartPdfFallback(container, url) {
+    if (!container) return;
+    const frameUrl = `${url}#toolbar=0&navpanes=0&view=FitH&zoom=page-width`;
+    container.innerHTML = `<iframe class="chart-fullscreen-frame chart-pdf-fallback" title="Chart preview" src="${escapeAttr(frameUrl)}"></iframe>`;
+  }
+
+  async function renderChartPdfPreview(url) {
+    const container = document.getElementById("chart-pdf-scroll");
+    const sourceUrl = String(url || "").trim();
+    if (!container || !sourceUrl) return;
+    const renderToken = ++chartPdfRenderToken;
+    const pdfjs = window.pdfjsLib;
+    if (!pdfjs || typeof pdfjs.getDocument !== "function") {
+      renderChartPdfFallback(container, sourceUrl);
+      return;
+    }
+    try {
+      pdfjs.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+      const pdf = await pdfjs.getDocument({ url: sourceUrl }).promise;
+      if (renderToken !== chartPdfRenderToken || !container.isConnected) return;
+      container.innerHTML = "";
+      const pageWidth = Math.max(1, (container.clientWidth || 320) - 12);
+      const deviceScale = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+        const page = await pdf.getPage(pageNumber);
+        if (renderToken !== chartPdfRenderToken || !container.isConnected) return;
+        const baseViewport = page.getViewport({ scale: 1 });
+        const scale = pageWidth / Math.max(1, baseViewport.width);
+        const viewport = page.getViewport({ scale });
+        const pageWrap = document.createElement("div");
+        pageWrap.className = "chart-pdf-page";
+        const canvas = document.createElement("canvas");
+        canvas.className = "chart-pdf-canvas";
+        canvas.width = Math.ceil(viewport.width * deviceScale);
+        canvas.height = Math.ceil(viewport.height * deviceScale);
+        canvas.style.width = `${Math.ceil(viewport.width)}px`;
+        canvas.style.height = `${Math.ceil(viewport.height)}px`;
+        pageWrap.appendChild(canvas);
+        container.appendChild(pageWrap);
+        await page.render({
+          canvasContext: canvas.getContext("2d"),
+          viewport,
+          transform: deviceScale === 1 ? null : [deviceScale, 0, 0, deviceScale, 0, 0],
+        }).promise;
+      }
+    } catch {
+      if (renderToken === chartPdfRenderToken && container.isConnected) renderChartPdfFallback(container, sourceUrl);
+    }
   }
 
   function wireUtcAdminTrigger() {
@@ -10702,6 +10753,8 @@
       "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js",
       "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js",
       "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
+      "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js",
+      "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js",
     ];
     urls.forEach((url) => {
       const isHttp = /^https?:\/\//i.test(url);
