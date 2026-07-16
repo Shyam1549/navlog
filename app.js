@@ -153,6 +153,7 @@
   let kioskModalScrollSnapshot = null;
   let kioskModalScrollHandler = null;
   let kioskModalTouchHandler = null;
+  let kioskModalWheelHandler = null;
   let adminStatusSignature = "";
   let adminStatusClearTimer = null;
   let adminStatusRevealTimer = null;
@@ -766,6 +767,13 @@
     positionSuggestionMenu(input, menu);
     Array.from(menu.querySelectorAll("[data-suggestion-index]")).forEach((button) => {
       button.addEventListener("mousedown", (event) => {
+        if (window.PointerEvent) return;
+        event.preventDefault();
+        const rawIndex = Number(button.getAttribute("data-suggestion-index"));
+        const nextValue = suggestionMenuState && Number.isFinite(rawIndex) ? suggestionMenuState.values[rawIndex] : "";
+        commitSuggestionValue(input, nextValue);
+      });
+      button.addEventListener("pointerdown", (event) => {
         event.preventDefault();
         const rawIndex = Number(button.getAttribute("data-suggestion-index"));
         const nextValue = suggestionMenuState && Number.isFinite(rawIndex) ? suggestionMenuState.values[rawIndex] : "";
@@ -801,6 +809,9 @@
       input.setAttribute("autocomplete", "off");
       if (!input.hasAttribute("spellcheck")) input.setAttribute("spellcheck", "false");
       input.addEventListener("focus", () => {
+        renderSuggestionMenu(input);
+      });
+      input.addEventListener("pointerdown", () => {
         renderSuggestionMenu(input);
       });
       input.addEventListener("input", () => {
@@ -1563,12 +1574,20 @@
         if (target && target.closest && target.closest(".bug-report-modal, .chart-fullscreen-viewer, .suggestion-menu")) return;
         event.preventDefault();
       };
+      kioskModalWheelHandler = (event) => {
+        if (!kioskModalScrollLocked) return;
+        const target = event.target;
+        if (target && target.closest && target.closest(".bug-report-modal, .chart-fullscreen-viewer, .suggestion-menu")) return;
+        event.preventDefault();
+      };
       document.addEventListener("scroll", kioskModalScrollHandler, true);
       document.addEventListener("touchmove", kioskModalTouchHandler, { capture: true, passive: false });
+      document.addEventListener("wheel", kioskModalWheelHandler, { capture: true, passive: false });
       requestAnimationFrame(restoreNestedScrollPositions);
     } else if (!locked && kioskModalScrollLocked) {
       if (kioskModalScrollHandler) document.removeEventListener("scroll", kioskModalScrollHandler, true);
       if (kioskModalTouchHandler) document.removeEventListener("touchmove", kioskModalTouchHandler, { capture: true });
+      if (kioskModalWheelHandler) document.removeEventListener("wheel", kioskModalWheelHandler, { capture: true });
       const styles = kioskModalBodyStyles || {};
       body.style.position = styles.position || "";
       body.style.top = styles.top || "";
@@ -1584,6 +1603,7 @@
       });
       kioskModalScrollHandler = null;
       kioskModalTouchHandler = null;
+      kioskModalWheelHandler = null;
     } else if (locked && kioskModalScrollLocked) {
       requestAnimationFrame(restoreNestedScrollPositions);
     }
@@ -3101,6 +3121,24 @@
     return leg[field];
   }
 
+  function getTotalEeDisplay() {
+    const legs = Array.isArray(state.navlog && state.navlog.legs) ? state.navlog.legs : [];
+    let totalMinutes = 0;
+    let hasValue = false;
+    legs.slice(1).forEach((leg) => {
+      const minutes = parseEeInput(leg && leg.ee);
+      if (minutes == null || !Number.isFinite(minutes)) return;
+      totalMinutes += Math.max(0, minutes);
+      hasValue = true;
+    });
+    return hasValue ? formatEeDisplay(totalMinutes) : "";
+  }
+
+  function displayedLegFieldValue(leg, index, field) {
+    if (state.view === "navlog" && field === "ee" && Number(index) === 0) return getTotalEeDisplay();
+    return legFieldValue(leg, field);
+  }
+
   function getDistanceToGoDisplay(index) {
     if (!state.settings.showDistanceToGo) return "";
     if (!Array.isArray(state.navlog.legs) || index < 0 || index >= state.navlog.legs.length) return "";
@@ -3174,7 +3212,7 @@
           <div class="${legFieldClass(leg, headingField, "kiosk-phone-heading-cell")}"><input data-leg-field="${index}:${headingField}" value="${escapeAttr(legFieldValue(leg, headingField))}" /></div>
           ${renderKioskPhoneSpeedCell(leg, index)}
           <div class="${legFieldClass(leg, "distance")}"><input data-leg-field="${index}:distance" value="${escapeAttr(legFieldValue(leg, "distance"))}" /></div>
-          <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(legFieldValue(leg, "ee"))}" /></div>
+          <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(displayedLegFieldValue(leg, index, "ee"))}"${state.view === "navlog" && index === 0 ? " readonly aria-label=\"Total estimated enroute time\"" : ""} /></div>
           <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(legFieldValue(leg, "et"))}" /></div>
           <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" ${index === 0 ? 'placeholder="AB TIME"' : ""} ${state.view === "ipad-kiosk" ? 'inputmode="numeric" pattern="[0-9]*"' : ""} /></div>
         </div>
@@ -3218,7 +3256,7 @@
         <div class="${legFieldClass(leg, "ta")}"><input data-leg-field="${index}:ta" value="${escapeAttr(legFieldValue(leg, "ta"))}" /></div>
         <div class="${legFieldClass(leg, "gs")}"><input data-leg-field="${index}:gs" value="${escapeAttr(legFieldValue(leg, "gs"))}" /></div>
         <div class="${legFieldClass(leg, "distance")}"><input data-leg-field="${index}:distance" value="${escapeAttr(legFieldValue(leg, "distance"))}" /></div>
-        <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(legFieldValue(leg, "ee"))}" /></div>
+        <div class="${legFieldClass(leg, "ee")}"><input data-leg-field="${index}:ee" value="${escapeAttr(displayedLegFieldValue(leg, index, "ee"))}"${state.view === "navlog" && index === 0 ? " readonly aria-label=\"Total estimated enroute time\"" : ""} /></div>
         <div class="${legFieldClass(leg, "et")}"><input data-leg-field="${index}:et" value="${escapeAttr(legFieldValue(leg, "et"))}" /></div>
         <div class="${legFieldClass(leg, "at")}"><input data-leg-field="${index}:at" value="${escapeAttr(legFieldValue(leg, "at"))}" ${index === 0 ? 'placeholder="AB TIME"' : ""} ${state.view === "ipad-kiosk" ? 'inputmode="numeric" pattern="[0-9]*"' : ""} /></div>
       </div>
@@ -4138,6 +4176,9 @@
       }
       if (!isKioskUtilityUi && node.tagName !== "BUTTON" && "readOnly" in node) node.readOnly = true;
       if (!isKioskUtilityUi && node.tagName !== "BUTTON" && "disabled" in node) node.disabled = false;
+      if (isKioskUtilityUi && node.tagName !== "BUTTON" && "readOnly" in node) node.readOnly = false;
+      if (isKioskUtilityUi && node.tagName !== "BUTTON" && "disabled" in node) node.disabled = false;
+      if (isKioskUtilityUi) node.style.pointerEvents = "auto";
       if (!isKioskUtilityUi && "placeholder" in node) node.placeholder = "";
       if (allowAt) {
         const [rowText] = legField.split(":");
@@ -4337,7 +4378,7 @@
     let tapCount = 0;
     let lastTapAt = 0;
     let lastTapEventAt = 0;
-    const tapWindowMs = 900;
+    const tapWindowMs = 420;
 
     const unlockKeyboard = () => {
       unlocked = true;
@@ -4367,7 +4408,7 @@
       if ((now - lastTapAt) > tapWindowMs) tapCount = 0;
       tapCount += 1;
       lastTapAt = now;
-      if (tapCount >= 2) {
+      if (tapCount >= 3) {
         tapCount = 0;
         unlockKeyboard();
       }
@@ -4379,8 +4420,6 @@
     input.addEventListener("dblclick", (event) => {
       if (!input.readOnly) return;
       event.preventDefault();
-      tapCount = 0;
-      unlockKeyboard();
     });
     input.addEventListener("click", (event) => {
       if (input.readOnly) event.preventDefault();
@@ -7053,6 +7092,12 @@
         const index = Number(button.getAttribute("data-admin-waypoint-add-alias"));
         const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
         if (!Number.isFinite(index) || !rows[index] || !rows[index].name.trim()) return;
+        if (!state.admin.selectedWaypointName) {
+          const typedName = normalizeCode(rows[index].name);
+          const existing = (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : [])
+            .find((waypoint) => normalizeCode(waypoint.name) === typedName);
+          if (existing) state.admin.selectedWaypointName = existing.name;
+        }
         state.admin.waypointForm.rows = rows;
         state.admin.waypointAliasEditor = { open: true, rowIndex: index, selectedAliasIndex: -1, draft: "" };
         render();
@@ -8227,6 +8272,7 @@
         name: selected.name,
         aliases: selected.aliases,
         coord: selected.coord,
+        _coordAutofilledFromName: Boolean(selected.coord),
       }]),
     };
   }
@@ -9804,9 +9850,11 @@
     const node = document.querySelector(`[data-leg-field="${index}:${field}"]`);
     if (!node) return;
     const displayValue =
-      leg && leg._errors && leg._errors[field] && !(leg._manual && leg._manual[field])
-        ? ""
-        : value;
+      state.view === "navlog" && field === "ee" && Number(index) === 0
+        ? getTotalEeDisplay()
+        : leg && leg._errors && leg._errors[field] && !(leg._manual && leg._manual[field])
+          ? ""
+          : value;
     node.value = displayValue;
   }
 
@@ -10047,7 +10095,7 @@
         : unit === "sm"
           ? valueNm / NM_PER_SM
           : valueNm;
-    return String(display);
+    return formatOneDecimal(display);
   }
 
   function formatDistanceDisplayWithRounding(valueNm, roundDistanceValues, unit = state.settings.distanceUnit) {
