@@ -1525,6 +1525,32 @@
     });
   }
 
+  function isKioskModalScrollLocked() {
+    return state.view === "ipad-kiosk" && Boolean(
+      state.meta?.kioskRouteEstimate?.open
+      || (Array.isArray(state.meta?.kioskTimerAlerts) && state.meta.kioskTimerAlerts.length > 0)
+      || state.meta?.kioskGps?.whereAmI?.open
+      || state.meta?.chartPreview?.open,
+    );
+  }
+
+  function isKioskModalScrollTarget(target) {
+    return Boolean(target && target.closest && target.closest("#chart-pdf-scroll"));
+  }
+
+  function preventKioskBackgroundScroll(event) {
+    if (!isKioskModalScrollLocked() || isKioskModalScrollTarget(event.target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function installKioskModalScrollGuard() {
+    if (window.__kioskModalScrollGuardBound) return;
+    window.__kioskModalScrollGuardBound = true;
+    document.addEventListener("wheel", preventKioskBackgroundScroll, { capture: true, passive: false });
+    document.addEventListener("touchmove", preventKioskBackgroundScroll, { capture: true, passive: false });
+  }
+
   function createDefaultSettings() {
     return {
       open: false,
@@ -5299,7 +5325,7 @@
 
   function normalizeMinuteOfDay(minutesFloat) {
     if (!Number.isFinite(minutesFloat)) return 0;
-    let roundedMinutes = roundHalfUp(minutesFloat) % 1440;
+    let roundedMinutes = roundUpWhole(minutesFloat) % 1440;
     if (roundedMinutes < 0) roundedMinutes += 1440;
     return roundedMinutes;
   }
@@ -10057,7 +10083,7 @@
         : unit === "sm"
           ? valueNm / NM_PER_SM
           : valueNm;
-    return roundDistanceValues ? maybeFormat(display) : formatOneDecimal(display);
+    return roundDistanceValues ? String(roundUpWhole(display)) : formatOneDecimal(display);
   }
 
   function parseClimbRateInput(value) {
@@ -10192,6 +10218,13 @@
     return sign * Math.floor((Math.abs(value) + 0.5));
   }
 
+  function roundUpWhole(value) {
+    if (!Number.isFinite(value)) return value;
+    // Remove only floating-point noise at an exact whole value. Any real
+    // fractional part must advance to the next whole unit.
+    return Math.ceil(value - 1e-9);
+  }
+
   function isDegreeField(field) {
     return field === "tc" || field === "wca" || field === "windDir" || field === "th" || field === "var" || field === "mh" || field === "dev" || field === "ch";
   }
@@ -10227,7 +10260,7 @@
   function formatEeDisplayWithTimeRounding(minutesFloat, roundTimeValues) {
     if (!Number.isFinite(minutesFloat)) return "";
     const bounded = Math.max(0, minutesFloat);
-    if (roundTimeValues) return String(Math.ceil(bounded));
+    if (roundTimeValues) return String(roundUpWhole(bounded));
     const totalSeconds = Math.max(0, Math.round(bounded * 60));
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
@@ -10236,7 +10269,7 @@
 
   function formatMinutesAsHhmm(minutesFloat) {
     if (!Number.isFinite(minutesFloat)) return "";
-    const totalMinutes = Math.max(0, roundHalfUp(minutesFloat));
+    const totalMinutes = Math.max(0, roundUpWhole(minutesFloat));
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
     return `${String(hours).padStart(2, "0")}${String(minutes).padStart(2, "0")}`;
@@ -10245,7 +10278,7 @@
   function formatMinutesDisplayWithTimeRounding(minutesFloat, roundTimeValues) {
     if (!Number.isFinite(minutesFloat)) return "";
     const bounded = Math.max(0, minutesFloat);
-    if (roundTimeValues) return String(Math.ceil(bounded));
+    if (roundTimeValues) return String(roundUpWhole(bounded));
     return formatMinutesAsClock(bounded);
   }
 
@@ -10832,6 +10865,7 @@
   }
 
   registerOfflineServiceWorker();
+  installKioskModalScrollGuard();
   installReloadProtection();
   initializeApp().catch((error) => {
     console.error(error);
