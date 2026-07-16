@@ -231,6 +231,7 @@
       aliases: [],
       coord: "",
       _coordAutofilledFromName: false,
+      _coordAutofillSourceName: "",
     };
   }
 
@@ -6943,11 +6944,15 @@
         const index = Number(button.getAttribute("data-admin-waypoint-add-alias"));
         const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
         if (!Number.isFinite(index) || !rows[index] || !rows[index].name.trim()) return;
-        if (!state.admin.selectedWaypointName) {
-          const typedName = normalizeCode(rows[index].name);
-          const existing = (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : [])
-            .find((waypoint) => normalizeCode(waypoint.name) === typedName);
-          if (existing) state.admin.selectedWaypointName = existing.name;
+        const typedName = normalizeCode(rows[index].name);
+        const existing = (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : [])
+          .find((waypoint) => normalizeCode(waypoint.name) === typedName);
+        if (existing) {
+          // Alias edits belong to the record identified by its primary name.
+          // Do not let an older selection (for example after a rename) redirect
+          // the update to a different waypoint.
+          state.admin.selectedWaypointName = existing.name;
+          rows[index].aliases = Array.isArray(existing.aliases) ? existing.aliases.slice() : rows[index].aliases;
         }
         state.admin.waypointForm.rows = rows;
         state.admin.waypointAliasEditor = { open: true, rowIndex: index, selectedAliasIndex: -1, draft: "" };
@@ -7960,6 +7965,7 @@
     const rowInputs = Array.from(document.querySelectorAll("[data-admin-waypoint-row]"));
     const previousRows = normalizeWaypointRows(state.admin.waypointForm.rows);
     const rows = [];
+    const nameChangedFromAutofill = new Set();
     rowInputs.forEach((node) => {
       const key = String(node.getAttribute("data-admin-waypoint-row") || "");
       const [indexText, field, aliasIndexText] = key.split(":");
@@ -7975,16 +7981,34 @@
         if (!Array.isArray(rows[index].aliases)) rows[index].aliases = [];
         rows[index].aliases[aliasIndex] = String(node.value || "");
       } else {
-        rows[index][field] = String(node.value || "");
-        if (field === "name" && previousRows[index] && previousRows[index]._coordAutofilledFromName
-          && normalizeCode(previousRows[index].name) !== normalizeCode(node.value)) {
+        if (field === "coord" && nameChangedFromAutofill.has(index)) {
           rows[index].coord = "";
+        } else {
+          rows[index][field] = String(node.value || "");
+        }
+        if (field === "name" && previousRows[index]) {
+          const previousSource = normalizeCode(
+            previousRows[index]._coordAutofillSourceName ||
+            (previousRows[index]._coordAutofilledFromName ? previousRows[index].name : ""),
+          );
+          if (previousSource && previousSource !== normalizeCode(node.value)) {
+            // Keep the old source long enough for syncAdminWaypointAutofill to
+            // see that the name changed, even if the new partial text is itself
+            // a recognized alias or waypoint.
+            rows[index].coord = "";
+            rows[index]._coordAutofilledFromName = true;
+            rows[index]._coordAutofillSourceName = previousSource;
+            nameChangedFromAutofill.add(index);
+          }
+        }
+        if (field === "coord" && !nameChangedFromAutofill.has(index)) {
           rows[index]._coordAutofilledFromName = false;
+          rows[index]._coordAutofillSourceName = "";
         }
       }
-      if (!(field === "name" && previousRows[index] && previousRows[index]._coordAutofilledFromName
-        && normalizeCode(previousRows[index].name) !== normalizeCode(node.value))) {
+      if (!nameChangedFromAutofill.has(index) && field !== "coord") {
         rows[index]._coordAutofilledFromName = Boolean(previousRows[index] && previousRows[index]._coordAutofilledFromName);
+        rows[index]._coordAutofillSourceName = String(previousRows[index] && previousRows[index]._coordAutofillSourceName || "");
       }
     });
     state.admin.waypointForm = {
@@ -8006,6 +8030,7 @@
       ].filter((alias) => alias && alias !== parsedName.primary))),
       coord: String(row && row.coord != null ? row.coord : ""),
       _coordAutofilledFromName: Boolean(row && row._coordAutofilledFromName),
+      _coordAutofillSourceName: normalizeCode(row && row._coordAutofillSourceName),
       };
     });
     return normalized.length ? normalized : [createEmptyWaypointRow()];
@@ -8018,16 +8043,26 @@
       if (!route) {
         row.coord = "";
         row._coordAutofilledFromName = false;
+        row._coordAutofillSourceName = "";
         state.admin.selectedWaypointName = "";
+        return;
+      }
+      const sourceName = normalizeCode(row._coordAutofillSourceName);
+      if (sourceName && sourceName !== route) {
+        row.coord = "";
+        row._coordAutofilledFromName = false;
+        row._coordAutofillSourceName = "";
         return;
       }
       const known = getWaypointData(route);
       if (known && known.hasCoords) {
         row.coord = known.coordText;
         row._coordAutofilledFromName = true;
-      } else if (row._coordAutofilledFromName || !String(row.coord || "").trim()) {
+        row._coordAutofillSourceName = route;
+      } else if (row._coordAutofilledFromName || sourceName || !String(row.coord || "").trim()) {
         row.coord = "";
         row._coordAutofilledFromName = false;
+        row._coordAutofillSourceName = "";
       }
     });
     state.admin.waypointForm.rows = rows;
@@ -8124,6 +8159,7 @@
         aliases: selected.aliases,
         coord: selected.coord,
         _coordAutofilledFromName: Boolean(selected.coord),
+        _coordAutofillSourceName: selected.coord ? normalizeCode(selected.name) : "",
       }]),
     };
   }
@@ -8290,22 +8326,42 @@
         name: formatWaypointStorageName(draftRow),
         coord: row.coord,
       };
-      if (row.id) payload.id = row.id;
-      const originalName = normalizeCode(state.admin.selectedWaypointName || row.name);
+      const selectedIdentity = parseWaypointNameParts(state.admin.selectedWaypointName).primary;
       const waypointRecords = [
         ...(Array.isArray(state.admin.waypoints) ? state.admin.waypoints : []),
         ...(Array.isArray(state.catalog.waypoints) ? state.catalog.waypoints : []),
       ];
-      const existingRecord = originalName
-        ? waypointRecords.find((waypoint) => normalizeCode(waypoint.name) === originalName)
-        : null;
-      const result = existingRecord
-        ? existingRecord.id
-          ? await supabaseClient.from("waypoints").update(payload).eq("id", existingRecord.id).select("*").maybeSingle()
-          : await supabaseClient.from("waypoints").update(payload).eq("name", existingRecord.rawName || existingRecord.name).select("*").maybeSingle()
-        : await supabaseClient.from("waypoints").upsert(payload, { onConflict: "name" });
-      if (result.error) throw result.error;
-      if (existingRecord && !result.data) throw new Error("The waypoint record was not updated.");
+      const existingRecord = waypointRecords.find((waypoint) =>
+        selectedIdentity && normalizeCode(waypoint.name) === selectedIdentity,
+      ) || waypointRecords.find((waypoint) => normalizeCode(waypoint.name) === row.name);
+
+      // Aliases are stored with their primary waypoint in the existing
+      // waypoints.name column as PRIMARY/ALIAS. The primary name remains the
+      // logical identity, so renames and alias edits update the same row.
+      let writeResult;
+      if (existingRecord) {
+        const lookup = existingRecord.id
+          ? supabaseClient.from("waypoints").update(payload).eq("id", existingRecord.id)
+          : supabaseClient.from("waypoints").update(payload).eq("name", existingRecord.rawName || existingRecord.name);
+        writeResult = await lookup;
+      } else {
+        writeResult = await supabaseClient.from("waypoints").insert(payload);
+      }
+      if (writeResult.error) throw writeResult.error;
+
+      // Read the row back before refreshing the screen. This prevents a local
+      // alias from appearing saved when the backend rejected or normalized the
+      // write, and makes the persisted association the source of truth.
+      const verifyQuery = existingRecord && existingRecord.id
+        ? supabaseClient.from("waypoints").select("*").eq("id", existingRecord.id).maybeSingle()
+        : supabaseClient.from("waypoints").select("*").eq("name", payload.name).maybeSingle();
+      const verifyResult = await verifyQuery;
+      if (verifyResult.error) throw verifyResult.error;
+      if (!verifyResult.data) throw new Error("The waypoint record was not returned after saving.");
+      const savedRecord = cloneWaypointRecord(verifyResult.data);
+      if (formatWaypointStorageName(savedRecord) !== payload.name) {
+        throw new Error("The waypoint aliases were not persisted.");
+      }
       state.admin.selectedWaypointName = row.name;
       await loadAdminData();
       state.admin.notice = silent ? "" : "Waypoint saved.";
