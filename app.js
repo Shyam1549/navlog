@@ -6906,7 +6906,8 @@
     waypointRowInputs.forEach((node) => {
       node.addEventListener("input", () => {
         const key = String(node.getAttribute("data-admin-waypoint-row") || "");
-        const [, field] = key.split(":");
+        const [indexText, field] = key.split(":");
+        const inputIndex = Number(indexText);
         const typedName = field === "name" ? String(node.value || "") : "";
         readWaypointFormFromInputs({ autofill: field === "name" });
         if (field === "name" && !state.admin.selectedWaypointName) {
@@ -6915,6 +6916,10 @@
           if (existing) state.admin.selectedWaypointName = existing.name;
         }
         syncAdminWaypointFormUi();
+        if (field === "name") {
+          syncAdminWaypointAliasesFromInput(inputIndex, typedName);
+          syncAdminWaypointFormUi();
+        }
         if (field === "name" && /\s$/.test(typedName)) {
           // Keep a trailing space during editing so the next keystroke can
           // create a waypoint name such as "DUMAGUETE AIRPORT". Storage and
@@ -8175,6 +8180,17 @@
     if (!primary) return null;
     return (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : [])
       .find((waypoint) => parseWaypointNameParts(waypoint && waypoint.name).primary === primary) || null;
+  }
+
+  function syncAdminWaypointAliasesFromInput(index, value) {
+    const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
+    const rowIndex = Number(index);
+    if (!Number.isFinite(rowIndex) || !rows[rowIndex]) return;
+    const existing = findAdminWaypointByPrimary(value);
+    rows[rowIndex].aliases = existing && Array.isArray(existing.aliases)
+      ? existing.aliases.slice()
+      : [];
+    state.admin.waypointForm.rows = rows;
   }
 
   function selectRpcForEditing(registration) {
