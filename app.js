@@ -6939,18 +6939,29 @@
         const index = Number(button.getAttribute("data-admin-waypoint-add-alias"));
         const rows = normalizeWaypointRows(state.admin.waypointForm.rows);
         if (!Number.isFinite(index) || !rows[index] || !rows[index].name.trim()) return;
-        const typedName = normalizeCode(rows[index].name);
-        const existing = (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : [])
-          .find((waypoint) => normalizeCode(waypoint.name) === typedName);
+        const typedName = parseWaypointNameParts(rows[index].name).primary;
+        const existing = findAdminWaypointByPrimary(typedName);
         if (existing) {
           // Alias edits belong to the record identified by its primary name.
           // Do not let an older selection (for example after a rename) redirect
           // the update to a different waypoint.
           state.admin.selectedWaypointName = existing.name;
-          rows[index].aliases = Array.isArray(existing.aliases) ? existing.aliases.slice() : rows[index].aliases;
+          rows[index].name = existing.name;
+          rows[index].aliases = Array.isArray(existing.aliases) ? existing.aliases.slice() : [];
+        } else {
+          // A new/unknown name has no aliases. Clear aliases inherited from
+          // whichever waypoint was previously selected in this form.
+          state.admin.selectedWaypointName = "";
+          rows[index].aliases = [];
         }
         state.admin.waypointForm.rows = rows;
-        state.admin.waypointAliasEditor = { open: true, rowIndex: index, selectedAliasIndex: -1, draft: "" };
+        state.admin.waypointAliasEditor = {
+          open: true,
+          rowIndex: index,
+          waypointName: typedName,
+          selectedAliasIndex: -1,
+          draft: "",
+        };
         render();
       });
     });
@@ -8157,6 +8168,13 @@
         _coordAutofillSourceName: selected.coord ? normalizeCode(selected.name) : "",
       }]),
     };
+  }
+
+  function findAdminWaypointByPrimary(name) {
+    const primary = parseWaypointNameParts(name).primary;
+    if (!primary) return null;
+    return (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : [])
+      .find((waypoint) => parseWaypointNameParts(waypoint && waypoint.name).primary === primary) || null;
   }
 
   function selectRpcForEditing(registration) {
