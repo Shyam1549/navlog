@@ -6907,6 +6907,7 @@
       node.addEventListener("input", () => {
         const key = String(node.getAttribute("data-admin-waypoint-row") || "");
         const [, field] = key.split(":");
+        const typedName = field === "name" ? String(node.value || "") : "";
         readWaypointFormFromInputs({ autofill: field === "name" });
         if (field === "name" && !state.admin.selectedWaypointName) {
           const typedName = normalizeCode(node.value);
@@ -6914,6 +6915,14 @@
           if (existing) state.admin.selectedWaypointName = existing.name;
         }
         syncAdminWaypointFormUi();
+        if (field === "name" && /\s$/.test(typedName)) {
+          // Keep a trailing space during editing so the next keystroke can
+          // create a waypoint name such as "DUMAGUETE AIRPORT". Storage and
+          // comparisons still use the normalized, trimmed value.
+          const row = state.admin.waypointForm.rows[0];
+          if (row) row.name = typedName;
+          node.value = typedName;
+        }
       });
       node.addEventListener("change", () => {
         const key = String(node.getAttribute("data-admin-waypoint-row") || "");
