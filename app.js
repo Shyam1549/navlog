@@ -123,7 +123,6 @@
       kioskGps: createEmptyKioskGpsState(),
       activateHeadingMode: "tc",
       chartPreview: createEmptyChartPreviewState(),
-      gpsPermissionPromptOpen: false,
       routeProgressMarkerSnapshot: null,
       monthlyVisitors: 0,
     },
@@ -1355,7 +1354,6 @@
       state.meta?.kioskRouteEstimate?.open
       || (Array.isArray(state.meta?.kioskTimerAlerts) && state.meta.kioskTimerAlerts.length > 0)
       || state.meta?.kioskGps?.whereAmI?.open
-      || state.meta?.gpsPermissionPromptOpen
       || state.meta?.chartPreview?.open,
     );
     document.documentElement.classList.toggle("kiosk-modal-scroll-lock", kioskModalScrollLock);
@@ -2525,7 +2523,6 @@
         ${renderKioskRouteEstimateModal()}
         ${renderKioskWhereAmIModal()}
         ${renderKioskTimerAlertModal()}
-        ${renderActivateGpsPermissionPromptModal()}
         ${renderChartPreviewModal()}
       </main>
     `;
@@ -2811,27 +2808,6 @@
           </div>
           <div class="bug-report-actions">
             <button class="action primary" id="activate-info-continue" type="button">Continue</button>
-          </div>
-        </section>
-      </div>
-    `;
-  }
-
-  function renderActivateGpsPermissionPromptModal() {
-    if (!state.meta.gpsPermissionPromptOpen) return "";
-    return `
-      <div class="bug-report-overlay" id="activate-gps-prompt-overlay">
-        <section class="bug-report-modal cockpit-info-modal" role="dialog" aria-modal="true" aria-label="Continue without GPS">
-          <div class="bug-report-head">
-            <h3>Continue without GPS?</h3>
-          </div>
-          <div class="cockpit-info-copy">
-            <p class="cockpit-info-intro">Navlog could not get GPS permission.</p>
-            <p class="cockpit-info-recommend">Choose yes to continue in GPS off mode, or no to ask iOS again immediately.</p>
-          </div>
-          <div class="bug-report-actions">
-            <button class="action" id="activate-gps-no" type="button">NO</button>
-            <button class="action primary" id="activate-gps-yes" type="button">YES</button>
           </div>
         </section>
       </div>
@@ -4222,7 +4198,6 @@
     wireKioskWhereAmIControls();
     wireKioskEventTimerControls();
     wireKioskTimerAlertControls();
-    wireKioskGpsPermissionPromptControls();
     syncKioskEventTimerDisplay();
     wireKioskScratchPadToggle();
     bindKioskDoubleTapGuard();
@@ -4240,7 +4215,9 @@
     let unlocked = false;
     let tapCount = 0;
     let lastTapAt = 0;
-    const tapWindowMs = 900;
+    let lastTapEventAt = 0;
+    const tapWindowMs = 420;
+    const requiredTapCount = 3;
 
     const unlockKeyboard = () => {
       unlocked = true;
@@ -4257,7 +4234,7 @@
       }
     };
 
-    const registerTap = () => {
+    const registerTap = (event) => {
       if (!input.readOnly) return;
       if (input.dataset.atHoldCommitted === "1") {
         input.dataset.atHoldCommitted = "";
@@ -4265,18 +4242,21 @@
         return;
       }
       const now = Date.now();
+      if (now - lastTapEventAt < 70) return;
+      lastTapEventAt = now;
+      if (event && event.cancelable) event.preventDefault();
       if ((now - lastTapAt) > tapWindowMs) tapCount = 0;
       tapCount += 1;
       lastTapAt = now;
-      if (tapCount >= 2) {
+      if (tapCount >= requiredTapCount) {
         tapCount = 0;
         unlockKeyboard();
       }
     };
 
-    if (window.PointerEvent) input.addEventListener("pointerup", registerTap);
+    if (window.PointerEvent) input.addEventListener("pointerup", registerTap, { passive: false });
     else {
-      input.addEventListener("touchend", registerTap, { passive: true });
+      input.addEventListener("touchend", registerTap, { passive: false });
       input.addEventListener("mouseup", registerTap);
     }
     input.addEventListener("click", (event) => {
@@ -4288,7 +4268,8 @@
     input.addEventListener("blur", () => {
       input.readOnly = true;
       unlocked = false;
-      tapCount = 0;
+      // A readonly tap focuses and immediately blurs the input. Keep the
+      // partial tap sequence alive across that focus cycle.
     });
     input.dataset.longPressBound = "1";
   }
@@ -5191,35 +5172,6 @@
     computeAndStoreKioskWhereAmI();
   }
 
-  function wireKioskGpsPermissionPromptControls() {
-    const overlay = document.getElementById("activate-gps-prompt-overlay");
-    if (!overlay) return;
-    const yesButton = document.getElementById("activate-gps-yes");
-    const noButton = document.getElementById("activate-gps-no");
-    if (yesButton) {
-      yesButton.addEventListener("click", () => {
-        state.meta.gpsPermissionPromptOpen = false;
-        state.meta.activateGpsEnabled = false;
-        persistKioskPayload({ activateGpsEnabled: false });
-        stopKioskGpsTracking();
-        render();
-      });
-    }
-    if (noButton) {
-      noButton.addEventListener("click", () => {
-        state.meta.gpsPermissionPromptOpen = false;
-        render();
-        retryKioskGpsPermissionRequest();
-      });
-    }
-    overlay.addEventListener("click", (event) => {
-      if (event.target !== overlay) return;
-      state.meta.gpsPermissionPromptOpen = false;
-      render();
-      retryKioskGpsPermissionRequest();
-    });
-  }
-
   function wireKioskEventTimerControls() {
     document.querySelectorAll("[data-kiosk-timer-clear]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -5579,7 +5531,6 @@
   function handleKioskGpsSuccess(position) {
     if (!position || !position.coords) return;
     if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
-    state.meta.gpsPermissionPromptOpen = false;
     const coords = position.coords;
     const timestampMs = Number(position.timestamp || Date.now());
     const lat = Number(coords.latitude);
@@ -5626,45 +5577,15 @@
     updateKioskGpsDom();
   }
 
-  function retryKioskGpsPermissionRequest() {
-    if (!navigator.geolocation || typeof navigator.geolocation.getCurrentPosition !== "function") {
-      if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
-      state.meta.kioskGps.supported = false;
-      state.meta.kioskGps.tracking = false;
-      state.meta.kioskGps.error = "GPS unavailable.";
-      state.meta.gpsPermissionPromptOpen = false;
-      updateKioskGpsDom();
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      () => {
-        if (state.view === "ipad-kiosk" && isActivateGpsEnabled()) startKioskGpsTracking();
-      },
-      (retryError) => {
-        handleKioskGpsError(retryError);
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 12000 },
-    );
-  }
-
   function handleKioskGpsError(error) {
     const permissionDenied = Number(error && error.code) === 1;
-    if (
-      permissionDenied
-      && state.view === "ipad-kiosk"
-      && isActivateGpsEnabled()
-      && !state.meta.gpsPermissionPromptOpen
-    ) {
-      state.meta.gpsPermissionPromptOpen = true;
-      stopKioskGpsTracking();
-      render();
-      return;
-    }
     if (!state.meta.kioskGps) state.meta.kioskGps = createEmptyKioskGpsState();
+    if (permissionDenied) stopKioskGpsTracking();
     state.meta.kioskGps.supported = Boolean(navigator.geolocation);
     state.meta.kioskGps.tracking = false;
-    state.meta.kioskGps.error = error && error.message ? String(error.message) : "GPS unavailable.";
-    state.meta.gpsPermissionPromptOpen = false;
+    state.meta.kioskGps.error = permissionDenied
+      ? "GPS permission denied."
+      : (error && error.message ? String(error.message) : "GPS unavailable.");
     updateKioskGpsDom();
   }
 
