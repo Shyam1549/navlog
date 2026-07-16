@@ -1383,6 +1383,15 @@ body.kiosk-modal-scroll-lock .ipad-kiosk-wrap {
   touch-action: none !important;
 }
 
+body.kiosk-modal-scroll-lock .sheet-wrap,
+body.kiosk-modal-scroll-lock .ipad-kiosk-sheet,
+body.kiosk-modal-scroll-lock .kiosk-phone-scroll-part,
+body.kiosk-modal-scroll-lock .kiosk-phone-toc-panel {
+  pointer-events: none !important;
+  overflow: hidden !important;
+  touch-action: none !important;
+}
+
 .kiosk-utc {
   display: flex;
   align-items: center;
@@ -4696,7 +4705,7 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
     height: calc(100dvh - 12px);
     min-height: 0;
     max-height: calc(100dvh - 12px);
-    border: 1px solid rgba(46, 41, 35, 0.55);
+    border: 1.5px solid rgba(46, 41, 35, 0.55);
     border-radius: 2px;
     overflow-x: hidden;
     overflow-y: auto;

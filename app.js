@@ -1700,14 +1700,14 @@
     const groupedCharts = groupChartsByCategory(charts);
     const selectedChart = charts.find((chart) => chart.id === String(model.selectedChartId || "")) || charts[0] || null;
     const selectedUrl = selectedChart ? getAirportChartPublicUrl(selectedChart) : "";
-    const frameUrl = selectedUrl ? `${selectedUrl}#toolbar=0&navpanes=0&scrollbar=0&view=FitH&zoom=page-width` : "";
+    const frameUrl = selectedUrl ? `${selectedUrl}#toolbar=0&navpanes=0&view=FitH&zoom=page-width` : "";
     if (model.viewer) {
       return `
         <div class="chart-fullscreen-overlay" id="chart-preview-overlay">
           <section class="chart-fullscreen-viewer" role="dialog" aria-modal="true" aria-label="Chart preview">
             ${
               frameUrl
-                ? `<iframe class="chart-fullscreen-frame" title="${escapeAttr(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}" src="${escapeAttr(frameUrl)}" scrolling="no"></iframe>`
+                ? `<iframe class="chart-fullscreen-frame" title="${escapeAttr(selectedChart ? selectedChart.name || "Chart preview" : "Chart preview")}" src="${escapeAttr(frameUrl)}"></iframe>`
                 : '<p class="chart-search-message">Chart preview unavailable.</p>'
             }
           </section>
