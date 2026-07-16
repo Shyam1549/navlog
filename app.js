@@ -6911,8 +6911,8 @@
         const typedName = field === "name" ? String(node.value || "") : "";
         readWaypointFormFromInputs({ autofill: field === "name" });
         if (field === "name" && !state.admin.selectedWaypointName) {
-          const typedName = normalizeCode(node.value);
-          const existing = state.admin.waypoints.find((waypoint) => normalizeCode(waypoint.name) === typedName);
+          const exactTypedName = normalizeCode(node.value);
+          const existing = state.admin.waypoints.find((waypoint) => normalizeCode(waypoint.name) === exactTypedName);
           if (existing) state.admin.selectedWaypointName = existing.name;
         }
         syncAdminWaypointFormUi();
@@ -7034,7 +7034,7 @@
         state.admin.notice = "";
         state.admin.error = "";
         render();
-        await saveWaypointsFromAdmin({ silent: true });
+        await saveWaypointsFromAdmin({ silent: true, aliasMutation: true });
       });
     }
     const aliasDeleteButton = document.getElementById("admin-waypoint-alias-delete");
@@ -7052,7 +7052,7 @@
         state.admin.notice = "";
         state.admin.error = "";
         render();
-        await saveWaypointsFromAdmin({ silent: true });
+        await saveWaypointsFromAdmin({ silent: true, aliasMutation: true });
       });
     }
     const aliasCloseButton = document.getElementById("admin-waypoint-alias-close");
@@ -8335,6 +8335,7 @@
 
   async function saveWaypointsFromAdmin(options = {}) {
     const silent = Boolean(options.silent);
+    const aliasMutation = Boolean(options.aliasMutation);
     const ok = await connectSupabaseClient(false);
     if (!ok) {
       render();
@@ -8355,14 +8356,22 @@
         name: formatWaypointStorageName(draftRow),
         coord: row.coord,
       };
-      const selectedIdentity = parseWaypointNameParts(state.admin.selectedWaypointName).primary;
       const waypointRecords = [
         ...(Array.isArray(state.admin.waypoints) ? state.admin.waypoints : []),
         ...(Array.isArray(state.catalog.waypoints) ? state.catalog.waypoints : []),
       ];
-      const existingRecord = waypointRecords.find((waypoint) =>
-        selectedIdentity && normalizeCode(waypoint.name) === selectedIdentity,
-      ) || waypointRecords.find((waypoint) => normalizeCode(waypoint.name) === row.name);
+      const matchingPrimaryRecord = waypointRecords.find((waypoint) =>
+        parseWaypointNameParts(waypoint && waypoint.name).primary === row.name,
+      );
+      const selectedIdentity = parseWaypointNameParts(state.admin.selectedWaypointName).primary;
+      // Alias edits are anchored to the primary currently in the waypoint
+      // field. This prevents a stale form selection from attaching a new
+      // waypoint's alias to the previously selected database row.
+      const existingRecord = aliasMutation
+        ? matchingPrimaryRecord
+        : waypointRecords.find((waypoint) =>
+          selectedIdentity && parseWaypointNameParts(waypoint && waypoint.name).primary === selectedIdentity,
+        ) || matchingPrimaryRecord;
 
       // Aliases are stored with their primary waypoint in the existing
       // waypoints.name column as PRIMARY/ALIAS. The primary name remains the
