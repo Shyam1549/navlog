@@ -6681,7 +6681,9 @@
       if (renderToken !== chartPdfRenderToken || !container.isConnected) return;
       container.innerHTML = "";
       const pageWidth = Math.max(1, (container.clientWidth || 320) - 12);
-      const deviceScale = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+      // Render above CSS resolution so fine chart labels and linework stay
+      // crisp on high-density phone and tablet screens.
+      const deviceScale = Math.max(2, Math.min(3, window.devicePixelRatio || 1));
       for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
         const page = await pdf.getPage(pageNumber);
         if (renderToken !== chartPdfRenderToken || !container.isConnected) return;
