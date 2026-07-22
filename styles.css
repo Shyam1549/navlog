@@ -2858,7 +2858,8 @@ body.kiosk-phone-mode .route-progress-dot {
   background: transparent;
   padding: 12px 10px;
   text-align: center;
-  font-size: 0.94rem;
+  font-size: 1.18rem;
+  font-weight: 700;
 }
 
 .stack-field {
@@ -3131,7 +3132,7 @@ body.kiosk-phone-mode .route-progress-dot {
   overflow-wrap: anywhere;
   pointer-events: none;
   color: rgba(24, 22, 18, 0.48);
-  font-size: 0.94rem;
+  font-size: 1.1rem;
   line-height: 1.1;
   padding: 0 4px;
 }
@@ -3859,6 +3860,8 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
 }
 
 .chart-fullscreen-viewer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   width: min(1180px, calc(100vw - 16px));
   height: calc(100vh - 16px);
   max-height: 99vh;
@@ -3870,22 +3873,46 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   min-height: min(720px, calc(100vh - 16px));
 }
 
+.chart-fullscreen-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px;
+  border-bottom: 1px solid rgba(46, 41, 35, 0.16);
+  background: #fbf7ef;
+}
+
+.chart-zoom-btn {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  font-size: 1.08rem;
+  font-weight: 800;
+}
+
+.chart-fullscreen-close {
+  min-height: 36px;
+}
+
 .chart-pdf-scroll {
   width: 100%;
   height: 100%;
   box-sizing: border-box;
   padding: 6px;
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: scroll;
   overscroll-behavior: contain;
   background: #e8e1d5;
 }
 
 .chart-pdf-page {
-  width: 100%;
   display: grid;
   justify-items: center;
   margin: 0 auto 8px;
+  max-width: none;
 }
 
 .chart-pdf-canvas {
@@ -4190,7 +4217,7 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   right: 6px;
   bottom: 4px;
   text-align: center;
-  font-size: 0.74rem;
+  font-size: 0.9rem;
   color: var(--muted);
   line-height: 1.1;
   pointer-events: none;
@@ -5082,6 +5109,23 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   -webkit-text-fill-color: #000 !important;
 }
 
+.pdf-export .pdf-input-value {
+  width: 100%;
+  min-height: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  padding: 2px 4px !important;
+  line-height: 1.25 !important;
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .pdf-export .route-main input,
 .pdf-export .location-cell input {
   text-align: center !important;
@@ -5261,13 +5305,15 @@ body.ipad-desktop-scale .leg-row {
 body.ipad-desktop-scale .field input {
   min-height: 86px !important;
   height: 86px !important;
-  font-size: 0.94rem !important;
+  font-size: 1.34rem !important;
+  font-weight: 800 !important;
   padding: 12px 10px !important;
 }
 
 body.ipad-desktop-scale .stack-field input {
   min-height: 43px !important;
   height: 43px !important;
+  font-size: 1.16rem !important;
   padding: 8px 8px !important;
 }
 
@@ -5312,7 +5358,7 @@ body.ipad-desktop-scale .atis-cell input {
 
 body.ipad-desktop-scale .route-inline-hint {
   right: 30px !important;
-  font-size: 0.8rem !important;
+  font-size: 1.04rem !important;
   line-height: 1.05 !important;
   padding: 0 2px !important;
 }
@@ -5412,7 +5458,8 @@ body.ipad-desktop-scale .route-inline-hint {
   border-radius: 8px;
   padding: 8px 11px;
   background: #fffdf9;
-  color: #122f3a;
+  color: #000;
+  -webkit-text-fill-color: #000;
   pointer-events: auto !important;
   touch-action: manipulation;
 }

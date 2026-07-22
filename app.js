@@ -10,8 +10,6 @@
   const NAVLOG_PUBLIC_CATALOG_CACHE_KEY = "navlog_public_catalog_cache_v2";
   const NAVLOG_ACCESS_KEY_UNLOCK = "navlog_access_unlocked_v1";
   const NAVLOG_WELCOME_BEHAVIOUR_SEEN = "navlog_welcome_behaviour_seen_v1";
-  const NAVLOG_MONTHLY_VISITOR_KEY = "navlog_monthly_visitor_marker";
-  const NAVLOG_MONTHLY_VISITOR_COUNT_KEY = "navlog_monthly_visitor_count";
   const UTC_ADMIN_CLICK_WINDOW_MS = 1500;
   const UTC_ADMIN_TOTAL_TIMEOUT_MS = 5000;
   const ADDITIONAL_INFO_DEFAULT_ROWS = 19;
@@ -124,7 +122,6 @@
       activateHeadingMode: "tc",
       chartPreview: createEmptyChartPreviewState(),
       routeProgressMarkerSnapshot: null,
-      monthlyVisitors: 0,
     },
   };
   const TRIG_TOLERANCE = 1e-6;
@@ -552,6 +549,7 @@
       selectedChartId: "",
       viewer: false,
       activateMode: false,
+      zoom: 1,
     };
   }
 
@@ -1760,6 +1758,11 @@
       return `
         <div class="chart-fullscreen-overlay" id="chart-preview-overlay">
           <section class="chart-fullscreen-viewer" role="dialog" aria-modal="true" aria-label="Chart preview">
+            <div class="chart-fullscreen-toolbar">
+              <button class="action chart-zoom-btn" id="chart-preview-zoom-out" type="button" aria-label="Zoom out">-</button>
+              <button class="action chart-zoom-btn" id="chart-preview-zoom-in" type="button" aria-label="Zoom in">+</button>
+              <button class="action bug-report-close chart-fullscreen-close" id="chart-preview-close" type="button">Close</button>
+            </div>
             <div class="chart-pdf-scroll" id="chart-pdf-scroll" aria-live="polite">
               ${selectedUrl ? '<p class="chart-search-message">Loading chart...</p>' : '<p class="chart-search-message">Chart preview unavailable.</p>'}
             </div>
@@ -4609,7 +4612,7 @@
     const halfDayMs = 12 * 60 * 60 * 1000;
     const baseMidnightMs = resolveNavlogUtcMidnightMs();
     let dayOffset = 0;
-    let lastReferenceUtcMs = Number.NaN;
+    let lastAtUtcMs = Number.NaN;
     const mapMinuteToUtcMs = (minuteOfDay, dayShift = dayOffset) => {
       return baseMidnightMs + (dayShift * dayMs) + Math.round(minuteOfDay * 60000);
     };
@@ -4623,15 +4626,17 @@
     legs.forEach((leg) => {
       const etMinutes = parseAtInput(leg?.et);
       const atMinutes = parseAtInput(leg?.at);
-      const referenceMinutes = Number.isFinite(atMinutes) ? atMinutes : (Number.isFinite(etMinutes) ? etMinutes : Number.NaN);
       let referenceUtcMs = Number.NaN;
-      if (Number.isFinite(referenceMinutes)) {
-        referenceUtcMs = mapMinuteToUtcMs(referenceMinutes, dayOffset);
-        while (Number.isFinite(lastReferenceUtcMs) && referenceUtcMs < (lastReferenceUtcMs - 30000)) {
+      if (Number.isFinite(atMinutes)) {
+        referenceUtcMs = mapMinuteToUtcMs(atMinutes, dayOffset);
+        while (Number.isFinite(lastAtUtcMs) && referenceUtcMs < (lastAtUtcMs - 30000)) {
           dayOffset += 1;
-          referenceUtcMs = mapMinuteToUtcMs(referenceMinutes, dayOffset);
+          referenceUtcMs = mapMinuteToUtcMs(atMinutes, dayOffset);
         }
-        lastReferenceUtcMs = referenceUtcMs;
+        lastAtUtcMs = referenceUtcMs;
+      } else if (Number.isFinite(etMinutes)) {
+        referenceUtcMs = mapMinuteToUtcMs(etMinutes, dayOffset);
+        if (Number.isFinite(lastAtUtcMs)) referenceUtcMs = alignNearReference(referenceUtcMs, lastAtUtcMs);
       }
       const etUtcMs = Number.isFinite(etMinutes)
         ? alignNearReference(mapMinuteToUtcMs(etMinutes, dayOffset), referenceUtcMs)
@@ -6744,6 +6749,8 @@
     const selectedChart = getChartsForAirportCode(normalizeCode(model.airportCode))
       .find((chart) => chart.id === String(model.selectedChartId || ""));
     const closeButton = document.getElementById("chart-preview-close");
+    const zoomInButton = document.getElementById("chart-preview-zoom-in");
+    const zoomOutButton = document.getElementById("chart-preview-zoom-out");
     const searchInput = document.getElementById("chart-preview-airport-search");
     const searchButton = document.getElementById("chart-preview-search-button");
     const submitSearch = () => {
@@ -6755,6 +6762,16 @@
     };
     if (model.viewer && selectedChart) renderChartPdfPreview(getAirportChartPublicUrl(selectedChart));
     if (closeButton) closeButton.addEventListener("click", closeChartPreviewModal);
+    if (zoomInButton) zoomInButton.addEventListener("click", () => setChartPreviewZoom(getChartPreviewZoom() + 0.15));
+    if (zoomOutButton) zoomOutButton.addEventListener("click", () => setChartPreviewZoom(getChartPreviewZoom() - 0.15));
+    const chartScroll = document.getElementById("chart-pdf-scroll");
+    if (chartScroll) {
+      chartScroll.addEventListener("wheel", (event) => {
+        if (!event.ctrlKey && !event.metaKey) return;
+        event.preventDefault();
+        setChartPreviewZoom(getChartPreviewZoom() + (event.deltaY < 0 ? 0.12 : -0.12));
+      }, { passive: false });
+    }
     if (searchButton) searchButton.addEventListener("click", submitSearch);
     if (searchInput) {
       searchInput.addEventListener("input", () => {
@@ -6787,6 +6804,21 @@
     container.innerHTML = `<iframe class="chart-fullscreen-frame chart-pdf-fallback" title="Chart preview" src="${escapeAttr(frameUrl)}"></iframe>`;
   }
 
+  function getChartPreviewZoom() {
+    const value = Number(state.meta && state.meta.chartPreview ? state.meta.chartPreview.zoom : 1);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  }
+
+  function setChartPreviewZoom(value) {
+    if (!state.meta.chartPreview) state.meta.chartPreview = createEmptyChartPreviewState();
+    const next = clamp(Number(value), 0.55, 2.6);
+    state.meta.chartPreview.zoom = next;
+    document.querySelectorAll(".chart-pdf-page").forEach((page) => {
+      const width = Number(page.getAttribute("data-base-width"));
+      if (Number.isFinite(width) && width > 0) page.style.width = `${Math.ceil(width * next)}px`;
+    });
+  }
+
   async function renderChartPdfPreview(url) {
     const container = document.getElementById("chart-pdf-scroll");
     const sourceUrl = String(url || "").trim();
@@ -6803,6 +6835,7 @@
       if (renderToken !== chartPdfRenderToken || !container.isConnected) return;
       container.innerHTML = "";
       const pageWidth = Math.max(1, (container.clientWidth || 320) - 12);
+      const zoom = getChartPreviewZoom();
       // Render above CSS resolution so fine chart labels and linework stay
       // crisp on high-density phone and tablet screens.
       const deviceScale = Math.max(2, Math.min(3, window.devicePixelRatio || 1));
@@ -6814,12 +6847,14 @@
         const viewport = page.getViewport({ scale });
         const pageWrap = document.createElement("div");
         pageWrap.className = "chart-pdf-page";
+        pageWrap.setAttribute("data-base-width", String(Math.ceil(viewport.width)));
+        pageWrap.style.width = `${Math.ceil(viewport.width * zoom)}px`;
         const canvas = document.createElement("canvas");
         canvas.className = "chart-pdf-canvas";
         canvas.width = Math.ceil(viewport.width * deviceScale);
         canvas.height = Math.ceil(viewport.height * deviceScale);
-        canvas.style.width = `${Math.ceil(viewport.width)}px`;
-        canvas.style.height = `${Math.ceil(viewport.height)}px`;
+        canvas.style.width = "100%";
+        canvas.style.height = "auto";
         pageWrap.appendChild(canvas);
         container.appendChild(pageWrap);
         await page.render({
@@ -8837,7 +8872,7 @@
       await loadAdminData();
       state.admin.chartForm = { ...createEmptyChartForm(), airportCode };
       if (fileInput) fileInput.value = "";
-      if (!String(state.admin.chartUploadStatus || "").trim()) state.admin.chartUploadStatus = existingChart ? "Chart saved." : "Chart uploaded.";
+      state.admin.chartUploadStatus = "";
       render();
     } catch (error) {
       state.admin.chartUploadStatus = error && error.message ? error.message : (existingChart ? "Could not save chart." : "Could not upload chart.");
@@ -9734,8 +9769,19 @@
     if (todTime) todTime.value = state.navlog.tocTod.todTime;
     syncKioskPhoneSpeedDisplayValues();
     syncRouteProgressMarkerDisplay();
-    document.querySelectorAll(".ee-total-number").forEach((node) => {
-      node.textContent = getTotalEeDisplay();
+    const totalEeDisplay = getTotalEeDisplay();
+    document.querySelectorAll(".ee-time-head").forEach((node) => {
+      const existing = node.querySelector(".ee-total-head");
+      if (!totalEeDisplay) {
+        if (existing) existing.remove();
+        return;
+      }
+      if (existing) {
+        const number = existing.querySelector(".ee-total-number");
+        if (number) number.textContent = totalEeDisplay;
+        return;
+      }
+      node.insertAdjacentHTML("beforeend", `<span class="ee-total-head"><span class="ee-total-number">${escapeHtml(totalEeDisplay)}</span><span class="ee-total-unit">mins</span></span>`);
     });
   }
 
@@ -10456,6 +10502,14 @@
   }
 
   function computeEtAtTimeline() {
+    if (state.view !== "ipad-kiosk") {
+      state.navlog.legs.forEach((leg) => {
+        leg._derived = leg._derived || {};
+        if (!(leg._manual && leg._manual.et)) leg.et = "";
+        delete leg._derived.et;
+      });
+      return;
+    }
     let activeAnchorAt = parseAtInput(state.navlog.legs[0] && state.navlog.legs[0].at);
     let cumulativeEeFromAnchor = 0;
     state.navlog.legs.forEach((leg, index) => {
@@ -10607,6 +10661,53 @@
               rows = currentRows();
             }
           };
+          const createPdfTocValueCell = (field, value, placeholder, unitText, isLast = false) => `
+            <label class="toc-value-wrap${isLast ? " is-last" : ""}">
+              <input data-toc="${field}" value="${escapeAttr(value)}" placeholder="${escapeAttr(placeholder)}" />
+              <span class="toc-unit" aria-hidden="true">${escapeHtml(unitText)}</span>
+            </label>
+          `;
+          const forceTocTodResolvedForPdf = () => {
+            const distanceUnitLabel =
+              state.settings.distanceUnit === "km"
+                ? "KM"
+                : state.settings.distanceUnit === "sm"
+                  ? "SM"
+                  : "NM";
+            const tocTimeUnitLabel = "mins";
+            const tocEntry = doc.querySelector(".toc-tod-card [data-toc-entry='roc']");
+            const todEntry = doc.querySelector(".toc-tod-card [data-toc-entry='rod']");
+            const tocCard = tocEntry && tocEntry.closest(".toc-tod-card");
+            const todCard = todEntry && todEntry.closest(".toc-tod-card");
+            if (tocCard) {
+              tocCard.classList.add("resolved");
+              tocCard.innerHTML = `
+                <button type="button" class="toc-tod-title" data-edit-toc="toc">TOC</button>
+                ${createPdfTocValueCell("tocDistance", state.navlog.tocTod.tocDistance, "Distance", distanceUnitLabel)}
+                ${createPdfTocValueCell("tocTime", state.navlog.tocTod.tocTime, "Time", tocTimeUnitLabel, true)}
+              `;
+            }
+            if (todCard) {
+              todCard.classList.add("resolved");
+              todCard.innerHTML = `
+                <button type="button" class="toc-tod-title" data-edit-toc="tod">TOD</button>
+                ${createPdfTocValueCell("todDistance", state.navlog.tocTod.todDistance, "Distance", distanceUnitLabel)}
+                ${createPdfTocValueCell("todTime", state.navlog.tocTod.todTime, "Time", tocTimeUnitLabel, true)}
+              `;
+            }
+          };
+          const replaceInputsWithPdfText = () => {
+            doc.querySelectorAll(".field input, .radio-row input, .atis-cell input, .toc-tod-card input, .header-box input").forEach((input) => {
+              if (input.matches(".date-picker-proxy")) {
+                input.remove();
+                return;
+              }
+              const span = doc.createElement("span");
+              span.className = "pdf-input-value";
+              span.textContent = input.value || input.getAttribute("value") || "";
+              input.replaceWith(span);
+            });
+          };
 
           doc.body.classList.add("pdf-export");
           doc.body.classList.add(pdfLayout === "printable" ? "pdf-export-printable" : "pdf-export-default");
@@ -10617,6 +10718,7 @@
           doc.querySelectorAll("input").forEach((input) => {
             input.placeholder = "";
           });
+          forceTocTodResolvedForPdf();
 
           // PDF-only row floor: keep route and airport tables expanded to printable minimums.
           ensureMinimumRows(doc.querySelector(".table-body"), ".leg-row", 8);
@@ -10636,6 +10738,7 @@
             }
             row.classList.add("leg-row-no-cas");
           });
+          replaceInputsWithPdfText();
         },
       });
       const image = canvas.toDataURL("image/png");
@@ -10665,7 +10768,15 @@
         pdf = new jsPDF({ orientation, unit: "px", format: [canvas.width, canvas.height] });
         pdf.addImage(image, "PNG", 0, 0, canvas.width, canvas.height);
       }
-      pdf.save("vfr-navlog.pdf");
+      const pdfUrl = pdf.output("bloburl");
+      const opened = window.open(pdfUrl, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        const link = document.createElement("a");
+        link.href = pdfUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.click();
+      }
     } finally {
       if (saveButton) saveButton.textContent = "Save";
     }
@@ -10799,6 +10910,15 @@
     }
   }
 
+  function clearLegacyMonthlyVisitorStorage() {
+    try {
+      window.localStorage.removeItem("navlog_monthly_visitor_marker");
+      window.localStorage.removeItem("navlog_monthly_visitor_count");
+    } catch {
+      // ignore storage errors
+    }
+  }
+
   async function loadPublicCatalogFromSupabase() {
     if (loadingPublicCatalog) return;
     if (!state.admin.supabaseUrl || !state.admin.supabaseAnonKey) return;
@@ -10870,33 +10990,6 @@
     }
   }
 
-  function touchMonthlyVisitorCounter() {
-    const now = new Date();
-    const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-    let marker = "";
-    let count = 0;
-    try {
-      marker = String(window.localStorage.getItem(NAVLOG_MONTHLY_VISITOR_KEY) || "");
-      count = Number(window.localStorage.getItem(NAVLOG_MONTHLY_VISITOR_COUNT_KEY) || 0);
-    } catch {
-      marker = "";
-      count = 0;
-    }
-    if (!Number.isFinite(count) || count < 0) count = 0;
-    if (marker !== monthKey) {
-      marker = monthKey;
-      count = 0;
-    }
-    count = Math.max(0, Math.floor(count)) + 1;
-    try {
-      window.localStorage.setItem(NAVLOG_MONTHLY_VISITOR_KEY, marker);
-      window.localStorage.setItem(NAVLOG_MONTHLY_VISITOR_COUNT_KEY, String(count));
-    } catch {
-      // ignore storage errors
-    }
-    state.meta.monthlyVisitors = count;
-  }
-
   async function initializeApp() {
     const params = new URLSearchParams(window.location.search);
     const kioskRequested = params.get("kiosk") === "1";
@@ -10918,8 +11011,8 @@
     } else {
       state.view = "setup";
     }
+    clearLegacyMonthlyVisitorStorage();
     restorePublicCatalogCache();
-    touchMonthlyVisitorCounter();
     await loadPublicCatalogFromSupabase();
     warmOfflineRuntimeAssets();
     evaluateAnnouncementsPrompt();
