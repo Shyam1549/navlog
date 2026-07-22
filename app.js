@@ -149,6 +149,7 @@
   let adminStatusSignature = "";
   let adminStatusClearTimer = null;
   let adminStatusRevealTimer = null;
+  let kioskPayloadPersistTimer = null;
 
   function createBlankLeg(route) {
     return {
@@ -216,6 +217,37 @@
       radios: [createBlankRadioRow()],
       depAtisCode: "",
       destinAtisCode: "",
+    };
+  }
+
+  function normalizeNavlogPayload(navlog) {
+    const blank = createBlankNavlog();
+    const source = navlog && typeof navlog === "object" ? navlog : {};
+    const legs = Array.isArray(source.legs) && source.legs.length ? source.legs : blank.legs;
+    const radios = Array.isArray(source.radios) && source.radios.length ? source.radios : blank.radios;
+    return {
+      ...blank,
+      ...source,
+      setup: { ...blank.setup, ...(source.setup && typeof source.setup === "object" ? source.setup : {}) },
+      header: { ...blank.header, ...(source.header && typeof source.header === "object" ? source.header : {}) },
+      tocTod: { ...blank.tocTod, ...(source.tocTod && typeof source.tocTod === "object" ? source.tocTod : {}) },
+      legs: legs.map((leg) => {
+        const base = createBlankLeg(leg && leg.route ? leg.route : "");
+        const item = leg && typeof leg === "object" ? leg : {};
+        return {
+          ...base,
+          ...item,
+          _manual: { ...base._manual, ...(item._manual && typeof item._manual === "object" ? item._manual : {}) },
+          _derived: { ...(item._derived && typeof item._derived === "object" ? item._derived : {}) },
+          _errors: { ...(item._errors && typeof item._errors === "object" ? item._errors : {}) },
+        };
+      }),
+      radios: radios.map((row) => ({
+        ...createBlankRadioRow(),
+        ...(row && typeof row === "object" ? row : {}),
+      })),
+      depAtisCode: String(source.depAtisCode || ""),
+      destinAtisCode: String(source.destinAtisCode || ""),
     };
   }
 
@@ -1703,18 +1735,15 @@
     if (locked) {
       return `
         <svg class="admin-lock-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path d="M7.75 10.25V7.75a4.25 4.25 0 1 1 8.5 0v2.5"></path>
-          <path d="M7 10.25h10a1.75 1.75 0 0 1 1.75 1.75v6a1.75 1.75 0 0 1-1.75 1.75H7A1.75 1.75 0 0 1 5.25 18v-6A1.75 1.75 0 0 1 7 10.25Z"></path>
-          <path d="M12 14v2.8"></path>
+          <rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
         </svg>
       `;
     }
     return `
       <svg class="admin-lock-glyph" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <path d="M9 10.25V8.4a4.25 4.25 0 0 1 7.28-3"></path>
-        <path d="M16.25 5.4 18.1 3.55"></path>
-        <path d="M7 10.25h10a1.75 1.75 0 0 1 1.75 1.75v6A1.75 1.75 0 0 1 17 19.75H7A1.75 1.75 0 0 1 5.25 18v-6A1.75 1.75 0 0 1 7 10.25Z"></path>
-        <path d="M12 14v2.8"></path>
+        <rect width="18" height="11" x="3" y="11" rx="2" ry="2"></rect>
+        <path d="M7 11V7a5 5 0 0 1 9.9-1"></path>
         </svg>
     `;
   }
@@ -2874,13 +2903,16 @@
           : "C";
     const eeUnitLabel = state.settings.roundTimeValues ? "mins" : "min+sec";
     const withUnit = (label, unitText) => `<span class="time-head"><span>${label}</span><span class="head-format-note">(${unitText})</span></span>`;
-    const withEeTotal = () => `
-      <span class="time-head ee-time-head">
-        <span>EE</span>
-        <span class="head-format-note">(${eeUnitLabel})</span>
-        ${state.view === "navlog" ? `<span class="ee-total-head"><span class="ee-total-number">${escapeHtml(getTotalEeDisplay())}</span><span class="ee-total-unit">mins</span></span>` : ""}
-      </span>
-    `;
+    const withEeTotal = () => {
+      const totalEeDisplay = getTotalEeDisplay();
+      return `
+        <span class="time-head ee-time-head">
+          <span>EE</span>
+          <span class="head-format-note">(${eeUnitLabel})</span>
+          ${state.view === "navlog" && totalEeDisplay ? `<span class="ee-total-head"><span class="ee-total-number">${escapeHtml(totalEeDisplay)}</span><span class="ee-total-unit">mins</span></span>` : ""}
+        </span>
+      `;
+    };
     let tableHead = "";
     if (isPhoneKiosk) {
       const headingField = getKioskPhoneHeadingField();
@@ -4125,6 +4157,7 @@
           computeRouteMath({ index: activeIndex, field: activeField });
           updateComputedCells({ index: activeIndex, field: activeField });
           if (activeField === "route") syncRouteHints();
+          scheduleKioskPayloadPersist();
         });
         input.addEventListener("blur", () => {
           persistKioskPayload();
@@ -4139,6 +4172,7 @@
           leg._manual.at = String(event.target.value || "").trim() !== "";
           computeRouteMath({ index, field: "at" });
           updateComputedCells({ index, field: "at" });
+          scheduleKioskPayloadPersist();
         });
         input.addEventListener("blur", (event) => {
           const [indexText] = event.target.dataset.legField.split(":");
@@ -4170,6 +4204,25 @@
       wireKioskDelayedKeyboard(input);
     });
 
+    document.querySelectorAll("[data-header]").forEach((input) => {
+      if (input.tagName !== "INPUT" && input.tagName !== "TEXTAREA") return;
+      input.addEventListener("input", (event) => {
+        const field = String(event.target.dataset.header || "");
+        if (!field || field === "date") return;
+        state.navlog.header[field] = event.target.value;
+        scheduleKioskPayloadPersist();
+      });
+      input.addEventListener("change", persistKioskPayloadIfActive);
+      input.addEventListener("blur", persistKioskPayloadIfActive);
+    });
+
+    document.querySelectorAll("[data-toc], [data-toc-entry]").forEach((input) => {
+      if (input.tagName !== "INPUT" && input.tagName !== "TEXTAREA") return;
+      input.addEventListener("input", scheduleKioskPayloadPersist);
+      input.addEventListener("change", persistKioskPayloadIfActive);
+      input.addEventListener("blur", persistKioskPayloadIfActive);
+    });
+
     if (phoneMode) {
       document.querySelectorAll("[data-kiosk-heading-toggle]").forEach((button) => {
         button.addEventListener("click", () => {
@@ -4196,7 +4249,8 @@
       const commitAirportLocation = (node) => {
         if (!node) return;
         const [indexText] = String(node.dataset.radioField || "").split(":");
-        autofillAirportRow(Number(indexText), node.value);
+        autofillAirportRow(Number(indexText), node.value, { render: false });
+        persistKioskPayload();
       };
       input.addEventListener("input", (event) => {
         const [indexText] = event.target.dataset.radioField.split(":");
@@ -4205,9 +4259,11 @@
         state.navlog.radios[index].location = value;
         if (value.trim() === "") {
           autofillAirportRow(index, "", { render: false });
+          scheduleKioskPayloadPersist();
           return;
         }
         autofillAirportRow(index, value, { render: false });
+        scheduleKioskPayloadPersist();
       });
       input.addEventListener("change", (event) => {
         commitAirportLocation(event.target);
@@ -4227,7 +4283,10 @@
       input.addEventListener("input", (event) => {
         const key = String(event.target.dataset.footer || "");
         state.navlog[key] = event.target.value;
+        scheduleKioskPayloadPersist();
       });
+      input.addEventListener("change", persistKioskPayloadIfActive);
+      input.addEventListener("blur", persistKioskPayloadIfActive);
     });
 
     wireKioskRouteEstimateModal();
@@ -5972,7 +6031,7 @@
   function persistKioskPayload(overrides = {}) {
     try {
       const payload = {
-        navlog: overrides.navlog || state.navlog,
+        navlog: normalizeNavlogPayload(overrides.navlog || state.navlog),
         settings: overrides.settings || state.settings,
         activateGpsEnabled: Object.prototype.hasOwnProperty.call(overrides, "activateGpsEnabled")
           ? Boolean(overrides.activateGpsEnabled)
@@ -5985,13 +6044,48 @@
     }
   }
 
+  function scheduleKioskPayloadPersist(delayMs = 180) {
+    if (state.view !== "ipad-kiosk") return;
+    if (kioskPayloadPersistTimer) clearTimeout(kioskPayloadPersistTimer);
+    kioskPayloadPersistTimer = setTimeout(() => {
+      kioskPayloadPersistTimer = null;
+      persistKioskPayload();
+    }, delayMs);
+  }
+
+  function persistKioskPayloadIfActive() {
+    if (state.view !== "ipad-kiosk") return;
+    if (kioskPayloadPersistTimer) {
+      clearTimeout(kioskPayloadPersistTimer);
+      kioskPayloadPersistTimer = null;
+    }
+    persistKioskPayload();
+  }
+
+  function installKioskPayloadPersistence() {
+    if (window.__navlogKioskPayloadPersistenceBound) return;
+    window.__navlogKioskPayloadPersistenceBound = "1";
+    window.addEventListener("beforeunload", persistKioskPayloadIfActive);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") persistKioskPayloadIfActive();
+    });
+  }
+
   function restoreKioskPayload() {
     try {
       const raw = window.localStorage.getItem(NAVLOG_KIOSK_PAYLOAD_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
       if (!parsed || typeof parsed !== "object") return;
-      if (parsed.navlog && typeof parsed.navlog === "object") state.navlog = parsed.navlog;
+      if (parsed.navlog && typeof parsed.navlog === "object") {
+        state.navlog = normalizeNavlogPayload(parsed.navlog);
+        if (String(state.navlog.tocTod.tocDistance || state.navlog.tocTod.tocTime || "").trim()) {
+          state.navlog.tocTod.tocManual = true;
+        }
+        if (String(state.navlog.tocTod.todDistance || state.navlog.tocTod.todTime || "").trim()) {
+          state.navlog.tocTod.todManual = true;
+        }
+      }
       if (parsed.settings && typeof parsed.settings === "object") state.settings = { ...createDefaultSettings(), ...parsed.settings };
       if (Object.prototype.hasOwnProperty.call(parsed, "activateGpsEnabled")) {
         state.meta.activateGpsEnabled = Boolean(parsed.activateGpsEnabled);
@@ -6079,7 +6173,9 @@
       convertLegField(leg, "windSpd", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
       convertLegField(leg, "ta", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
       convertLegField(leg, "gs", previous, next, parseSpeedInputWithUnit, formatSpeedDisplayForUnit);
-      convertLegField(leg, "distance", previous, next, parseDistanceInputWithUnit, formatDistanceDisplayWithRounding);
+      if (previous.distanceUnit !== next.distanceUnit) {
+        convertLegField(leg, "distance", previous, next, parseDistanceInputWithUnit, formatDistanceDisplayWithRounding);
+      }
       convertLegField(leg, "ee", previous, next, parseEeInput, formatEeDisplayWithTimeRounding);
     });
 
@@ -6097,7 +6193,7 @@
       if (todMinutes != null) state.navlog.tocTod.todTime = formatGeneralMinutesWithTimeRounding(todMinutes, next.roundTimeValues);
     }
 
-    if (previous.roundDistanceValues !== next.roundDistanceValues || previous.distanceUnit !== next.distanceUnit) {
+    if (previous.distanceUnit !== next.distanceUnit) {
       const tocDistance = parseDistanceInputWithRounding(state.navlog.tocTod.tocDistance, previous.roundDistanceValues, previous.distanceUnit);
       const todDistance = parseDistanceInputWithRounding(state.navlog.tocTod.todDistance, previous.roundDistanceValues, previous.distanceUnit);
       if (tocDistance != null) state.navlog.tocTod.tocDistance = formatDistanceDisplayWithRounding(tocDistance, next.roundDistanceValues, next.distanceUnit);
@@ -10555,7 +10651,7 @@
         const marginBottom = 4;
         const maxWidth = pageWidth - marginLeft - marginRight;
         const maxHeight = pageHeight - marginTop - marginBottom;
-        const cornerWidth = 108;
+        const cornerWidth = 151;
         const imageAspect = canvas.height / canvas.width;
         let exportWidth = Math.min(cornerWidth, maxWidth);
         let exportHeight = exportWidth * imageAspect;
@@ -10866,6 +10962,7 @@
 
   registerOfflineServiceWorker();
   installKioskModalScrollGuard();
+  installKioskPayloadPersistence();
   installReloadProtection();
   initializeApp().catch((error) => {
     console.error(error);

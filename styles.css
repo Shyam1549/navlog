@@ -314,11 +314,17 @@ body.kiosk-mode .time-head {
 }
 
 @media (max-width: 1280px) {
-  .front-footer-slot { margin-bottom: -24px; }
+  .front-footer-slot {
+    margin-bottom: -24px;
+    transform: translateY(-14px);
+  }
 }
 
 @media (max-width: 720px) {
-  .front-footer-slot { margin-bottom: -22px; }
+  .front-footer-slot {
+    margin-bottom: -22px;
+    transform: translateY(-12px);
+  }
 }
 
 .bug-report-overlay {
@@ -1167,11 +1173,11 @@ body.kiosk-mode .time-head {
 }
 
 .admin-lock-glyph {
-  width: 46px;
-  height: 46px;
+  width: 18px;
+  height: 18px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.9;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
   pointer-events: none;
@@ -4695,8 +4701,8 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   }
 
   body.iphone-ui .admin-lock-glyph {
-    width: 42px;
-    height: 42px;
+    width: 18px;
+    height: 18px;
   }
 
   .additional-info-wrap {
@@ -4715,13 +4721,27 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
 
 }
 
-@media (min-width: 768px) and (max-width: 1024px) and (orientation: portrait) {
+@media (min-width: 768px) and (max-width: 1180px) {
   .entry-page .setup-card .entry-actions {
     justify-content: center;
   }
 
   .entry-page .setup-card .swap-button {
     margin: 0 auto;
+  }
+
+  body.ipad-desktop-scale:not(.kiosk-mode) .nav-table .field input,
+  body.ipad-desktop-scale:not(.kiosk-mode) .nav-table .route-main input {
+    font-size: 1.08rem;
+  }
+
+  body.ipad-desktop-scale:not(.kiosk-mode) .nav-table .route-inline-hint,
+  body.ipad-desktop-scale:not(.kiosk-mode) .nav-table .alt-departure-hint {
+    font-size: 1.08rem;
+  }
+
+  body.ipad-desktop-scale:not(.kiosk-mode) .nav-table .route-dtg {
+    font-size: 0.82rem;
   }
 }
 
@@ -5026,7 +5046,7 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
 .pdf-export .alt-info-wrap,
 .pdf-export .settings-info-wrap { display: none !important; }
 
-.pdf-export .sheet { font-size: 1em; }
+.pdf-export .sheet { font-size: 1.2em; }
 .pdf-export .sheet,
 .pdf-export .sheet * {
   color: #000 !important;
@@ -5034,7 +5054,6 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
 }
 .pdf-export .field,
 .pdf-export .atis-cell,
-.pdf-export .header-box,
 .pdf-export .head-cell,
 .pdf-export .toc-value-wrap,
 .pdf-export .radio-row > div {
@@ -5055,13 +5074,71 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   min-height: 100%;
   height: 100%;
   align-self: stretch;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
+  box-sizing: border-box;
+  padding: 2px 4px !important;
   margin: 0 auto !important;
-  line-height: 1 !important;
-  font-size: 1.08em !important;
+  line-height: 1.25 !important;
   color: #000 !important;
   -webkit-text-fill-color: #000 !important;
+}
+
+.pdf-export .route-main input,
+.pdf-export .location-cell input {
+  text-align: center !important;
+}
+
+.pdf-export .route-main,
+.pdf-export .location-cell {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.pdf-export .header-box {
+  display: grid !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+  overflow: hidden;
+}
+
+.pdf-export .header-box-label {
+  align-self: start !important;
+  justify-self: start !important;
+  text-align: left !important;
+}
+
+.pdf-export .header-box-input {
+  align-items: center !important;
+}
+
+.pdf-export .header-box.static {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.pdf-export .stack-field {
+  display: grid !important;
+  grid-template-rows: 1fr 1fr !important;
+  align-items: stretch !important;
+  justify-content: stretch !important;
+}
+
+.pdf-export .stack-field input {
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.pdf-export .nav-head-grid,
+.pdf-export .leg-row {
+  border-color: var(--line) !important;
+}
+
+.pdf-export .nav-head-grid > div,
+.pdf-export .leg-row > div,
+.pdf-export .head-cell.group,
+.pdf-export .head-cell.split-top,
+.pdf-export .stack-field input:first-child {
+  border-width: 1.5px !important;
+  border-color: var(--line) !important;
 }
 
 .pdf-export input::placeholder { color: transparent !important; }
@@ -5079,6 +5156,10 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   -webkit-text-fill-color: transparent !important;
 }
 .pdf-export .planning-box {
+  color: var(--paper) !important;
+  -webkit-text-fill-color: var(--paper) !important;
+  display: flex !important;
+  align-items: center !important;
   justify-content: center !important;
   text-align: center;
   white-space: normal;
