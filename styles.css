@@ -208,6 +208,148 @@ body.kiosk-mode .time-head {
   margin: 0 !important;
 }
 .setup-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 16px; align-items: end; }
+
+.wb-card {
+  display: grid;
+  gap: 14px;
+}
+
+.wb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wb-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wb-settings {
+  display: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+  border: 1.5px solid rgba(46, 41, 35, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.42);
+}
+
+.wb-settings.open {
+  display: grid;
+}
+
+.wb-settings select {
+  width: 100%;
+  min-height: 42px;
+  border: 2px solid rgba(46, 41, 35, 0.2);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.86);
+  padding: 8px 10px;
+}
+
+.wb-tables {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.75fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.wb-table-wrap {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.wb-table-wrap h3 {
+  margin: 0;
+  font-size: 0.88rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #274f5d;
+}
+
+.wb-moment-table,
+.wb-fuel-table {
+  display: grid;
+  border: 2px solid var(--line);
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.wb-moment-table {
+  grid-template-columns: minmax(128px, 1fr) repeat(3, minmax(92px, 0.8fr));
+}
+
+.wb-fuel-table {
+  grid-template-columns: minmax(128px, 1fr) minmax(100px, 0.8fr);
+}
+
+.wb-cell {
+  min-height: 44px;
+  border-right: 1.5px solid var(--line);
+  border-bottom: 1.5px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.wb-moment-table .wb-cell:nth-child(4n),
+.wb-fuel-table .wb-cell:nth-child(2n) {
+  border-right: 0;
+}
+
+.wb-moment-table .wb-cell:nth-last-child(-n + 4),
+.wb-fuel-table .wb-cell:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.wb-head-cell {
+  min-height: 48px;
+  gap: 4px;
+  flex-direction: column;
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #1d3f4b;
+  background: rgba(33, 76, 90, 0.08);
+}
+
+.wb-head-cell span {
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.wb-label-cell {
+  justify-content: flex-start;
+  padding: 0 10px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1f3540;
+}
+
+.wb-cell input {
+  width: 100%;
+  height: 100%;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  text-align: center;
+  font-size: 0.94rem;
+}
+
+.wb-cell input[readonly] {
+  font-weight: 700;
+  color: #1f3540;
+}
 .setup-field { display: grid; gap: 8px; }
 .setup-field span { color: var(--muted); text-transform: uppercase; font-size: 0.84rem; }
 .setup-field input {
@@ -2858,8 +3000,7 @@ body.kiosk-phone-mode .route-progress-dot {
   background: transparent;
   padding: 12px 10px;
   text-align: center;
-  font-size: 1.18rem;
-  font-weight: 700;
+  font-size: 1.04rem;
 }
 
 .stack-field {
@@ -4545,6 +4686,24 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   .kiosk-event-countdown { grid-area: countdown; }
   .kiosk-event-target { grid-area: target; justify-self: end; }
   .kiosk-estimate-grid { grid-template-columns: 1fr; }
+
+  .wb-settings,
+  .wb-tables {
+    grid-template-columns: 1fr;
+  }
+
+  .wb-table-wrap {
+    overflow-x: auto;
+  }
+
+  .wb-moment-table {
+    min-width: 620px;
+  }
+
+  .wb-fuel-table {
+    min-width: 360px;
+  }
+
   .admin-preset-table,
   .admin-airport-table {
     overflow-x: auto;
@@ -5290,12 +5449,12 @@ body.ipad-desktop-scale .header-box.static.navlog-box {
 }
 
 body.ipad-desktop-scale .head-cell.group {
-  font-size: 0.95rem !important;
+  font-size: 1.08rem !important;
 }
 
 body.ipad-desktop-scale .head-cell.sub,
 body.ipad-desktop-scale .head-cell.tall {
-  font-size: 0.95rem !important;
+  font-size: 1.08rem !important;
 }
 
 body.ipad-desktop-scale .leg-row {
@@ -5305,16 +5464,21 @@ body.ipad-desktop-scale .leg-row {
 body.ipad-desktop-scale .field input {
   min-height: 86px !important;
   height: 86px !important;
-  font-size: 1.34rem !important;
-  font-weight: 800 !important;
+  font-size: 1.14rem !important;
+  font-weight: 400 !important;
   padding: 12px 10px !important;
 }
 
 body.ipad-desktop-scale .stack-field input {
   min-height: 43px !important;
   height: 43px !important;
-  font-size: 1.16rem !important;
+  font-size: 1.02rem !important;
+  font-weight: 400 !important;
   padding: 8px 8px !important;
+}
+
+body.ipad-desktop-scale .field.derived input {
+  font-weight: 400 !important;
 }
 
 body.ipad-desktop-scale .route-main .remove-chip,
@@ -5333,13 +5497,13 @@ body.ipad-desktop-scale .radio-row {
 
 body.ipad-desktop-scale .radio-row input {
   min-height: 78px !important;
-  font-size: 0.9rem !important;
+  font-size: 1rem !important;
   padding: 12px 10px !important;
 }
 
 body.ipad-desktop-scale .radio-head > div {
   min-height: 56px !important;
-  font-size: 0.95rem !important;
+  font-size: 1.04rem !important;
 }
 
 body.ipad-desktop-scale .atis-cell {
@@ -5348,19 +5512,24 @@ body.ipad-desktop-scale .atis-cell {
 
 body.ipad-desktop-scale .atis-cell span {
   min-height: 52px !important;
-  font-size: 0.84rem !important;
+  font-size: 0.96rem !important;
 }
 
 body.ipad-desktop-scale .atis-cell input {
   min-height: 50px !important;
+  font-size: 1rem !important;
   padding: 12px 10px !important;
 }
 
 body.ipad-desktop-scale .route-inline-hint {
   right: 30px !important;
-  font-size: 1.04rem !important;
+  font-size: 0.9rem !important;
   line-height: 1.05 !important;
   padding: 0 2px !important;
+}
+
+body.ipad-desktop-scale .route-dtg {
+  font-size: 0.82rem !important;
 }
 
 /* Activate overlays use one fixed interaction layer so transformed navlog content cannot steal taps. */
