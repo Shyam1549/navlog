@@ -230,7 +230,7 @@ body.kiosk-mode .time-head {
 
 .wb-settings {
   display: none;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   padding: 12px;
   border: 1.5px solid rgba(46, 41, 35, 0.14);
@@ -349,6 +349,30 @@ body.kiosk-mode .time-head {
 .wb-cell input[readonly] {
   font-weight: 700;
   color: #1f3540;
+}
+
+.wb-converter {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.wb-converter h3 {
+  margin: 0;
+  font-size: 0.88rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #274f5d;
+}
+
+.wb-converter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+  border: 1.5px solid rgba(46, 41, 35, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.42);
 }
 .setup-field { display: grid; gap: 8px; }
 .setup-field span { color: var(--muted); text-transform: uppercase; font-size: 0.84rem; }
@@ -4688,7 +4712,8 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   .kiosk-estimate-grid { grid-template-columns: 1fr; }
 
   .wb-settings,
-  .wb-tables {
+  .wb-tables,
+  .wb-converter-grid {
     grid-template-columns: 1fr;
   }
 

@@ -224,6 +224,11 @@
       units: {
         weight: "lbs",
         arm: "in",
+        fuel: "gal",
+      },
+      converter: {
+        ratePerHour: "",
+        minutes: "",
       },
       momentRows: [
         { label: "Basic", weight: "", arm: "", moment: "" },
@@ -300,6 +305,10 @@
       units: {
         ...blank.units,
         ...(source.units && typeof source.units === "object" ? source.units : {}),
+      },
+      converter: {
+        ...blank.converter,
+        ...(source.converter && typeof source.converter === "object" ? source.converter : {}),
       },
       momentRows: blank.momentRows.map((row, index) => ({
         ...row,
@@ -1794,13 +1803,32 @@
     return total > 0 ? formatWeightBalanceComputed(total) : "";
   }
 
+  function getFuelUnitShort(units) {
+    return units && units.fuel === "l" ? "L" : "gal";
+  }
+
+  function getFuelUnitLabel(units) {
+    return units && units.fuel === "l" ? "liters" : "gallons";
+  }
+
+  function getFuelConverterFuel(converter) {
+    const ratePerHour = num(converter && converter.ratePerHour);
+    const minutes = num(converter && converter.minutes);
+    if (ratePerHour == null || minutes == null) return "";
+    return formatWeightBalanceComputed((ratePerHour * minutes) / 60);
+  }
+
   function renderWeightBalancePanel() {
     const wb = getWeightBalanceState();
     const units = wb.units || {};
     const weightUnit = units.weight === "kg" ? "kg" : "lbs";
     const armUnit = units.arm === "cm" ? "cm" : "in";
+    const fuelUnit = units.fuel === "l" ? "l" : "gal";
+    const fuelUnitShort = getFuelUnitShort({ fuel: fuelUnit });
+    const fuelUnitLabel = getFuelUnitLabel({ fuel: fuelUnit });
     const momentUnit = getWeightBalanceMomentUnit({ weight: weightUnit, arm: armUnit });
     const totalMinutes = getFuelTotalMinutes(wb.fuelRows);
+    const converter = wb.converter || {};
     return `
       <section class="setup-card wb-card">
         <div class="wb-head">
@@ -1822,13 +1850,20 @@
               <option value="cm" ${armUnit === "cm" ? "selected" : ""}>centimeters</option>
             </select>
           </label>
+          <label class="setup-field">
+            <span>Fuel Unit</span>
+            <select id="wb-fuel-unit">
+              <option value="gal" ${fuelUnit === "gal" ? "selected" : ""}>gallons</option>
+              <option value="l" ${fuelUnit === "l" ? "selected" : ""}>liters</option>
+            </select>
+          </label>
         </div>
         <div class="wb-tables">
           <section class="wb-table-wrap">
-            <h3>Fuel Consumption</h3>
-            <div class="wb-fuel-table" role="table" aria-label="Fuel consumption table">
+            <h3>Fuel Required</h3>
+            <div class="wb-fuel-table" role="table" aria-label="Fuel required table">
               <div class="wb-cell wb-head-cell"></div>
-              <div class="wb-cell wb-head-cell">Gallons</div>
+              <div class="wb-cell wb-head-cell">Fuel <span>${escapeHtml(fuelUnitLabel)}</span></div>
               <div class="wb-cell wb-head-cell">Time <span>mins</span></div>
               ${wb.fuelRows.map((row, index) => {
                 const minutesValue = row.label === "Total Time" ? totalMinutes : row.minutes;
@@ -1847,7 +1882,7 @@
               <div class="wb-cell wb-head-cell"></div>
               <div class="wb-cell wb-head-cell">Weight <span>${escapeHtml(weightUnit)}</span></div>
               <div class="wb-cell wb-head-cell">Arm <span>${escapeHtml(armUnit === "in" ? "inches" : armUnit)}</span></div>
-              <div class="wb-cell wb-head-cell">Weight and Balance <span>${escapeHtml(momentUnit)}</span></div>
+              <div class="wb-cell wb-head-cell">Moment <span>${escapeHtml(momentUnit)}</span></div>
               ${wb.momentRows.map((row, index) => `
                 <div class="wb-cell wb-label-cell">${escapeHtml(row.label)}</div>
                 <div class="wb-cell"><input data-wb-moment="${index}:weight" value="${escapeAttr(row.weight)}" inputmode="decimal" /></div>
@@ -1857,6 +1892,23 @@
             </div>
           </section>
         </div>
+        <section class="wb-converter">
+          <h3>Time to Fuel Converter</h3>
+          <div class="wb-converter-grid">
+            <label class="setup-field">
+              <span>${escapeHtml(fuelUnitShort)}/hour</span>
+              <input data-wb-converter="ratePerHour" value="${escapeAttr(converter.ratePerHour)}" inputmode="decimal" />
+            </label>
+            <label class="setup-field">
+              <span>Time mins</span>
+              <input data-wb-converter="minutes" value="${escapeAttr(converter.minutes)}" inputmode="decimal" />
+            </label>
+            <label class="setup-field">
+              <span>Fuel ${escapeHtml(fuelUnitLabel)}</span>
+              <input data-wb-converter="fuel" value="${escapeAttr(getFuelConverterFuel(converter))}" readonly tabindex="-1" />
+            </label>
+          </div>
+        </section>
       </section>
     `;
   }
@@ -3827,6 +3879,8 @@
     });
     const totalNode = document.querySelector('[data-wb-fuel="4:minutes"]');
     if (totalNode) totalNode.value = getFuelTotalMinutes(wb.fuelRows);
+    const converterFuelNode = document.querySelector('[data-wb-converter="fuel"]');
+    if (converterFuelNode) converterFuelNode.value = getFuelConverterFuel(wb.converter);
   }
 
   function wireWeightBalancePanel() {
@@ -3852,6 +3906,13 @@
         render();
       });
     }
+    const fuelUnitSelect = document.getElementById("wb-fuel-unit");
+    if (fuelUnitSelect) {
+      fuelUnitSelect.addEventListener("change", (event) => {
+        wb.units.fuel = event.target.value === "l" ? "l" : "gal";
+        render();
+      });
+    }
     document.querySelectorAll("[data-wb-moment]").forEach((input) => {
       input.addEventListener("input", (event) => {
         const [indexText, field] = String(event.target.dataset.wbMoment || "").split(":");
@@ -3868,6 +3929,14 @@
         if (!Number.isFinite(index) || !wb.fuelRows[index] || (field !== "gallons" && field !== "minutes")) return;
         if (index === 4 && field === "minutes") return;
         wb.fuelRows[index][field] = event.target.value;
+        syncWeightBalanceComputedDom();
+      });
+    });
+    document.querySelectorAll("[data-wb-converter]").forEach((input) => {
+      input.addEventListener("input", (event) => {
+        const field = String(event.target.dataset.wbConverter || "");
+        if (field !== "ratePerHour" && field !== "minutes") return;
+        wb.converter[field] = event.target.value;
         syncWeightBalanceComputedDom();
       });
     });
@@ -10548,6 +10617,8 @@
     const weightBalanceValues = [
       ...wb.momentRows.flatMap((row) => [row.weight, row.arm]),
       ...wb.fuelRows.flatMap((row) => [row.gallons, row.minutes]),
+      wb.converter.ratePerHour,
+      wb.converter.minutes,
     ];
     return [...headerValues, ...legValues, ...radioValues, ...tocTodValues, ...footerValues, ...weightBalanceValues].some((value) => String(value || "").trim() !== "");
   }
