@@ -253,7 +253,7 @@ body.kiosk-mode .time-head {
 
 .wb-tables {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(260px, 0.75fr);
+  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.45fr);
   gap: 16px;
   align-items: start;
 }
@@ -284,7 +284,7 @@ body.kiosk-mode .time-head {
 }
 
 .wb-fuel-table {
-  grid-template-columns: minmax(128px, 1fr) minmax(100px, 0.8fr);
+  grid-template-columns: minmax(128px, 1fr) repeat(2, minmax(90px, 0.75fr));
 }
 
 .wb-cell {
@@ -298,12 +298,12 @@ body.kiosk-mode .time-head {
 }
 
 .wb-moment-table .wb-cell:nth-child(4n),
-.wb-fuel-table .wb-cell:nth-child(2n) {
+.wb-fuel-table .wb-cell:nth-child(3n) {
   border-right: 0;
 }
 
 .wb-moment-table .wb-cell:nth-last-child(-n + 4),
-.wb-fuel-table .wb-cell:nth-last-child(-n + 2) {
+.wb-fuel-table .wb-cell:nth-last-child(-n + 3) {
   border-bottom: 0;
 }
 
@@ -4701,7 +4701,7 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   }
 
   .wb-fuel-table {
-    min-width: 360px;
+    min-width: 460px;
   }
 
   .admin-preset-table,
