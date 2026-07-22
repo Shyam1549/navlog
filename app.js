@@ -221,6 +221,7 @@
   function createBlankWeightBalance() {
     return {
       unitsOpen: false,
+      preset: "",
       units: {
         weight: "lbs",
         arm: "in",
@@ -319,6 +320,7 @@
         ...blank.converter,
         ...(source.converter && typeof source.converter === "object" ? source.converter : {}),
       },
+      preset: String(source.preset || ""),
       momentRows: blank.momentRows.map((row, index) => ({
         ...row,
         ...((momentRowsByLabel.get(row.label) || sourceRows[index]) && typeof (momentRowsByLabel.get(row.label) || sourceRows[index]) === "object" ? (momentRowsByLabel.get(row.label) || sourceRows[index]) : {}),
@@ -1765,7 +1767,7 @@
         <section class="topbar centered">
           <div class="top-side">${renderBackButton("back-from-weight-balance", "Back to setup")}</div>
           <div class="top-center">
-            <h1>Weight and Balance</h1>
+            <h1>Navlog</h1>
             <div class="utc-pill" id="utc-clock">UTC ${formatUtcNow()}</div>
           </div>
           <div class="top-side right"></div>
@@ -1950,6 +1952,11 @@
       <section class="setup-card wb-card">
         <div class="wb-head">
           <h2>Weight and Balance</h2>
+          <div class="wb-preset-chips" aria-label="Aircraft preset buttons">
+            ${["C152", "C152LR", "C172", "PA34"].map((preset) => `
+              <button class="wb-preset-chip${wb.preset === preset ? " active" : ""}" type="button" data-wb-preset="${escapeAttr(preset)}">${escapeHtml(preset)}</button>
+            `).join("")}
+          </div>
           <button class="action" id="wb-settings-toggle" type="button">Settings</button>
         </div>
         <div class="wb-settings${wb.unitsOpen ? " open" : ""}" id="wb-settings-panel">
@@ -4001,7 +4008,7 @@
     wireWeightBalancePanel();
   }
 
-  function syncWeightBalanceComputedDom() {
+  function syncWeightBalanceComputedDom(activeNode) {
     const wb = getWeightBalanceState();
     applyWeightBalanceTableMath(wb);
     applyFuelTableMath(wb);
@@ -4009,12 +4016,14 @@
       ["weight", "arm", "moment"].forEach((field) => {
         const node = document.querySelector(`[data-wb-moment="${index}:${field}"]`);
         if (!node) return;
+        if (node === activeNode) return;
         node.value = field === "moment" ? getMomentValue(row) : (row[field] || "");
       });
     });
     wb.fuelRows.forEach((row, index) => {
       ["gallons", "minutes"].forEach((field) => {
         const node = document.querySelector(`[data-wb-fuel="${index}:${field}"]`);
+        if (node === activeNode) return;
         if (node) node.value = getFuelDisplayValue(wb.fuelRows, index, field);
       });
     });
@@ -4023,10 +4032,10 @@
   }
 
   function wireWeightBalancePanel() {
-    const wb = getWeightBalanceState();
     const settingsToggle = document.getElementById("wb-settings-toggle");
     if (settingsToggle) {
       settingsToggle.addEventListener("click", () => {
+        const wb = getWeightBalanceState();
         wb.unitsOpen = !wb.unitsOpen;
         render();
       });
@@ -4034,6 +4043,7 @@
     const weightUnitSelect = document.getElementById("wb-weight-unit");
     if (weightUnitSelect) {
       weightUnitSelect.addEventListener("change", (event) => {
+        const wb = getWeightBalanceState();
         wb.units.weight = event.target.value === "kg" ? "kg" : "lbs";
         render();
       });
@@ -4041,6 +4051,7 @@
     const armUnitSelect = document.getElementById("wb-arm-unit");
     if (armUnitSelect) {
       armUnitSelect.addEventListener("change", (event) => {
+        const wb = getWeightBalanceState();
         wb.units.arm = event.target.value === "cm" ? "cm" : "in";
         render();
       });
@@ -4048,37 +4059,48 @@
     const fuelUnitSelect = document.getElementById("wb-fuel-unit");
     if (fuelUnitSelect) {
       fuelUnitSelect.addEventListener("change", (event) => {
+        const wb = getWeightBalanceState();
         wb.units.fuel = event.target.value === "l" ? "l" : "gal";
         render();
       });
     }
+    document.querySelectorAll("[data-wb-preset]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        const wb = getWeightBalanceState();
+        wb.preset = String(event.currentTarget.dataset.wbPreset || "");
+        render();
+      });
+    });
     document.querySelectorAll("[data-wb-moment]").forEach((input) => {
       input.addEventListener("input", (event) => {
+        const wb = getWeightBalanceState();
         const [indexText, field] = String(event.target.dataset.wbMoment || "").split(":");
         const index = Number(indexText);
         if (!Number.isFinite(index) || !wb.momentRows[index] || (field !== "weight" && field !== "arm" && field !== "moment")) return;
         if (index === 7 && field === "weight") return;
         wb.momentRows[index][field] = event.target.value;
         applyMomentRowMath(wb.momentRows[index], field);
-        syncWeightBalanceComputedDom();
+        syncWeightBalanceComputedDom(event.target);
       });
     });
     document.querySelectorAll("[data-wb-fuel]").forEach((input) => {
       input.addEventListener("input", (event) => {
+        const wb = getWeightBalanceState();
         const [indexText, field] = String(event.target.dataset.wbFuel || "").split(":");
         const index = Number(indexText);
         if (!Number.isFinite(index) || !wb.fuelRows[index] || (field !== "gallons" && field !== "minutes")) return;
         if (isFuelCellReadOnly(index, field)) return;
         wb.fuelRows[index][field] = event.target.value;
-        syncWeightBalanceComputedDom();
+        syncWeightBalanceComputedDom(event.target);
       });
     });
     document.querySelectorAll("[data-wb-converter]").forEach((input) => {
       input.addEventListener("input", (event) => {
+        const wb = getWeightBalanceState();
         const field = String(event.target.dataset.wbConverter || "");
         if (field !== "ratePerHour" && field !== "minutes") return;
         wb.converter[field] = event.target.value;
-        syncWeightBalanceComputedDom();
+        syncWeightBalanceComputedDom(event.target);
       });
     });
   }

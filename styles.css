@@ -215,10 +215,12 @@ body.kiosk-mode .time-head {
 }
 
 .wb-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1.5px solid rgba(46, 41, 35, 0.14);
 }
 
 .wb-head h2 {
@@ -226,6 +228,36 @@ body.kiosk-mode .time-head {
   font-size: 1rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.wb-head .action {
+  justify-self: end;
+}
+
+.wb-preset-chips {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wb-preset-chip {
+  min-height: 30px;
+  border: 1.5px solid rgba(46, 41, 35, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #274f5d;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.wb-preset-chip:hover,
+.wb-preset-chip.active {
+  border-color: rgba(39, 79, 93, 0.44);
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .wb-settings {
@@ -353,14 +385,9 @@ body.kiosk-mode .time-head {
 
 .wb-converter {
   display: grid;
-  gap: 12px;
-  margin-top: 2px;
-  padding: 14px;
-  border: 1.5px solid rgba(46, 41, 35, 0.14);
-  border-radius: 8px;
-  background:
-    linear-gradient(135deg, rgba(245, 248, 238, 0.78), rgba(233, 243, 246, 0.66)),
-    rgba(255, 255, 255, 0.54);
+  gap: 10px;
+  margin-top: 0;
+  padding-top: 2px;
 }
 
 .wb-converter-head {
@@ -389,23 +416,23 @@ body.kiosk-mode .time-head {
 .wb-converter-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
-  gap: 10px;
+  gap: 8px;
   align-items: stretch;
 }
 
 .wb-converter-field {
   gap: 6px;
-  padding: 10px;
+  padding: 8px;
   border: 1.5px solid rgba(46, 41, 35, 0.12);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
+  background: transparent;
 }
 
 .wb-converter-field input {
-  min-height: 46px;
+  min-height: 42px;
   border-radius: 8px;
   text-align: center;
-  font-size: 1.14rem;
+  font-size: 1.04rem;
   font-weight: 700;
   color: #1f3540;
 }
@@ -419,7 +446,7 @@ body.kiosk-mode .time-head {
 
 .wb-converter-result {
   border-color: rgba(39, 79, 93, 0.28);
-  background: rgba(232, 244, 246, 0.8);
+  background: transparent;
 }
 
 .wb-converter-mark {
@@ -4777,6 +4804,20 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   .wb-converter-head {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .wb-head {
+    grid-template-columns: 1fr;
+    justify-items: start;
+  }
+
+  .wb-head .action,
+  .wb-preset-chips {
+    justify-self: start;
+  }
+
+  .wb-preset-chips {
+    justify-content: flex-start;
   }
 
   .wb-converter-mark {
