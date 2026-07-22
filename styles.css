@@ -209,6 +209,7 @@ body.kiosk-mode .time-head {
 }
 .setup-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 16px; align-items: end; }
 
+.wb-toolbar,
 .wb-card {
   display: grid;
   gap: 14px;
@@ -219,8 +220,6 @@ body.kiosk-mode .time-head {
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 12px;
-  padding-bottom: 10px;
-  border-bottom: 1.5px solid rgba(46, 41, 35, 0.14);
 }
 
 .wb-head h2 {
@@ -260,18 +259,18 @@ body.kiosk-mode .time-head {
   background: rgba(255, 255, 255, 0.95);
 }
 
-.wb-settings {
+.wb-settings-card {
   display: none;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  padding: 12px;
-  border: 1.5px solid rgba(46, 41, 35, 0.14);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.42);
 }
 
-.wb-settings.open {
+.wb-settings-card.open {
+  display: block;
+}
+
+.wb-settings {
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .wb-settings select {
@@ -316,7 +315,7 @@ body.kiosk-mode .time-head {
 }
 
 .wb-fuel-table {
-  grid-template-columns: minmax(128px, 1fr) repeat(2, minmax(90px, 0.75fr));
+  grid-template-columns: minmax(150px, 1fr) minmax(110px, 0.75fr);
 }
 
 .wb-cell {
@@ -330,12 +329,12 @@ body.kiosk-mode .time-head {
 }
 
 .wb-moment-table .wb-cell:nth-child(4n),
-.wb-fuel-table .wb-cell:nth-child(3n) {
+.wb-fuel-table .wb-cell:nth-child(2n) {
   border-right: 0;
 }
 
 .wb-moment-table .wb-cell:nth-last-child(-n + 4),
-.wb-fuel-table .wb-cell:nth-last-child(-n + 3) {
+.wb-fuel-table .wb-cell:nth-last-child(-n + 2) {
   border-bottom: 0;
 }
 
@@ -386,7 +385,7 @@ body.kiosk-mode .time-head {
 .wb-converter {
   display: grid;
   gap: 10px;
-  margin-top: 0;
+  margin-top: 14px;
   padding-top: 2px;
 }
 
@@ -457,6 +456,13 @@ body.kiosk-mode .time-head {
   color: #274f5d;
   font-size: 1.1rem;
   font-weight: 800;
+}
+
+.wb-caution {
+  margin: 6px 0 0;
+  color: #6a4430;
+  font-size: 0.82rem;
+  line-height: 1.35;
 }
 .setup-field { display: grid; gap: 8px; }
 .setup-field span { color: var(--muted); text-transform: uppercase; font-size: 0.84rem; }
@@ -4833,7 +4839,7 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   }
 
   .wb-fuel-table {
-    min-width: 460px;
+    min-width: 360px;
   }
 
   .admin-preset-table,
