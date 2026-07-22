@@ -135,6 +135,9 @@ body.kiosk-mode .time-head {
 }
 
 .setup-card { margin-top: 18px; margin-bottom: 16px; padding: 20px; }
+.wb-page .wb-toolbar {
+  margin-top: 8px;
+}
 .additional-info-page {
   margin-top: 18px;
   margin-bottom: 16px;
@@ -209,6 +212,25 @@ body.kiosk-mode .time-head {
 }
 .setup-grid { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 16px; align-items: end; }
 
+.wb-launch-content {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+}
+
+.wb-launch-content h2 {
+  margin: 0;
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wb-launch-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .wb-toolbar,
 .wb-card {
   display: grid;
@@ -259,18 +281,16 @@ body.kiosk-mode .time-head {
   background: rgba(255, 255, 255, 0.95);
 }
 
-.wb-settings-card {
-  display: none;
-}
-
-.wb-settings-card.open {
-  display: block;
-}
-
 .wb-settings {
-  display: grid;
+  display: none;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+  padding-top: 12px;
+  border-top: 1.5px solid rgba(46, 41, 35, 0.14);
+}
+
+.wb-settings.open {
+  display: grid;
 }
 
 .wb-settings select {
@@ -292,7 +312,7 @@ body.kiosk-mode .time-head {
 .wb-table-wrap {
   min-width: 0;
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 
 .wb-table-wrap h3 {
@@ -385,7 +405,7 @@ body.kiosk-mode .time-head {
 .wb-converter {
   display: grid;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 28px;
   padding-top: 2px;
 }
 
@@ -459,10 +479,25 @@ body.kiosk-mode .time-head {
 }
 
 .wb-caution {
-  margin: 6px 0 0;
+  margin: 10px 0 0;
   color: #6a4430;
   font-size: 0.82rem;
   line-height: 1.35;
+}
+
+.wb-summary {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #274f5d;
+  font-size: 0.84rem;
+  text-transform: uppercase;
+}
+
+.wb-summary strong {
+  margin-left: 6px;
+  color: #1f3540;
 }
 .setup-field { display: grid; gap: 8px; }
 .setup-field span { color: var(--muted); text-transform: uppercase; font-size: 0.84rem; }

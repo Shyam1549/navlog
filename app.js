@@ -146,6 +146,7 @@
     },
     meta: {
       hasOpenedSheet: false,
+      hasOpenedWeightBalance: false,
       usingPresetRoute: false,
       lastNonDocView: "setup",
       docBackView: "",
@@ -274,7 +275,7 @@
         minutes: "",
       },
       momentRows: [
-        { label: "Basic", weight: "", arm: "", moment: "" },
+        { label: "Standard Empty Mass", weight: "", arm: "", moment: "" },
         { label: "Fuel", weight: "", arm: "", moment: "" },
         { label: "Front Row", weight: "", arm: "", moment: "" },
         { label: "Rear Row", weight: "", arm: "", moment: "" },
@@ -286,9 +287,10 @@
       ],
       fuelRows: [
         { label: "Taxi", gallons: "", minutes: "" },
-        { label: "En-route", gallons: "", minutes: "" },
+        { label: "Trip", gallons: "", minutes: "" },
         { label: "Alternate", gallons: "", minutes: "" },
         { label: "Hold", gallons: "", minutes: "" },
+        { label: "Reserve", gallons: "", minutes: "" },
         { label: "Fuel Required", gallons: "", minutes: "" },
         { label: "Fuel On Board", gallons: "", minutes: "" },
         { label: "Expected Fuel On Landing", gallons: "", minutes: "" },
@@ -334,16 +336,20 @@
     const sourceRows = Array.isArray(source.momentRows) ? source.momentRows : [];
     const sourceFuelRows = Array.isArray(source.fuelRows) ? source.fuelRows : [];
     const labelAliases = {
+      "Basic": "Standard Empty Mass",
       "Take Off Weight": "TAKE OFF WEIGHT",
       "Fuel Burn": "Trip Fuel",
       "Landing Weight": "LANDING WEIGHT",
     };
     const usesLegacyFuelRows = sourceFuelRows.some((row) => String(row && row.label ? row.label : "") === "Total Time");
     const fuelLabelAliases = usesLegacyFuelRows ? {
+      "En-route": "Trip",
       "Total Time": "Fuel Required",
       "Fuel Required": "Fuel On Board",
       "Fuel On Board": "Expected Fuel On Landing",
-    } : {};
+    } : {
+      "En-route": "Trip",
+    };
     const sourceMomentRowsHaveLabels = sourceRows.some((row) => String(row && row.label ? row.label : "").trim() !== "");
     const momentRowsByLabel = new Map(sourceRows.map((row) => {
       const label = String(row && row.label ? row.label : "");
@@ -1737,6 +1743,7 @@
   function renderSetupScreen() {
     const presetStatus = getPresetStatusMarkup();
     const showResume = shouldShowResumeButton();
+    const showWeightBalanceResume = shouldShowWeightBalanceResumeButton();
     const welcomeBehaviourNotice = state.meta.showWelcomeBehaviourNotice
       ? '<p class="welcome-behaviour-note">Welcome to Navlog. Please read "Navlog Behaviours" in the User Manual before proceeding.</p>'
       : "";
@@ -1774,9 +1781,12 @@
           </div>
         </section>
         <section class="setup-card wb-launch-card">
-          <div class="wb-head">
+          <div class="wb-launch-content">
             <h2>Weight and Balance</h2>
-            <button class="action primary" id="open-weight-balance" type="button">Open</button>
+            <div class="wb-launch-actions">
+              <button class="action primary" id="open-weight-balance" type="button">Open new sheet</button>
+              ${showWeightBalanceResume ? `<button class="action" id="resume-weight-balance" type="button">Resume current sheet</button>` : ""}
+            </div>
           </div>
         </section>
         ${renderFrontFooter()}
@@ -1842,20 +1852,82 @@
     return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
   }
 
+  function convertNumericText(value, factor) {
+    const numeric = num(value);
+    if (numeric == null) return String(value ?? "");
+    return formatWeightBalanceComputed(numeric * factor);
+  }
+
+  function getWeightConversionFactor(fromUnit, toUnit) {
+    if (fromUnit === toUnit) return 1;
+    if (fromUnit === "lbs" && toUnit === "kg") return 0.45359237;
+    if (fromUnit === "kg" && toUnit === "lbs") return 1 / 0.45359237;
+    return 1;
+  }
+
+  function getArmConversionFactor(fromUnit, toUnit) {
+    if (fromUnit === toUnit) return 1;
+    if (fromUnit === "in" && toUnit === "cm") return 2.54;
+    if (fromUnit === "cm" && toUnit === "in") return 1 / 2.54;
+    return 1;
+  }
+
+  function getFuelConversionFactor(fromUnit, toUnit) {
+    if (fromUnit === toUnit) return 1;
+    if (fromUnit === "gal" && toUnit === "l") return 3.785411784;
+    if (fromUnit === "l" && toUnit === "gal") return 1 / 3.785411784;
+    return 1;
+  }
+
+  function convertWeightBalanceWeightUnit(wb, toUnit) {
+    const fromUnit = wb.units.weight === "kg" ? "kg" : "lbs";
+    if (fromUnit === toUnit) return;
+    const factor = getWeightConversionFactor(fromUnit, toUnit);
+    wb.momentRows.forEach((row) => {
+      row.weight = convertNumericText(row.weight, factor);
+      row.moment = "";
+    });
+    wb.units.weight = toUnit;
+    applyWeightBalanceTableMath(wb);
+  }
+
+  function convertWeightBalanceArmUnit(wb, toUnit) {
+    const fromUnit = wb.units.arm === "cm" ? "cm" : "in";
+    if (fromUnit === toUnit) return;
+    const factor = getArmConversionFactor(fromUnit, toUnit);
+    wb.momentRows.forEach((row) => {
+      row.arm = convertNumericText(row.arm, factor);
+      row.moment = "";
+    });
+    wb.units.arm = toUnit;
+    applyWeightBalanceTableMath(wb);
+  }
+
+  function convertWeightBalanceFuelUnit(wb, toUnit) {
+    const fromUnit = wb.units.fuel === "l" ? "l" : "gal";
+    if (fromUnit === toUnit) return;
+    const factor = getFuelConversionFactor(fromUnit, toUnit);
+    wb.fuelRows.forEach((row) => {
+      row.gallons = convertNumericText(row.gallons, factor);
+    });
+    wb.converter.ratePerHour = convertNumericText(wb.converter.ratePerHour, factor);
+    wb.units.fuel = toUnit;
+    applyFuelTableMath(wb);
+  }
+
   function getMomentValue(row) {
     const weight = num(row && row.weight);
     const arm = num(row && row.arm);
-    const moment = num(row && row.moment);
-    const momentText = String(row && row.moment != null ? row.moment : "").trim();
-    if (moment != null && momentText !== "") return String(row.moment);
     if (weight == null || arm == null) return "";
     return formatWeightBalanceComputed(weight * arm);
   }
 
   function getFuelInputTotal(fuelRows, field) {
     const rows = Array.isArray(fuelRows) ? fuelRows : [];
+    const requiredIndex = rows.findIndex((row) => row && row.label === "Fuel Required");
+    const inputRows = requiredIndex >= 0 ? rows.slice(0, requiredIndex) : rows;
     let hasValue = false;
-    const total = rows.slice(0, 4).reduce((sum, row) => {
+    const total = inputRows.reduce((sum, row) => {
       const value = num(row && row[field]);
       if (value == null) return sum;
       hasValue = true;
@@ -1870,7 +1942,8 @@
 
   function getExpectedFuelOnLanding(fuelRows) {
     const rows = Array.isArray(fuelRows) ? fuelRows : [];
-    const fuelOnBoard = num(rows[5] && rows[5].gallons);
+    const fuelOnBoardRow = rows.find((row) => row && row.label === "Fuel On Board");
+    const fuelOnBoard = num(fuelOnBoardRow && fuelOnBoardRow.gallons);
     const required = num(getFuelRequiredFuel(rows));
     if (fuelOnBoard == null || required == null) return "";
     return formatWeightBalanceComputed(fuelOnBoard - required);
@@ -1879,21 +1952,21 @@
   function getFuelDisplayValue(fuelRows, index, field) {
     const row = Array.isArray(fuelRows) ? fuelRows[index] : null;
     if (field === "gallons") {
-      if (index === 4) return getFuelRequiredFuel(fuelRows);
-      if (index === 6) return getExpectedFuelOnLanding(fuelRows);
+      if (row && row.label === "Fuel Required") return getFuelRequiredFuel(fuelRows);
+      if (row && row.label === "Expected Fuel On Landing") return getExpectedFuelOnLanding(fuelRows);
       return row && row.gallons != null ? row.gallons : "";
     }
     return "";
   }
 
   function isFuelCellReadOnly(index, field) {
-    if (field === "gallons") return index === 4 || index === 6;
+    const rows = getWeightBalanceState().fuelRows;
+    const row = rows[index];
+    if (field === "gallons") return row && (row.label === "Fuel Required" || row.label === "Expected Fuel On Landing");
     return true;
   }
 
   function getMomentNumericValue(row) {
-    const moment = num(row && row.moment);
-    if (moment != null) return moment;
     const weight = num(row && row.weight);
     const arm = num(row && row.arm);
     return weight != null && arm != null ? weight * arm : null;
@@ -1908,6 +1981,26 @@
     row.arm = hasWeight && weight !== 0 && hasMoment ? formatWeightBalanceComputed(moment / weight) : "";
   }
 
+  function getWeightBalanceSummary(wb) {
+    const rows = wb && Array.isArray(wb.momentRows) ? wb.momentRows : [];
+    const takeOffIndex = rows.findIndex((row) => row && row.label === "TAKE OFF WEIGHT");
+    const sourceRows = takeOffIndex >= 0 ? rows.slice(0, takeOffIndex) : rows;
+    const totals = sourceRows.reduce((sum, row) => {
+      const weight = num(row && row.weight);
+      const moment = getMomentNumericValue(row);
+      return {
+        weight: weight == null ? sum.weight : sum.weight + weight,
+        moment: moment == null ? sum.moment : sum.moment + moment,
+        hasWeight: sum.hasWeight || weight != null,
+        hasMoment: sum.hasMoment || moment != null,
+      };
+    }, { weight: 0, moment: 0, hasWeight: false, hasMoment: false });
+    return {
+      momentThousands: totals.hasMoment ? formatWeightBalanceComputed(totals.moment / 1000) : "",
+      cg: totals.hasWeight && totals.hasMoment && totals.weight !== 0 ? formatWeightBalanceComputed(totals.moment / totals.weight) : "",
+    };
+  }
+
   function applyMomentRowMath(row, changedField) {
     const changedValue = String(row && row[changedField] != null ? row[changedField] : "").trim();
     if ((changedField === "weight" || changedField === "arm") && !changedValue) {
@@ -1920,23 +2013,14 @@
     }
     const weight = num(row && row.weight);
     const arm = num(row && row.arm);
-    const moment = num(row && row.moment);
-    if (changedField === "moment") {
-      if (moment == null) return;
-      if (arm != null && arm !== 0) row.weight = formatWeightBalanceComputed(moment / arm);
-      else if (weight != null && weight !== 0) row.arm = formatWeightBalanceComputed(moment / weight);
-      return;
-    }
     if (changedField === "weight") {
       if (weight == null) return;
       if (arm != null) row.moment = formatWeightBalanceComputed(weight * arm);
-      else if (moment != null && weight !== 0) row.arm = formatWeightBalanceComputed(moment / weight);
       return;
     }
     if (changedField === "arm") {
       if (arm == null) return;
       if (weight != null) row.moment = formatWeightBalanceComputed(weight * arm);
-      else if (moment != null && arm !== 0) row.weight = formatWeightBalanceComputed(moment / arm);
     }
   }
 
@@ -1976,30 +2060,11 @@
 
   function applyFuelTableMath(wb) {
     if (!wb || !Array.isArray(wb.fuelRows)) return;
-    if (wb.fuelRows[4]) {
-      wb.fuelRows[4].gallons = getFuelRequiredFuel(wb.fuelRows);
-      wb.fuelRows[4].minutes = "";
-    }
-    if (wb.fuelRows[5]) wb.fuelRows[5].minutes = "";
-    if (wb.fuelRows[6]) {
-      wb.fuelRows[6].gallons = getExpectedFuelOnLanding(wb.fuelRows);
-      wb.fuelRows[6].minutes = "";
-    }
-  }
-
-  function clearComputedFuelCell(wb, index, field) {
-    if (!wb || field !== "gallons") return false;
-    if (index === 4) {
-      wb.fuelRows.slice(0, 4).forEach((row) => {
-        row.gallons = "";
-      });
-      return true;
-    }
-    if (index === 6 && wb.fuelRows[5]) {
-      wb.fuelRows[5].gallons = "";
-      return true;
-    }
-    return false;
+    wb.fuelRows.forEach((row) => {
+      if (row.label === "Fuel Required") row.gallons = getFuelRequiredFuel(wb.fuelRows);
+      if (row.label === "Expected Fuel On Landing") row.gallons = getExpectedFuelOnLanding(wb.fuelRows);
+      row.minutes = "";
+    });
   }
 
   function getFuelUnitShort(units) {
@@ -2026,7 +2091,7 @@
     wb.units.fuel = "gal";
     const rowsByLabel = new Map(wb.momentRows.map((row) => [row.label, row]));
     const rowValues = {
-      Basic: { weight: preset.basicWeight, arm: preset.basicArm },
+      "Standard Empty Mass": { weight: preset.basicWeight, arm: preset.basicArm },
       Fuel: { arm: preset.fuelArm },
       "Front Row": { arm: preset.frontRowArm },
       "Rear Row": { arm: preset.rearRowArm },
@@ -2045,6 +2110,13 @@
     applyFuelTableMath(wb);
   }
 
+  function clearWeightBalanceValues(wb) {
+    if (!wb) return;
+    const unitsOpen = Boolean(wb.unitsOpen);
+    const blank = createBlankWeightBalance();
+    Object.assign(wb, blank, { unitsOpen });
+  }
+
   function renderWeightBalancePanel() {
     const wb = getWeightBalanceState();
     applyWeightBalanceTableMath(wb);
@@ -2057,6 +2129,7 @@
     const fuelUnitLabel = getFuelUnitLabel({ fuel: fuelUnit });
     const momentUnit = getWeightBalanceMomentUnit({ weight: weightUnit, arm: armUnit });
     const converter = wb.converter || {};
+    const summary = getWeightBalanceSummary(wb);
     return `
       <section class="setup-card wb-toolbar">
         <div class="wb-head">
@@ -2068,9 +2141,7 @@
           </div>
           <button class="action" id="wb-settings-toggle" type="button">Settings</button>
         </div>
-      </section>
-      <section class="setup-card wb-settings-card${wb.unitsOpen ? " open" : ""}" id="wb-settings-panel">
-        <div class="wb-settings">
+        <div class="wb-settings${wb.unitsOpen ? " open" : ""}" id="wb-settings-panel">
           <label class="setup-field">
             <span>Weight Unit</span>
             <select id="wb-weight-unit">
@@ -2124,12 +2195,17 @@
                   <div class="wb-cell wb-label-cell">${escapeHtml(row.label)}</div>
                   <div class="wb-cell"><input data-wb-moment="${index}:weight" value="${escapeAttr(row.weight)}" inputmode="decimal" ${computedRowReadOnly} /></div>
                   <div class="wb-cell"><input data-wb-moment="${index}:arm" value="${escapeAttr(row.arm)}" inputmode="decimal" ${computedRowReadOnly} /></div>
-                  <div class="wb-cell"><input data-wb-moment="${index}:moment" value="${escapeAttr(getMomentValue(row))}" inputmode="decimal" ${computedRowReadOnly} /></div>
+                  <div class="wb-cell"><input data-wb-moment="${index}:moment" value="${escapeAttr(getMomentValue(row))}" inputmode="decimal" readonly tabindex="-1" /></div>
                 `;
               }).join("")}
             </div>
+            <div class="wb-summary">
+              <div>Moment / 1000 <strong data-wb-summary="momentThousands">${escapeHtml(summary.momentThousands || "-")}</strong></div>
+              <div>CG <strong data-wb-summary="cg">${escapeHtml(summary.cg || "-")}</strong></div>
+            </div>
           </section>
         </div>
+        <p class="wb-caution">Please use your specific aircraft's empty weight and moment arm from the official W&amp;B record, the values in the presets will NOT accurately reflect your aircrafts weight and balance.</p>
         <section class="wb-converter">
           <div class="wb-converter-head">
             <h3>Time to Fuel Converter</h3>
@@ -2154,7 +2230,6 @@
             </label>
           </div>
         </section>
-        <p class="wb-caution">Please use your specific aircraft's empty weight and moment arm from the official W&amp;B record, the values in the presets will NOT accurately reflect your aircrafts weight and balance.</p>
       </section>
     `;
   }
@@ -4099,6 +4174,18 @@
     const openWeightBalanceButton = document.getElementById("open-weight-balance");
     if (openWeightBalanceButton) {
       openWeightBalanceButton.addEventListener("click", () => {
+        if (hasMeaningfulWeightBalanceData() && !window.confirm("Are you sure you want to lose current weight and balance progress and make a new sheet?")) return;
+        state.navlog.weightBalance = createBlankWeightBalance();
+        state.meta.hasOpenedWeightBalance = true;
+        state.meta.lastNonDocView = "setup";
+        state.view = "weight-balance";
+        render();
+      });
+    }
+    const resumeWeightBalanceButton = document.getElementById("resume-weight-balance");
+    if (resumeWeightBalanceButton) {
+      resumeWeightBalanceButton.addEventListener("click", () => {
+        state.meta.hasOpenedWeightBalance = true;
         state.meta.lastNonDocView = "setup";
         state.view = "weight-balance";
         render();
@@ -4138,6 +4225,11 @@
     });
     const converterFuelNode = document.querySelector('[data-wb-converter="fuel"]');
     if (converterFuelNode) converterFuelNode.value = getFuelConverterFuel(wb.converter);
+    const summary = getWeightBalanceSummary(wb);
+    const momentSummaryNode = document.querySelector('[data-wb-summary="momentThousands"]');
+    if (momentSummaryNode) momentSummaryNode.textContent = summary.momentThousands || "-";
+    const cgSummaryNode = document.querySelector('[data-wb-summary="cg"]');
+    if (cgSummaryNode) cgSummaryNode.textContent = summary.cg || "-";
   }
 
   function wireWeightBalancePanel() {
@@ -4153,7 +4245,8 @@
     if (weightUnitSelect) {
       weightUnitSelect.addEventListener("change", (event) => {
         const wb = getWeightBalanceState();
-        wb.units.weight = event.target.value === "kg" ? "kg" : "lbs";
+        state.meta.hasOpenedWeightBalance = true;
+        convertWeightBalanceWeightUnit(wb, event.target.value === "kg" ? "kg" : "lbs");
         render();
       });
     }
@@ -4161,7 +4254,8 @@
     if (armUnitSelect) {
       armUnitSelect.addEventListener("change", (event) => {
         const wb = getWeightBalanceState();
-        wb.units.arm = event.target.value === "cm" ? "cm" : "in";
+        state.meta.hasOpenedWeightBalance = true;
+        convertWeightBalanceArmUnit(wb, event.target.value === "cm" ? "cm" : "in");
         render();
       });
     }
@@ -4169,14 +4263,18 @@
     if (fuelUnitSelect) {
       fuelUnitSelect.addEventListener("change", (event) => {
         const wb = getWeightBalanceState();
-        wb.units.fuel = event.target.value === "l" ? "l" : "gal";
+        state.meta.hasOpenedWeightBalance = true;
+        convertWeightBalanceFuelUnit(wb, event.target.value === "l" ? "l" : "gal");
         render();
       });
     }
     document.querySelectorAll("[data-wb-preset]").forEach((button) => {
       button.addEventListener("click", (event) => {
         const wb = getWeightBalanceState();
-        applyWeightBalancePreset(wb, String(event.currentTarget.dataset.wbPreset || ""));
+        state.meta.hasOpenedWeightBalance = true;
+        const preset = String(event.currentTarget.dataset.wbPreset || "");
+        if (wb.preset === preset) clearWeightBalanceValues(wb);
+        else applyWeightBalancePreset(wb, preset);
         render();
       });
     });
@@ -4187,27 +4285,21 @@
         const index = Number(indexText);
         if (!Number.isFinite(index) || !wb.momentRows[index] || (field !== "weight" && field !== "arm" && field !== "moment")) return;
         if (wb.momentRows[index].label === "TAKE OFF WEIGHT" || wb.momentRows[index].label === "LANDING WEIGHT") return;
+        if (field === "moment") return;
+        state.meta.hasOpenedWeightBalance = true;
         wb.momentRows[index][field] = event.target.value;
         applyMomentRowMath(wb.momentRows[index], field);
         syncWeightBalanceComputedDom(event.target);
       });
     });
     document.querySelectorAll("[data-wb-fuel]").forEach((input) => {
-      input.addEventListener("keydown", (event) => {
-        if (event.key !== "Backspace" && event.key !== "Delete") return;
-        const wb = getWeightBalanceState();
-        const [indexText, field] = String(event.target.dataset.wbFuel || "").split(":");
-        const index = Number(indexText);
-        if (!isFuelCellReadOnly(index, field) || !clearComputedFuelCell(wb, index, field)) return;
-        event.preventDefault();
-        syncWeightBalanceComputedDom();
-      });
       input.addEventListener("input", (event) => {
         const wb = getWeightBalanceState();
         const [indexText, field] = String(event.target.dataset.wbFuel || "").split(":");
         const index = Number(indexText);
         if (!Number.isFinite(index) || !wb.fuelRows[index] || (field !== "gallons" && field !== "minutes")) return;
         if (isFuelCellReadOnly(index, field)) return;
+        state.meta.hasOpenedWeightBalance = true;
         wb.fuelRows[index][field] = event.target.value;
         syncWeightBalanceComputedDom(event.target);
       });
@@ -4217,6 +4309,7 @@
         const wb = getWeightBalanceState();
         const field = String(event.target.dataset.wbConverter || "");
         if (field !== "ratePerHour" && field !== "minutes") return;
+        state.meta.hasOpenedWeightBalance = true;
         wb.converter[field] = event.target.value;
         syncWeightBalanceComputedDom(event.target);
       });
@@ -10887,6 +10980,10 @@
     return state.meta.hasOpenedSheet && hasMeaningfulSheetData();
   }
 
+  function shouldShowWeightBalanceResumeButton() {
+    return state.meta.hasOpenedWeightBalance && hasMeaningfulWeightBalanceData();
+  }
+
   function hasMeaningfulSheetData() {
     const header = state.navlog.header;
     const headerValues = [header.aircraft, header.rpCNo, header.gphPph, header.date, header.timeUtc];
@@ -10894,14 +10991,19 @@
     const radioValues = state.navlog.radios.flatMap((row) => [row.location, row.cptAtis, row.depAap, row.twr, row.gnd, row.fss, row.remarks]);
     const tocTodValues = [state.navlog.tocTod.roc, state.navlog.tocTod.rod, state.navlog.tocTod.tocDistance, state.navlog.tocTod.tocTime, state.navlog.tocTod.todDistance, state.navlog.tocTod.todTime];
     const footerValues = [state.navlog.depAtisCode, state.navlog.destinAtisCode];
+    return [...headerValues, ...legValues, ...radioValues, ...tocTodValues, ...footerValues].some((value) => String(value || "").trim() !== "");
+  }
+
+  function hasMeaningfulWeightBalanceData() {
     const wb = normalizeWeightBalancePayload(state.navlog.weightBalance);
     const weightBalanceValues = [
       ...wb.momentRows.flatMap((row) => [row.weight, row.arm]),
       ...wb.fuelRows.flatMap((row) => [row.gallons, row.minutes]),
       wb.converter.ratePerHour,
       wb.converter.minutes,
+      wb.preset,
     ];
-    return [...headerValues, ...legValues, ...radioValues, ...tocTodValues, ...footerValues, ...weightBalanceValues].some((value) => String(value || "").trim() !== "");
+    return weightBalanceValues.some((value) => String(value || "").trim() !== "");
   }
 
   function getMappedAircraftFromRpc(rpcValue) {
