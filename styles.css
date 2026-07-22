@@ -231,6 +231,14 @@ body.kiosk-mode .time-head {
   flex-wrap: wrap;
 }
 
+.entry-page .wb-launch-card {
+  margin-top: 0;
+}
+
+.entry-page .navlog-launch-card {
+  margin-bottom: 0;
+}
+
 .wb-toolbar,
 .wb-card {
   display: grid;
@@ -287,6 +295,10 @@ body.kiosk-mode .time-head {
   gap: 12px;
   padding-top: 12px;
   border-top: 1.5px solid rgba(46, 41, 35, 0.14);
+}
+
+.wb-toolbar .wb-settings:not(.open) {
+  display: none !important;
 }
 
 .wb-settings.open {
@@ -2653,6 +2665,11 @@ body.kiosk-mode .nav-table {
   padding: 8px 14px 14px;
 }
 
+.nav-table input::placeholder,
+.sheet-header input::placeholder {
+  font-weight: 400 !important;
+}
+
 .date-input-wrap {
   width: 100%;
   display: grid;
@@ -2716,6 +2733,17 @@ body.kiosk-mode .date-picker-proxy::-webkit-datetime-edit-year-field {
 
 body.kiosk-mode .date-picker-proxy::-webkit-date-and-time-value {
   text-align: left;
+}
+
+body.kiosk-mode input[data-header="date"],
+body.kiosk-mode .date-input-wrap input[data-header="date"],
+body.kiosk-mode .date-input-wrap input[data-header="date"]::-webkit-date-and-time-value,
+body.kiosk-phone-mode input[data-header="date"],
+body.kiosk-phone-mode .date-input-wrap input[data-header="date"],
+body.kiosk-phone-mode .date-input-wrap input[data-header="date"]::-webkit-date-and-time-value {
+  color: #000 !important;
+  -webkit-text-fill-color: #000 !important;
+  opacity: 1 !important;
 }
 
 @media (pointer: fine) {
@@ -4849,16 +4877,17 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
 
   .wb-head {
     grid-template-columns: 1fr;
-    justify-items: start;
+    justify-items: center;
+    text-align: center;
   }
 
   .wb-head .action,
   .wb-preset-chips {
-    justify-self: start;
+    justify-self: center;
   }
 
   .wb-preset-chips {
-    justify-content: flex-start;
+    justify-content: center;
   }
 
   .wb-converter-mark {
@@ -5091,7 +5120,19 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
 
   body.ipad-desktop-scale:not(.kiosk-mode) .nav-table .field input,
   body.ipad-desktop-scale:not(.kiosk-mode) .nav-table .route-main input {
+    font-size: 1.14rem;
+    font-weight: 500;
+  }
+
+  body.ipad-desktop-scale .nav-table .head-cell {
     font-size: 1.08rem;
+  }
+
+  body.ipad-desktop-scale.kiosk-mode .nav-table .field input,
+  body.ipad-desktop-scale.kiosk-mode .nav-table .route-main input,
+  body.ipad-desktop-scale.kiosk-mode .nav-table .stack-field input {
+    font-size: 1.14rem;
+    font-weight: 500;
   }
 
   body.ipad-desktop-scale:not(.kiosk-mode) .nav-table .route-inline-hint,
@@ -5512,9 +5553,26 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
 .pdf-export .leg-row > div,
 .pdf-export .head-cell.group,
 .pdf-export .head-cell.split-top,
-.pdf-export .stack-field input:first-child {
+.pdf-export .stack-field input:first-child,
+.pdf-export .stack-field .pdf-input-value:first-child {
   border-width: 1.5px !important;
   border-color: var(--line) !important;
+}
+
+.pdf-export .stack-field .pdf-input-value:first-child {
+  border-bottom-style: solid !important;
+}
+
+.pdf-export .tcw-top-head,
+.pdf-export .tcv-head {
+  border-bottom: 1.5px solid var(--line) !important;
+}
+
+.pdf-export .aircraft-box .pdf-input-value,
+.pdf-export .rpc-box .pdf-input-value {
+  justify-content: flex-start !important;
+  text-align: left !important;
+  padding-left: 14px !important;
 }
 
 .pdf-export input::placeholder { color: transparent !important; }
@@ -5637,7 +5695,7 @@ body.ipad-desktop-scale .leg-row {
 body.ipad-desktop-scale .field input {
   min-height: 86px !important;
   height: 86px !important;
-  font-size: 1.14rem !important;
+  font-size: 1.2rem !important;
   font-weight: 400 !important;
   padding: 12px 10px !important;
 }
@@ -5645,7 +5703,7 @@ body.ipad-desktop-scale .field input {
 body.ipad-desktop-scale .stack-field input {
   min-height: 43px !important;
   height: 43px !important;
-  font-size: 1.02rem !important;
+  font-size: 1.12rem !important;
   font-weight: 400 !important;
   padding: 8px 8px !important;
 }
@@ -5977,6 +6035,12 @@ body.ipad-desktop-scale .route-dtg {
 
 .ee-time-head {
   gap: 2px;
+}
+
+@media (pointer: coarse), (max-width: 1180px) {
+  .chart-zoom-btn {
+    display: none;
+  }
 }
 
 @media (max-width: 720px) {

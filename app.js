@@ -996,6 +996,9 @@
     const code = normalizeCode(activateMode && !chartId ? airportCode : (airportCode || state.meta.chartAirportQuery || state.meta.chartPreview.airportCode));
     const charts = getChartsForAirportCode(code);
     const selected = charts.find((chart) => chart.id === String(chartId || "")) || charts[0] || null;
+    const activateReturnScroll = options.returnScroll || (activateMode && isIpadDevice() && !isIphoneDevice()
+      ? captureActivateScrollPosition()
+      : null);
     state.meta.chartPreview = {
       open: true,
       airportCode: code,
@@ -1003,12 +1006,50 @@
       viewer: Object.prototype.hasOwnProperty.call(options, "viewer") ? Boolean(options.viewer) : Boolean(chartId),
       activateMode,
     };
+    if (activateReturnScroll) state.meta.chartPreviewReturnScroll = activateReturnScroll;
     render();
+    if (activateMode && isIpadDevice() && !isIphoneDevice() && !options.skipInitialWarp) {
+      requestAnimationFrame(() => requestAnimationFrame(scrollActivateToBottom));
+    }
   }
 
   function closeChartPreviewModal() {
+    const restoreScroll = state.meta && state.meta.chartPreview && state.meta.chartPreview.activateMode
+      ? state.meta.chartPreviewReturnScroll
+      : null;
     state.meta.chartPreview = createEmptyChartPreviewState();
+    state.meta.chartPreviewReturnScroll = null;
     render();
+    if (restoreScroll) requestAnimationFrame(() => requestAnimationFrame(() => restoreActivateScrollPosition(restoreScroll)));
+  }
+
+  function getActivateScrollNode() {
+    return document.querySelector(".ipad-kiosk-wrap") || document.querySelector(".sheet-wrap") || document.scrollingElement || document.documentElement;
+  }
+
+  function captureActivateScrollPosition() {
+    const node = getActivateScrollNode();
+    return {
+      nodeTop: node ? Number(node.scrollTop || 0) : 0,
+      nodeLeft: node ? Number(node.scrollLeft || 0) : 0,
+      windowX: Number(window.scrollX || 0),
+      windowY: Number(window.scrollY || 0),
+    };
+  }
+
+  function scrollActivateToBottom() {
+    const node = getActivateScrollNode();
+    if (node) node.scrollTop = node.scrollHeight;
+    window.scrollTo(window.scrollX || 0, document.documentElement.scrollHeight || document.body.scrollHeight || 0);
+  }
+
+  function restoreActivateScrollPosition(position) {
+    const node = getActivateScrollNode();
+    if (node) {
+      node.scrollTop = Number(position && position.nodeTop) || 0;
+      node.scrollLeft = Number(position && position.nodeLeft) || 0;
+    }
+    window.scrollTo(Number(position && position.windowX) || 0, Number(position && position.windowY) || 0);
   }
 
   function openChartInNewTab(chart) {
@@ -1762,7 +1803,7 @@
             ${maintenanceBanner}
           </div>
         </section>
-        <section class="setup-card">
+        <section class="setup-card navlog-launch-card">
           <div class="setup-grid">
             <label class="setup-field">
               <span>Departure</span>
@@ -2200,8 +2241,8 @@
               }).join("")}
             </div>
             <div class="wb-summary">
-              <div>Moment / 1000 <strong data-wb-summary="momentThousands">${escapeHtml(summary.momentThousands || "-")}</strong></div>
-              <div>CG <strong data-wb-summary="cg">${escapeHtml(summary.cg || "-")}</strong></div>
+              <div>Moment/1000: <strong data-wb-summary="momentThousands">${escapeHtml(summary.momentThousands || "-")}</strong></div>
+              <div>CG: <strong data-wb-summary="cg">${escapeHtml(summary.cg || "-")}</strong></div>
             </div>
           </section>
         </div>
@@ -3428,7 +3469,7 @@
             <p class="cockpit-info-recommend">Recommended: Turn on Guided Access and DND.</p>
             <ul class="cockpit-info-list">
               <li>Press and hold Actual Time (AT) for 2 seconds to auto-enter current ZULU time.</li>
-              <li>To use keyboard entry for interactive fields (AT, ATIS, LOCATION), tap the respective table cell 3 times.</li>
+              <li>To use keyboard entry for interactive fields, tap the respective table cell 3 times.</li>
               <li>For inbound/outbound time estimate, press and hold the route for 2 seconds.</li>
             </ul>
             <label class="settings-item cockpit-gps-toggle">
@@ -4340,7 +4381,21 @@
       state.meta.usingPresetRoute = false;
       render();
     });
-    document.getElementById("save-sheet").addEventListener("click", downloadPdf);
+    document.getElementById("save-sheet").addEventListener("click", () => {
+      const pdfTab = window.html2canvas && window.jspdf
+        ? window.open("about:blank", "_blank")
+        : null;
+      if (pdfTab && pdfTab.document) {
+        try {
+          pdfTab.opener = null;
+        } catch {
+          // ignore browsers that do not allow assigning opener
+        }
+        pdfTab.document.title = "Preparing navlog PDF...";
+        pdfTab.document.body.innerHTML = "<p style=\"font-family: system-ui, sans-serif; padding: 24px;\">Preparing navlog PDF...</p>";
+      }
+      downloadPdf(pdfTab);
+    });
     const activateButton = document.getElementById("activate-ipad-mode");
     if (activateButton) {
       activateButton.addEventListener("click", () => {
@@ -4762,6 +4817,14 @@
     const activateChartsButton = document.getElementById("open-activate-charts");
     if (activateChartsButton) {
       activateChartsButton.addEventListener("click", () => {
+        if (isIpadDevice() && !isIphoneDevice()) {
+          const returnScroll = captureActivateScrollPosition();
+          scrollActivateToBottom();
+          requestAnimationFrame(() => {
+            openChartPreviewModal("", "", { activateMode: true, viewer: false, returnScroll, skipInitialWarp: true });
+          });
+          return;
+        }
         openChartPreviewModal("", "", { activateMode: true, viewer: false });
       });
     }
@@ -7488,7 +7551,9 @@
       chartScroll.addEventListener("wheel", (event) => {
         if (!event.ctrlKey && !event.metaKey) return;
         event.preventDefault();
-        setChartPreviewZoom(getChartPreviewZoom() + (event.deltaY < 0 ? 0.12 : -0.12));
+        const rawDelta = Math.abs(Number(event.deltaY) || 0);
+        const zoomStep = Math.min(0.045, Math.max(0.012, rawDelta * 0.0015));
+        setChartPreviewZoom(getChartPreviewZoom() + (event.deltaY < 0 ? zoomStep : -zoomStep));
       }, { passive: false });
     }
     if (searchButton) searchButton.addEventListener("click", submitSearch);
@@ -11336,7 +11401,7 @@
     syncRouteProgressMarkerDisplay();
   }
 
-  async function downloadPdf() {
+  async function downloadPdf(preopenedTab = null) {
     const sheet = document.querySelector(".sheet");
     const saveButton = document.getElementById("save-sheet");
     if (!sheet) return;
@@ -11504,7 +11569,15 @@
         pdf.addImage(image, "PNG", 0, 0, canvas.width, canvas.height);
       }
       const pdfUrl = pdf.output("bloburl");
-      const opened = window.open(pdfUrl, "_blank", "noopener,noreferrer");
+      let opened = preopenedTab;
+      if (opened) {
+        try {
+          opened.location.href = pdfUrl;
+        } catch {
+          opened = null;
+        }
+      }
+      if (!opened) opened = window.open(pdfUrl, "_blank", "noopener,noreferrer");
       if (!opened) {
         const link = document.createElement("a");
         link.href = pdfUrl;
@@ -11512,6 +11585,7 @@
         link.rel = "noopener noreferrer";
         link.click();
       }
+      if (opened && typeof opened.focus === "function") opened.focus();
     } finally {
       if (saveButton) saveButton.textContent = "Save";
     }
