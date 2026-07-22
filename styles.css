@@ -353,11 +353,24 @@ body.kiosk-mode .time-head {
 
 .wb-converter {
   display: grid;
-  gap: 10px;
-  padding-top: 2px;
+  gap: 12px;
+  margin-top: 2px;
+  padding: 14px;
+  border: 1.5px solid rgba(46, 41, 35, 0.14);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(245, 248, 238, 0.78), rgba(233, 243, 246, 0.66)),
+    rgba(255, 255, 255, 0.54);
 }
 
-.wb-converter h3 {
+.wb-converter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wb-converter-head h3 {
   margin: 0;
   font-size: 0.88rem;
   text-transform: uppercase;
@@ -365,14 +378,58 @@ body.kiosk-mode .time-head {
   color: #274f5d;
 }
 
+.wb-converter-head p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 .wb-converter-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  padding: 12px;
-  border: 1.5px solid rgba(46, 41, 35, 0.14);
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.wb-converter-field {
+  gap: 6px;
+  padding: 10px;
+  border: 1.5px solid rgba(46, 41, 35, 0.12);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.42);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.wb-converter-field input {
+  min-height: 46px;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 1.14rem;
+  font-weight: 700;
+  color: #1f3540;
+}
+
+.wb-converter-field small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.wb-converter-result {
+  border-color: rgba(39, 79, 93, 0.28);
+  background: rgba(232, 244, 246, 0.8);
+}
+
+.wb-converter-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  color: #274f5d;
+  font-size: 1.1rem;
+  font-weight: 800;
 }
 .setup-field { display: grid; gap: 8px; }
 .setup-field span { color: var(--muted); text-transform: uppercase; font-size: 0.84rem; }
@@ -4715,6 +4772,15 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   .wb-tables,
   .wb-converter-grid {
     grid-template-columns: 1fr;
+  }
+
+  .wb-converter-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .wb-converter-mark {
+    min-height: 12px;
   }
 
   .wb-table-wrap {
