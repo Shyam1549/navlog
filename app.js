@@ -79,6 +79,8 @@
       content: {
         manualHtml: "",
         privacyHtml: "",
+        manualUpdatedAt: "",
+        privacyUpdatedAt: "",
         announcements: [],
         maintenanceMode: false,
         maintenanceText: "under maintenance: service is undergoing maintenance. do not trust.",
@@ -294,6 +296,7 @@
         { label: "Fuel Required", gallons: "", minutes: "" },
         { label: "Fuel On Board", gallons: "", minutes: "" },
         { label: "Expected Fuel On Landing", gallons: "", minutes: "" },
+        { label: "Remarks", gallons: "", minutes: "" },
       ],
     };
   }
@@ -813,8 +816,15 @@
     const key = String(source || "").trim().toLowerCase();
     if (key === "waypoints") return getWaypointSuggestionOptions();
     if (key === "airports") return state.catalog.airports.map((airport) => normalizeCode(airport && airport.code)).filter(Boolean).sort();
+    if (key === "setup-airports") {
+      return Array.from(new Set([
+        ...collectPresetAirportCodes(),
+        ...state.catalog.airports.map((airport) => normalizeCode(airport && airport.code)).filter(Boolean),
+      ])).sort();
+    }
     if (key === "preset-airports") return collectPresetAirportCodes();
     if (key === "rpc") return getRpcRegistryOptions().map((entry) => entry.registration);
+    if (key === "aircraft-types") return getAircraftTypeSuggestionOptions();
     if (key === "chart-airports") {
       return Array.from(new Set((state.catalog.charts || []).map((chart) => normalizeCode(chart && chart.airportCode)).filter(Boolean))).sort();
     }
@@ -1348,6 +1358,19 @@
       .sort((left, right) => left.registration.localeCompare(right.registration));
   }
 
+  function getAircraftTypeSuggestionOptions() {
+    const byType = new Map();
+    getRpcRegistryOptions().forEach((entry) => {
+      const aircraftType = String(entry.aircraftType || "").trim();
+      if (!aircraftType) return;
+      const current = byType.get(aircraftType) || { value: aircraftType, label: aircraftType, search: "" };
+      current.search = Array.from(new Set(`${current.search} ${entry.registration}`.trim().split(/\s+/).filter(Boolean))).join(" ");
+      byType.set(aircraftType, current);
+    });
+    return Array.from(byType.values())
+      .sort((left, right) => left.value.localeCompare(right.value));
+  }
+
   function renderAdminWaypointPickerMenu() {
     return getWaypointPickerOptions()
       .map((entry) => {
@@ -1793,7 +1816,7 @@
       : "";
     return `
       <div class="ui-scale">
-      <main class="entry-page${isIpadDevice() ? " ipad-home-page" : ""}">
+      <main class="entry-page home-page${isIpadDevice() ? " ipad-home-page" : ""}">
         <section class="entry-hero entry-hero-centered">
           <div class="top-center">
             <h1>Navlog</h1>
@@ -1807,12 +1830,12 @@
           <div class="setup-grid">
             <label class="setup-field">
               <span>Departure</span>
-              <input id="setup-departure" value="${escapeAttr(state.navlog.setup.departure)}" />
+              <input id="setup-departure" value="${escapeAttr(state.navlog.setup.departure)}" data-suggest-source="setup-airports" data-suggest-open-on-focus="true" />
             </label>
             <button class="swap-button" id="swap-airports" type="button" aria-label="Swap departure and destination">&#8646;</button>
             <label class="setup-field">
               <span>Destination</span>
-              <input id="setup-destination" value="${escapeAttr(state.navlog.setup.destination)}" />
+              <input id="setup-destination" value="${escapeAttr(state.navlog.setup.destination)}" data-suggest-source="setup-airports" data-suggest-open-on-focus="true" />
             </label>
           </div>
           <div id="preset-status-slot">${presetStatus}</div>
@@ -1949,6 +1972,7 @@
     if (fromUnit === toUnit) return;
     const factor = getFuelConversionFactor(fromUnit, toUnit);
     wb.fuelRows.forEach((row) => {
+      if (row.label === "Remarks") return;
       row.gallons = convertNumericText(row.gallons, factor);
     });
     wb.converter.ratePerHour = convertNumericText(wb.converter.ratePerHour, factor);
@@ -1990,6 +2014,15 @@
     return formatWeightBalanceComputed(fuelOnBoard - required);
   }
 
+  function getExpectedFuelOnLandingNumber(fuelRows) {
+    const rows = Array.isArray(fuelRows) ? fuelRows : [];
+    const fuelOnBoardRow = rows.find((row) => row && row.label === "Fuel On Board");
+    const fuelOnBoard = num(fuelOnBoardRow && fuelOnBoardRow.gallons);
+    const required = num(getFuelRequiredFuel(rows));
+    if (fuelOnBoard == null || required == null) return null;
+    return fuelOnBoard - required;
+  }
+
   function getFuelDisplayValue(fuelRows, index, field) {
     const row = Array.isArray(fuelRows) ? fuelRows[index] : null;
     if (field === "gallons") {
@@ -2005,6 +2038,15 @@
     const row = rows[index];
     if (field === "gallons") return row && (row.label === "Fuel Required" || row.label === "Expected Fuel On Landing");
     return true;
+  }
+
+  function getFuelRowClass(row) {
+    const classes = ["wb-cell"];
+    if (row && row.label === "Expected Fuel On Landing" && getExpectedFuelOnLandingNumber(getWeightBalanceState().fuelRows) < 0) {
+      classes.push("wb-negative");
+    }
+    if (row && row.label === "Remarks") classes.push("wb-remarks-cell");
+    return classes.join(" ");
   }
 
   function getMomentNumericValue(row) {
@@ -2104,7 +2146,6 @@
     wb.fuelRows.forEach((row) => {
       if (row.label === "Fuel Required") row.gallons = getFuelRequiredFuel(wb.fuelRows);
       if (row.label === "Expected Fuel On Landing") row.gallons = getExpectedFuelOnLanding(wb.fuelRows);
-      row.minutes = "";
     });
   }
 
@@ -2180,7 +2221,10 @@
               <button class="wb-preset-chip${wb.preset === preset ? " active" : ""}" type="button" data-wb-preset="${escapeAttr(preset)}">${escapeHtml(preset)}</button>
             `).join("")}
           </div>
-          <button class="action" id="wb-settings-toggle" type="button">Settings</button>
+          <div class="wb-head-actions">
+            <button class="action primary" id="wb-save-pdf" type="button">Save</button>
+            <button class="action" id="wb-settings-toggle" type="button">Settings</button>
+          </div>
         </div>
         <div class="wb-settings${wb.unitsOpen ? " open" : ""}" id="wb-settings-panel">
           <label class="setup-field">
@@ -2216,9 +2260,10 @@
               ${wb.fuelRows.map((row, index) => {
                 const fuelValue = getFuelDisplayValue(wb.fuelRows, index, "gallons");
                 const fuelReadOnly = isFuelCellReadOnly(index, "gallons") ? 'readonly tabindex="-1"' : "";
+                const inputMode = row.label === "Remarks" ? "text" : "decimal";
                 return `
                   <div class="wb-cell wb-label-cell">${escapeHtml(row.label)}</div>
-                  <div class="wb-cell"><input data-wb-fuel="${index}:gallons" value="${escapeAttr(fuelValue)}" inputmode="decimal" ${fuelReadOnly} /></div>
+                  <div class="${getFuelRowClass(row)}"><input data-wb-fuel="${index}:gallons" value="${escapeAttr(fuelValue)}" inputmode="${inputMode}" ${fuelReadOnly} /></div>
                 `;
               }).join("")}
             </div>
@@ -2669,6 +2714,12 @@
         ? state.admin.rpcRegistryForm.rows
         : [createEmptyRpcRegistryRow()],
     );
+    const waypointDeleteExists = Boolean(normalizeWaypointRecord(waypointRows[0]).name
+      && (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : [])
+        .some((waypoint) => normalizeCode(waypoint && waypoint.name) === normalizeWaypointRecord(waypointRows[0]).name));
+    const rpcDeleteExists = Boolean(normalizeRpcRegistryRecord(rpcRows[0]).registration
+      && (Array.isArray(state.admin.rpcRegistry) ? state.admin.rpcRegistry : [])
+        .some((record) => normalizeCode(record && record.registration) === normalizeRpcRegistryRecord(rpcRows[0]).registration));
     const existingRpcRecords = (Array.isArray(state.admin.rpcRegistry) ? state.admin.rpcRegistry : [])
       .map((record) => normalizeRpcRegistryRecord(record))
       .filter((record) => record.registration)
@@ -2797,7 +2848,7 @@
             </section>
             <div class="entry-actions">
               <button class="action primary" id="admin-waypoint-save">Save</button>
-              <button class="action" id="admin-waypoint-delete">Delete</button>
+              <button class="action" id="admin-waypoint-delete"${waypointDeleteExists ? "" : " disabled"}>Delete</button>
             </div>
           </div>
           <div class="manual-section${panel === "rpc-reg" ? "" : " hidden"}">
@@ -2836,7 +2887,7 @@
             </section>
             <div class="entry-actions">
               <button class="action primary" id="admin-rpc-save">Save</button>
-              <button class="action" id="admin-rpc-delete">Delete</button>
+              <button class="action" id="admin-rpc-delete"${rpcDeleteExists ? "" : " disabled"}>Delete</button>
             </div>
             <section class="admin-record-picker">
               <h4>Existing registrations</h4>
@@ -3106,9 +3157,9 @@
         <section class="sheet-wrap">
           <div class="sheet">
             <section class="sheet-header">
-              ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
+              ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" data-suggest-source="aircraft-types" data-suggest-open-on-focus="true" />`, "aircraft-box")}
               <div class="header-box dark static planning-box">PREFLIGHT PLANNER</div>
-              ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
+              ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" data-suggest-source="rpc" data-suggest-open-on-focus="true" />`, "rpc-box")}
                ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
               ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
               <div class="header-box static navlog-box">NAVIGATION LOG</div>
@@ -3155,9 +3206,9 @@
       ? renderKioskPhoneHeaderSummary(h)
       : `
         <section class="sheet-header">
-          ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" />`, "aircraft-box")}
+          ${renderHeaderInputBox("AIRCRAFT", `<input data-header="aircraft" value="${escapeAttr(h.aircraft)}" data-suggest-source="aircraft-types" data-suggest-open-on-focus="true" />`, "aircraft-box")}
           <div class="header-box dark static planning-box">PREFLIGHT PLANNER</div>
-          ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" />`, "rpc-box")}
+          ${renderHeaderInputBox("RP-C NO.", `<input data-header="rpCNo" value="${escapeAttr(h.rpCNo)}" data-suggest-source="rpc" data-suggest-open-on-focus="true" />`, "rpc-box")}
           ${renderHeaderInputBox("DATE", renderDateHeaderControl(h.date), "date-box")}
           ${renderHeaderInputBox("GPH/PPH", `<input data-header="gphPph" value="${escapeAttr(h.gphPph)}" />`, "gph-box")}
           <div class="header-box static navlog-box">NAVIGATION LOG</div>
@@ -4263,6 +4314,14 @@
         if (node === activeNode) return;
         if (node) node.value = getFuelDisplayValue(wb.fuelRows, index, field);
       });
+      const fuelNode = document.querySelector(`[data-wb-fuel="${index}:gallons"]`);
+      const fuelCell = fuelNode ? fuelNode.closest(".wb-cell") : null;
+      if (fuelCell) {
+        fuelCell.classList.toggle(
+          "wb-negative",
+          row.label === "Expected Fuel On Landing" && getExpectedFuelOnLandingNumber(wb.fuelRows) < 0,
+        );
+      }
     });
     const converterFuelNode = document.querySelector('[data-wb-converter="fuel"]');
     if (converterFuelNode) converterFuelNode.value = getFuelConverterFuel(wb.converter);
@@ -4274,6 +4333,24 @@
   }
 
   function wireWeightBalancePanel() {
+    const savePdfButton = document.getElementById("wb-save-pdf");
+    if (savePdfButton) {
+      savePdfButton.addEventListener("click", () => {
+        const pdfTab = window.html2canvas && window.jspdf
+          ? window.open("about:blank", "_blank")
+          : null;
+        if (pdfTab && pdfTab.document) {
+          try {
+            pdfTab.opener = null;
+          } catch {
+            // ignore browsers that do not allow assigning opener
+          }
+          pdfTab.document.title = "Preparing weight and balance PDF...";
+          pdfTab.document.body.innerHTML = "<p style=\"font-family: system-ui, sans-serif; padding: 24px;\">Preparing weight and balance PDF...</p>";
+        }
+        downloadWeightBalancePdf(pdfTab);
+      });
+    }
     const settingsToggle = document.getElementById("wb-settings-toggle");
     if (settingsToggle) {
       settingsToggle.addEventListener("click", () => {
@@ -8525,8 +8602,11 @@
       if (state.admin.selectedRpcRegistration) selectRpcForEditing(state.admin.selectedRpcRegistration);
       else state.admin.rpcRegistryForm = createEmptyRpcRegistryForm();
       const contentMap = {};
+      const contentUpdatedAtMap = {};
       (contentResult.data || []).forEach((row) => {
-        contentMap[String(row.key || "").toLowerCase()] = String(row.body_html || "");
+        const key = String(row.key || "").toLowerCase();
+        contentMap[key] = String(row.body_html || "");
+        contentUpdatedAtMap[key] = String(row.updated_at || "");
       });
       state.catalog.routePresets = state.admin.presets.map((preset) => clonePreset(preset));
       state.catalog.airports = state.admin.airports.map((airport) => ({ ...airport }));
@@ -8535,6 +8615,8 @@
       state.catalog.charts = state.admin.charts.map((record) => ({ ...record }));
       state.catalog.content.manualHtml = contentMap.manual || "";
       state.catalog.content.privacyHtml = contentMap.privacy || "";
+      state.catalog.content.manualUpdatedAt = contentUpdatedAtMap.manual || "";
+      state.catalog.content.privacyUpdatedAt = contentUpdatedAtMap.privacy || "";
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
       state.catalog.content.maintenanceMode = parseMaintenanceModeContent(contentMap.maintenance_mode || "");
       state.catalog.content.maintenanceText = String(contentMap.maintenance_text || state.catalog.content.maintenanceText || "").trim() || "under maintenance: service is undergoing maintenance. do not trust.";
@@ -9156,7 +9238,10 @@
 
   function collectPresetAirportCodes() {
     const seen = new Set();
-    state.admin.presets.forEach((preset) => {
+    [
+      ...(Array.isArray(state.catalog.routePresets) ? state.catalog.routePresets : []),
+      ...(Array.isArray(state.admin.presets) ? state.admin.presets : []),
+    ].forEach((preset) => {
       const dep = normalizeCode(preset.departure);
       const dest = normalizeCode(preset.destination);
       if (dep) seen.add(dep);
@@ -9891,6 +9976,13 @@
         addAliasButton.classList.toggle("active", active);
       }
     });
+    const row = normalizeWaypointRecord(rows[0]);
+    const deleteButton = document.getElementById("admin-waypoint-delete");
+    if (deleteButton) {
+      const exists = Boolean(row.name && (Array.isArray(state.admin.waypoints) ? state.admin.waypoints : [])
+        .some((waypoint) => normalizeCode(waypoint && waypoint.name) === row.name));
+      deleteButton.disabled = !exists;
+    }
   }
 
   function syncAdminRpcFormUi() {
@@ -9907,6 +9999,13 @@
       if (cruiseNode && cruiseNode.value !== String(row.casCruise || "")) cruiseNode.value = String(row.casCruise || "");
       if (gphNode && gphNode.value !== String(row.gph || "")) gphNode.value = String(row.gph || "");
     });
+    const row = normalizeRpcRegistryRecord(rows[0]);
+    const deleteButton = document.getElementById("admin-rpc-delete");
+    if (deleteButton) {
+      const exists = Boolean(row.registration && (Array.isArray(state.admin.rpcRegistry) ? state.admin.rpcRegistry : [])
+        .some((record) => normalizeCode(record && record.registration) === row.registration));
+      deleteButton.disabled = !exists;
+    }
   }
 
   function isAnnouncementActive(item, nowMs) {
@@ -11401,6 +11500,81 @@
     syncRouteProgressMarkerDisplay();
   }
 
+  async function downloadWeightBalancePdf(preopenedTab = null) {
+    const saveButton = document.getElementById("wb-save-pdf");
+    const tables = document.querySelector(".wb-tables");
+    if (!tables) return;
+    if (!window.html2canvas || !window.jspdf) {
+      if (saveButton) saveButton.textContent = "Print...";
+      try {
+        window.print();
+      } finally {
+        if (saveButton) {
+          setTimeout(() => {
+            saveButton.textContent = "Save";
+          }, 180);
+        }
+      }
+      return;
+    }
+    if (saveButton) saveButton.textContent = "Saving...";
+    const exportRoot = document.createElement("section");
+    exportRoot.className = "wb-pdf-export-root";
+    const title = document.createElement("h1");
+    title.textContent = "Weight and Balance";
+    const clone = tables.cloneNode(true);
+    clone.querySelectorAll("input").forEach((input) => {
+      const span = document.createElement("span");
+      span.className = "wb-pdf-input-value";
+      span.textContent = input.value || input.getAttribute("value") || "";
+      input.replaceWith(span);
+    });
+    exportRoot.appendChild(title);
+    exportRoot.appendChild(clone);
+    document.body.appendChild(exportRoot);
+    try {
+      const canvas = await window.html2canvas(exportRoot, {
+        scale: 2,
+        backgroundColor: "#f7f2e7",
+        useCORS: true,
+        windowWidth: 1120,
+        windowHeight: 760,
+      });
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pageWidth = 210;
+      const marginLeft = 8;
+      const marginTop = 8;
+      const marginRight = 8;
+      const maxWidth = pageWidth - marginLeft - marginRight;
+      const imageAspect = canvas.height / canvas.width;
+      const imageWidth = maxWidth;
+      const imageHeight = imageWidth * imageAspect;
+      pdf.addImage(canvas.toDataURL("image/png"), "PNG", marginLeft, marginTop, imageWidth, imageHeight);
+      const pdfUrl = pdf.output("bloburl");
+      let opened = preopenedTab;
+      if (opened) {
+        try {
+          opened.location.href = pdfUrl;
+        } catch {
+          opened = null;
+        }
+      }
+      if (!opened) opened = window.open(pdfUrl, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        const link = document.createElement("a");
+        link.href = pdfUrl;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.click();
+      }
+      if (opened && typeof opened.focus === "function") opened.focus();
+    } finally {
+      exportRoot.remove();
+      if (saveButton) saveButton.textContent = "Save";
+    }
+  }
+
   async function downloadPdf(preopenedTab = null) {
     const sheet = document.querySelector(".sheet");
     const saveButton = document.getElementById("save-sheet");
@@ -11635,12 +11809,22 @@
     return `${year.slice(-2)}/${month}/${day}`;
   }
 
-  function formatPolicyDate() {
-    const now = new Date();
-    const year = now.getUTCFullYear();
-    const month = String(now.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(now.getUTCDate()).padStart(2, "0");
+  function formatContentUpdatedDate(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    const date = new Date(raw);
+    if (Number.isNaN(date.getTime())) {
+      const isoLike = raw.match(/\d{4}-\d{2}-\d{2}/);
+      return isoLike ? isoLike[0] : raw;
+    }
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
     return `${year}-${month}-${day}`;
+  }
+
+  function formatPolicyDate() {
+    return formatContentUpdatedDate(state.catalog.content.privacyUpdatedAt) || "2026-07-16";
   }
 
   function renderDateHeaderControl(displayDateValue) {
@@ -11665,6 +11849,8 @@
         content: {
           manualHtml: String(state.catalog.content.manualHtml || ""),
           privacyHtml: String(state.catalog.content.privacyHtml || ""),
+          manualUpdatedAt: String(state.catalog.content.manualUpdatedAt || ""),
+          privacyUpdatedAt: String(state.catalog.content.privacyUpdatedAt || ""),
           announcements: Array.isArray(state.catalog.content.announcements) ? state.catalog.content.announcements.map((item) => ({ ...item })) : [],
           maintenanceMode: Boolean(state.catalog.content.maintenanceMode),
           maintenanceText: String(state.catalog.content.maintenanceText || ""),
@@ -11705,6 +11891,8 @@
         const content = parsed.content;
         if (typeof content.manualHtml === "string") state.catalog.content.manualHtml = content.manualHtml;
         if (typeof content.privacyHtml === "string") state.catalog.content.privacyHtml = content.privacyHtml;
+        if (typeof content.manualUpdatedAt === "string") state.catalog.content.manualUpdatedAt = content.manualUpdatedAt;
+        if (typeof content.privacyUpdatedAt === "string") state.catalog.content.privacyUpdatedAt = content.privacyUpdatedAt;
         if (Array.isArray(content.announcements)) state.catalog.content.announcements = content.announcements.map((item) => ({ ...item }));
         if (typeof content.maintenanceMode === "boolean") state.catalog.content.maintenanceMode = content.maintenanceMode;
         if (typeof content.maintenanceText === "string" && content.maintenanceText.trim()) state.catalog.content.maintenanceText = content.maintenanceText.trim();
@@ -11776,8 +11964,11 @@
         gph: row.gph,
       }));
       const contentMap = {};
+      const contentUpdatedAtMap = {};
       (contentResult.data || []).forEach((row) => {
-        contentMap[String(row.key || "").toLowerCase()] = String(row.body_html || "");
+        const key = String(row.key || "").toLowerCase();
+        contentMap[key] = String(row.body_html || "");
+        contentUpdatedAtMap[key] = String(row.updated_at || "");
       });
 
       state.catalog.routePresets = dbPresets.map((preset) => clonePreset(preset));
@@ -11789,6 +11980,8 @@
       }
       if (typeof contentMap.manual === "string") state.catalog.content.manualHtml = contentMap.manual;
       if (typeof contentMap.privacy === "string") state.catalog.content.privacyHtml = contentMap.privacy;
+      state.catalog.content.manualUpdatedAt = contentUpdatedAtMap.manual || "";
+      state.catalog.content.privacyUpdatedAt = contentUpdatedAtMap.privacy || "";
       state.catalog.content.announcements = parseAnnouncementsContent(contentMap.announcements || "");
       state.catalog.content.maintenanceMode = parseMaintenanceModeContent(contentMap.maintenance_mode || "");
       state.catalog.content.maintenanceText = String(contentMap.maintenance_text || state.catalog.content.maintenanceText || "").trim() || "under maintenance: service is undergoing maintenance. do not trust.";

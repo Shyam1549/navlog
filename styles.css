@@ -259,6 +259,14 @@ body.kiosk-mode .time-head {
   letter-spacing: 0.04em;
 }
 
+.wb-head-actions {
+  justify-self: end;
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .wb-head .action {
   justify-self: end;
 }
@@ -414,6 +422,16 @@ body.kiosk-mode .time-head {
   color: #1f3540;
 }
 
+.wb-cell.wb-negative input,
+.wb-cell.wb-negative .wb-pdf-input-value {
+  color: #b71c1c;
+  -webkit-text-fill-color: #b71c1c;
+}
+
+.wb-remarks-cell input {
+  text-align: left;
+}
+
 .wb-converter {
   display: grid;
   gap: 10px;
@@ -510,6 +528,52 @@ body.kiosk-mode .time-head {
 .wb-summary strong {
   margin-left: 6px;
   color: #1f3540;
+}
+
+.wb-pdf-export-root {
+  position: fixed;
+  left: -10000px;
+  top: 0;
+  width: 1120px;
+  min-height: 760px;
+  padding: 28px;
+  background: #f7f2e7;
+  color: #1f3540;
+  box-sizing: border-box;
+}
+
+.wb-pdf-export-root h1 {
+  margin: 0 0 18px;
+  font-size: 1.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wb-pdf-export-root .wb-tables {
+  align-items: start;
+}
+
+.wb-pdf-export-root .wb-table-wrap {
+  overflow: visible;
+}
+
+.wb-pdf-input-value {
+  width: 100%;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  box-sizing: border-box;
+  font-size: 0.94rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.wb-remarks-cell .wb-pdf-input-value {
+  justify-content: flex-start;
+  text-align: left;
 }
 .setup-field { display: grid; gap: 8px; }
 .setup-field span { color: var(--muted); text-transform: uppercase; font-size: 0.84rem; }
@@ -608,6 +672,24 @@ body.kiosk-mode .time-head {
 .ipad-home-page {
   height: calc(100vh - 36px);
   min-height: 0;
+}
+
+.ipad-home-page .entry-actions,
+body.iphone-ui .home-page .entry-actions,
+.ipad-home-page .wb-launch-actions,
+body.iphone-ui .home-page .wb-launch-actions {
+  justify-content: center;
+}
+
+.ipad-home-page .wb-launch-content,
+body.iphone-ui .home-page .wb-launch-content {
+  justify-items: center;
+  text-align: center;
+}
+
+.ipad-home-page .setup-card .setup-grid .swap-button,
+body.iphone-ui .home-page .setup-card .setup-grid .swap-button {
+  justify-self: center;
 }
 
 @supports (height: 100dvh) {
@@ -3450,7 +3532,8 @@ body.kiosk-phone-mode .route-progress-dot {
   overflow-wrap: anywhere;
   pointer-events: none;
   color: rgba(24, 22, 18, 0.48);
-  font-size: 1.1rem;
+  font-size: clamp(0.78rem, 1.6vw, 0.94rem);
+  font-weight: 400;
   line-height: 1.1;
   padding: 0 4px;
 }
@@ -3589,6 +3672,7 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   pointer-events: none;
   white-space: normal;
   padding: 0 4px;
+  font-weight: 400;
 }
 
 .announcement-overlay {
@@ -4830,11 +4914,13 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
     width: auto;
   }
 
-  .entry-page .setup-card .setup-grid .swap-button {
+  .ipad-home-page .setup-card .setup-grid .swap-button,
+  body.iphone-ui .home-page .setup-card .setup-grid .swap-button {
     justify-self: center;
   }
 
-  .entry-page .setup-card .entry-actions {
+  .ipad-home-page .setup-card .entry-actions,
+  body.iphone-ui .home-page .setup-card .entry-actions {
     justify-content: center;
   }
 
@@ -4882,6 +4968,7 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
   }
 
   .wb-head .action,
+  .wb-head-actions,
   .wb-preset-chips {
     justify-self: center;
   }
@@ -5110,11 +5197,11 @@ body.kiosk-mode select:not(.kiosk-editable-on-tap) {
 }
 
 @media (min-width: 768px) and (max-width: 1180px) {
-  .entry-page .setup-card .entry-actions {
+  .ipad-home-page .setup-card .entry-actions {
     justify-content: center;
   }
 
-  .entry-page .setup-card .swap-button {
+  .ipad-home-page .setup-card .swap-button {
     margin: 0 auto;
   }
 
@@ -5680,12 +5767,12 @@ body.ipad-desktop-scale .header-box.static.navlog-box {
 }
 
 body.ipad-desktop-scale .head-cell.group {
-  font-size: 1.08rem !important;
+  font-size: 1.24rem !important;
 }
 
 body.ipad-desktop-scale .head-cell.sub,
 body.ipad-desktop-scale .head-cell.tall {
-  font-size: 1.08rem !important;
+  font-size: 1.24rem !important;
 }
 
 body.ipad-desktop-scale .leg-row {
@@ -5695,7 +5782,7 @@ body.ipad-desktop-scale .leg-row {
 body.ipad-desktop-scale .field input {
   min-height: 86px !important;
   height: 86px !important;
-  font-size: 1.2rem !important;
+  font-size: 1.38rem !important;
   font-weight: 400 !important;
   padding: 12px 10px !important;
 }
@@ -5703,7 +5790,7 @@ body.ipad-desktop-scale .field input {
 body.ipad-desktop-scale .stack-field input {
   min-height: 43px !important;
   height: 43px !important;
-  font-size: 1.12rem !important;
+  font-size: 1.29rem !important;
   font-weight: 400 !important;
   padding: 8px 8px !important;
 }
@@ -5728,13 +5815,13 @@ body.ipad-desktop-scale .radio-row {
 
 body.ipad-desktop-scale .radio-row input {
   min-height: 78px !important;
-  font-size: 1rem !important;
+  font-size: 1.15rem !important;
   padding: 12px 10px !important;
 }
 
 body.ipad-desktop-scale .radio-head > div {
   min-height: 56px !important;
-  font-size: 1.04rem !important;
+  font-size: 1.2rem !important;
 }
 
 body.ipad-desktop-scale .atis-cell {
@@ -5743,20 +5830,52 @@ body.ipad-desktop-scale .atis-cell {
 
 body.ipad-desktop-scale .atis-cell span {
   min-height: 52px !important;
-  font-size: 0.96rem !important;
+  font-size: 1.1rem !important;
 }
 
 body.ipad-desktop-scale .atis-cell input {
   min-height: 50px !important;
-  font-size: 1rem !important;
+  font-size: 1.15rem !important;
   padding: 12px 10px !important;
 }
 
 body.ipad-desktop-scale .route-inline-hint {
   right: 30px !important;
   font-size: 0.9rem !important;
+  font-weight: 400 !important;
   line-height: 1.05 !important;
   padding: 0 2px !important;
+}
+
+body.ipad-desktop-scale .field.first-alt.show-alt-hint .alt-departure-hint {
+  right: 30px !important;
+  font-size: 0.9rem !important;
+  font-weight: 400 !important;
+  line-height: 1.05 !important;
+  padding: 0 2px !important;
+}
+
+body.ipad-desktop-scale .toc-tod-title,
+body.ipad-desktop-scale .toc-tod-card input,
+body.ipad-desktop-scale .toc-value-wrap input {
+  font-size: 1.15rem !important;
+  font-weight: 400 !important;
+}
+
+body.ipad-desktop-scale.pdf-export .pdf-input-value,
+body.ipad-desktop-scale.pdf-export .radio-row .pdf-input-value,
+body.ipad-desktop-scale.pdf-export .atis-cell .pdf-input-value,
+body.ipad-desktop-scale.pdf-export .toc-tod-card .pdf-input-value {
+  font-size: 1.15rem !important;
+  font-weight: 400 !important;
+}
+
+body.ipad-desktop-scale.pdf-export .field .pdf-input-value {
+  font-size: 1.38rem !important;
+}
+
+body.ipad-desktop-scale.pdf-export .stack-field .pdf-input-value {
+  font-size: 1.29rem !important;
 }
 
 body.ipad-desktop-scale .route-dtg {
