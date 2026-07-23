@@ -506,7 +506,7 @@ body.kiosk-mode .time-head {
 }
 
 .wb-converter-result {
-  border-color: rgba(39, 79, 93, 0.28);
+  border-color: rgba(46, 41, 35, 0.12);
   background: transparent;
 }
 
@@ -528,18 +528,34 @@ body.kiosk-mode .time-head {
 }
 
 .wb-summary {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  flex-wrap: wrap;
   color: #274f5d;
   font-size: 0.84rem;
   text-transform: uppercase;
 }
 
+.wb-summary > div {
+  display: grid;
+  gap: 4px;
+}
+
+.wb-summary > div:last-child {
+  text-align: right;
+}
+
 .wb-summary strong {
-  margin-left: 6px;
+  margin-left: 0;
   color: #1f3540;
+}
+
+.wb-summary em {
+  font-style: normal;
+}
+
+.wb-empty-metric-cell {
+  background: rgba(46, 41, 35, 0.04);
 }
 
 .wb-chart-section {
@@ -717,7 +733,7 @@ body.kiosk-mode .time-head {
   touch-action: none;
 }
 
-.wb-chart-annotation-stage img {
+.wb-chart-annotation-stage canvas {
   display: block;
   width: 100%;
   height: auto;
@@ -735,7 +751,7 @@ body.kiosk-mode .time-head {
 
 .wb-chart-annotation-layer line {
   stroke: #d71920;
-  stroke-width: 0.7;
+  stroke-width: 5;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
 }

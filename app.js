@@ -23,6 +23,8 @@
       title: "Center of Gravity Moment Envelope",
       alt: "C152 center of gravity moment envelope chart",
       annotationKey: "C152",
+      displayRotation: "left",
+      openRotation: "left",
       pdfRotation: "left",
     },
     C152LR: {
@@ -31,6 +33,8 @@
       title: "Center of Gravity Moment Envelope",
       alt: "C152LR center of gravity moment envelope chart",
       annotationKey: "C152",
+      displayRotation: "left",
+      openRotation: "left",
       pdfRotation: "left",
     },
     C172: {
@@ -54,6 +58,7 @@
       basicWeight: "1104",
       basicArm: "31.5",
       fuelArm: "42",
+      tripFuelArm: "42",
       frontRowArm: "39",
       rearRowArm: "N/A",
       frontBaggageArm: "64",
@@ -64,6 +69,7 @@
       basicWeight: "1104",
       basicArm: "31.5",
       fuelArm: "39.5",
+      tripFuelArm: "39.5",
       frontRowArm: "39",
       rearRowArm: "N/A",
       frontBaggageArm: "64",
@@ -74,6 +80,7 @@
       basicWeight: "1414",
       basicArm: "57.3",
       fuelArm: "48",
+      tripFuelArm: "48",
       frontRowArm: "37",
       rearRowArm: "73",
       frontBaggageArm: "95",
@@ -84,6 +91,7 @@
       basicWeight: "3102",
       basicArm: "86.8",
       fuelArm: "93.6",
+      tripFuelArm: "93.6",
       frontRowArm: "85.5",
       rearRowArm: "155.7",
       frontBaggageArm: "22.5",
@@ -320,9 +328,9 @@
         { label: "Rear Row", weight: "", arm: "", moment: "" },
         { label: "Front Baggage", weight: "", arm: "", moment: "" },
         { label: "Rear Baggage", weight: "", arm: "", moment: "" },
-        { label: "TAKE OFF WEIGHT", weight: "", arm: "", moment: "" },
+        { label: "TAKEOFF METRICS", weight: "", arm: "", moment: "" },
         { label: "Trip Fuel", weight: "", arm: "", moment: "" },
-        { label: "LANDING WEIGHT", weight: "", arm: "", moment: "" },
+        { label: "LANDING METRICS", weight: "", arm: "", moment: "" },
       ],
       fuelRows: [
         { label: "Taxi", gallons: "", minutes: "" },
@@ -377,9 +385,14 @@
     const sourceFuelRows = Array.isArray(source.fuelRows) ? source.fuelRows : [];
     const labelAliases = {
       "Basic": "Standard Empty Mass",
-      "Take Off Weight": "TAKE OFF WEIGHT",
+      "Take Off Weight": "TAKEOFF METRICS",
+      "TAKE OFF WEIGHT": "TAKEOFF METRICS",
+      "Takeoff Weight": "TAKEOFF METRICS",
+      "Takeoff Metrics": "TAKEOFF METRICS",
       "Fuel Burn": "Trip Fuel",
-      "Landing Weight": "LANDING WEIGHT",
+      "Landing Weight": "LANDING METRICS",
+      "LANDING WEIGHT": "LANDING METRICS",
+      "Landing Metrics": "LANDING METRICS",
     };
     const usesLegacyFuelRows = sourceFuelRows.some((row) => String(row && row.label ? row.label : "") === "Total Time");
     const fuelLabelAliases = usesLegacyFuelRows ? {
@@ -2022,6 +2035,8 @@
   }
 
   function getMomentValue(row) {
+    const explicitMoment = num(row && row.moment);
+    if (explicitMoment != null) return String(row.moment);
     const weight = num(row && row.weight);
     const arm = num(row && row.arm);
     if (weight == null || arm == null) return "";
@@ -2109,9 +2124,23 @@
   }
 
   function getMomentNumericValue(row) {
+    const explicitMoment = num(row && row.moment);
+    if (explicitMoment != null) return explicitMoment;
     const weight = num(row && row.weight);
     const arm = num(row && row.arm);
     return weight != null && arm != null ? weight * arm : null;
+  }
+
+  function isTakeoffMetricsRow(row) {
+    return row && row.label === "TAKEOFF METRICS";
+  }
+
+  function isLandingMetricsRow(row) {
+    return row && row.label === "LANDING METRICS";
+  }
+
+  function isWeightBalanceMetricsRow(row) {
+    return isTakeoffMetricsRow(row) || isLandingMetricsRow(row);
   }
 
   function setComputedMomentRow(row, weight, moment) {
@@ -2120,31 +2149,39 @@
     const hasMoment = moment != null;
     row.weight = hasWeight ? formatWeightBalanceComputed(weight) : "";
     row.moment = hasMoment ? formatWeightBalanceComputed(moment) : "";
-    row.arm = hasWeight && weight !== 0 && hasMoment ? formatWeightBalanceComputed(moment / weight) : "";
+    row.arm = "";
+  }
+
+  function getMetricSummary(row) {
+    const weight = num(row && row.weight);
+    const moment = getMomentNumericValue(row);
+    return {
+      momentThousands: moment != null ? formatWeightBalanceComputed(moment / 1000) : "",
+      cg: weight != null && moment != null && weight !== 0 ? formatWeightBalanceComputed(moment / weight) : "",
+    };
   }
 
   function getWeightBalanceSummary(wb) {
     const rows = wb && Array.isArray(wb.momentRows) ? wb.momentRows : [];
-    const takeOffIndex = rows.findIndex((row) => row && row.label === "TAKE OFF WEIGHT");
-    const sourceRows = takeOffIndex >= 0 ? rows.slice(0, takeOffIndex) : rows;
-    const totals = sourceRows.reduce((sum, row) => {
-      const weight = num(row && row.weight);
-      const moment = getMomentNumericValue(row);
-      return {
-        weight: weight == null ? sum.weight : sum.weight + weight,
-        moment: moment == null ? sum.moment : sum.moment + moment,
-        hasWeight: sum.hasWeight || weight != null,
-        hasMoment: sum.hasMoment || moment != null,
-      };
-    }, { weight: 0, moment: 0, hasWeight: false, hasMoment: false });
+    const takeoffRow = rows.find((row) => isTakeoffMetricsRow(row));
+    const landingRow = rows.find((row) => isLandingMetricsRow(row));
     return {
-      momentThousands: totals.hasMoment ? formatWeightBalanceComputed(totals.moment / 1000) : "",
-      cg: totals.hasWeight && totals.hasMoment && totals.weight !== 0 ? formatWeightBalanceComputed(totals.moment / totals.weight) : "",
+      takeoff: getMetricSummary(takeoffRow),
+      landing: getMetricSummary(landingRow),
     };
   }
 
   function applyMomentRowMath(row, changedField) {
     const changedValue = String(row && row[changedField] != null ? row[changedField] : "").trim();
+    if (changedField === "moment") {
+      if (!changedValue || num(row && row.moment) == null) return;
+      const weight = num(row && row.weight);
+      const moment = num(row && row.moment);
+      if (weight != null && weight !== 0 && moment != null && !isWeightBalanceMetricsRow(row)) {
+        row.arm = formatWeightBalanceComputed(moment / weight);
+      }
+      return;
+    }
     if ((changedField === "weight" || changedField === "arm") && !changedValue) {
       row.moment = "";
       return;
@@ -2168,9 +2205,9 @@
 
   function applyWeightBalanceTableMath(wb) {
     if (!wb || !Array.isArray(wb.momentRows)) return;
-    const takeOffIndex = wb.momentRows.findIndex((row) => row && row.label === "TAKE OFF WEIGHT");
+    const takeOffIndex = wb.momentRows.findIndex((row) => isTakeoffMetricsRow(row));
     const tripFuelIndex = wb.momentRows.findIndex((row) => row && row.label === "Trip Fuel");
-    const landingIndex = wb.momentRows.findIndex((row) => row && row.label === "LANDING WEIGHT");
+    const landingIndex = wb.momentRows.findIndex((row) => isLandingMetricsRow(row));
     if (takeOffIndex < 0) return;
     let hasTakeOffWeight = false;
     let hasTakeOffMoment = false;
@@ -2238,6 +2275,7 @@
       "Rear Row": { arm: preset.rearRowArm },
       "Front Baggage": { arm: preset.frontBaggageArm },
       "Rear Baggage": { arm: preset.rearBaggageArm },
+      "Trip Fuel": { arm: preset.tripFuelArm },
     };
     Object.entries(rowValues).forEach(([label, values]) => {
       const row = rowsByLabel.get(label);
@@ -2315,7 +2353,7 @@
     const preset = WEIGHT_BALANCE_PRESETS[presetName];
     if (!wb || !preset) return;
     const rowsByLabel = new Map(wb.momentRows.map((row) => [row.label, row]));
-    ["Standard Empty Mass", "Fuel", "Front Row", "Rear Row", "Front Baggage", "Rear Baggage"].forEach((label) => {
+    ["Standard Empty Mass", "Fuel", "Front Row", "Rear Row", "Front Baggage", "Rear Baggage", "Trip Fuel"].forEach((label) => {
       const row = rowsByLabel.get(label);
       if (!row) return;
       if (label === "Standard Empty Mass") row.weight = "";
@@ -2423,22 +2461,34 @@
               <div class="wb-cell wb-head-cell">Arm <span>${escapeHtml(armUnit === "in" ? "inches" : armUnit)}</span></div>
               <div class="wb-cell wb-head-cell">Moment <span>${escapeHtml(momentUnit)}</span></div>
               ${wb.momentRows.map((row, index) => {
-                const computedRowReadOnly = row.label === "TAKE OFF WEIGHT" || row.label === "LANDING WEIGHT" ? 'readonly tabindex="-1"' : "";
+                const metricsRow = isWeightBalanceMetricsRow(row);
+                const computedCellReadOnly = metricsRow ? 'readonly tabindex="-1"' : "";
                 return `
                   <div class="wb-cell wb-label-cell">${escapeHtml(row.label)}</div>
-                  <div class="wb-cell"><input data-wb-moment="${index}:weight" value="${escapeAttr(row.weight)}" inputmode="decimal" ${computedRowReadOnly} /></div>
-                  <div class="wb-cell"><input data-wb-moment="${index}:arm" value="${escapeAttr(row.arm)}" inputmode="decimal" ${computedRowReadOnly} /></div>
-                  <div class="wb-cell"><input data-wb-moment="${index}:moment" value="${escapeAttr(getMomentValue(row))}" inputmode="decimal" readonly tabindex="-1" /></div>
+                  <div class="wb-cell"><input data-wb-moment="${index}:weight" value="${escapeAttr(row.weight)}" inputmode="decimal" ${computedCellReadOnly} /></div>
+                  ${metricsRow
+                    ? '<div class="wb-cell wb-empty-metric-cell" aria-label="No arm for metrics"></div>'
+                    : `<div class="wb-cell"><input data-wb-moment="${index}:arm" value="${escapeAttr(row.arm)}" inputmode="decimal" /></div>`
+                  }
+                  <div class="wb-cell"><input data-wb-moment="${index}:moment" value="${escapeAttr(row.moment || getMomentValue(row))}" inputmode="decimal" ${computedCellReadOnly} /></div>
                 `;
               }).join("")}
             </div>
             <div class="wb-summary">
-              <div>Moment/1000: <strong data-wb-summary="momentThousands">${escapeHtml(summary.momentThousands || "-")}</strong></div>
-              <div>CG: <strong data-wb-summary="cg">${escapeHtml(summary.cg || "-")}</strong></div>
+              <div>
+                <span>Takeoff</span>
+                <strong>Moment/1000: <em data-wb-summary="takeoffMomentThousands">${escapeHtml(summary.takeoff.momentThousands || "-")}</em></strong>
+                <strong>CG: <em data-wb-summary="takeoffCg">${escapeHtml(summary.takeoff.cg || "-")}</em></strong>
+              </div>
+              <div>
+                <span>Landing</span>
+                <strong>Moment/1000: <em data-wb-summary="landingMomentThousands">${escapeHtml(summary.landing.momentThousands || "-")}</em></strong>
+                <strong>CG: <em data-wb-summary="landingCg">${escapeHtml(summary.landing.cg || "-")}</em></strong>
+              </div>
             </div>
           </section>
         </div>
-        <p class="wb-caution">Please use your specific aircraft's empty weight and moment arm from the official W&amp;B record, the values in the presets will NOT accurately reflect your aircrafts weight and balance.</p>
+        <p class="wb-caution">Please use your specific aircraft's empty mass and arm from the official W&amp;B record, the values in the presets will NOT accurately reflect your aircrafts weight and balance.</p>
         ${renderWeightBalanceChartSection(wb)}
         <section class="wb-converter">
           <div class="wb-converter-head">
@@ -2500,7 +2550,7 @@
           </div>
           <div class="wb-chart-preview-scroll">
             <div class="wb-chart-annotation-stage${state.meta.weightBalanceChartAnnotating ? " annotating" : ""}" id="wb-chart-annotation-stage">
-              <img src="${escapeAttr(chart.src)}" alt="${escapeAttr(chart.alt)}" draggable="false" />
+              <canvas id="wb-chart-preview-canvas" aria-label="${escapeAttr(chart.alt)}"></canvas>
               <svg class="wb-chart-annotation-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
                 ${renderWeightBalanceChartAnnotationLines(chart)}
               </svg>
@@ -4518,10 +4568,16 @@
     const converterFuelNode = document.querySelector('[data-wb-converter="fuel"]');
     if (converterFuelNode) converterFuelNode.value = getFuelConverterFuel(wb.converter);
     const summary = getWeightBalanceSummary(wb);
-    const momentSummaryNode = document.querySelector('[data-wb-summary="momentThousands"]');
-    if (momentSummaryNode) momentSummaryNode.textContent = summary.momentThousands || "-";
-    const cgSummaryNode = document.querySelector('[data-wb-summary="cg"]');
-    if (cgSummaryNode) cgSummaryNode.textContent = summary.cg || "-";
+    const summaryValues = {
+      takeoffMomentThousands: summary.takeoff.momentThousands,
+      takeoffCg: summary.takeoff.cg,
+      landingMomentThousands: summary.landing.momentThousands,
+      landingCg: summary.landing.cg,
+    };
+    Object.entries(summaryValues).forEach(([key, value]) => {
+      const node = document.querySelector(`[data-wb-summary="${key}"]`);
+      if (node) node.textContent = value || "-";
+    });
   }
 
   function getWeightBalanceChartPointerPoint(stage, event) {
@@ -4548,6 +4604,24 @@
     draft.setAttribute("y1", `${line.y1 * 100}%`);
     draft.setAttribute("x2", `${line.x2 * 100}%`);
     draft.setAttribute("y2", `${line.y2 * 100}%`);
+  }
+
+  async function renderWeightBalanceChartPreviewCanvas() {
+    const canvas = document.getElementById("wb-chart-preview-canvas");
+    const stage = document.getElementById("wb-chart-annotation-stage");
+    const chart = getWeightBalanceChart();
+    if (!canvas || !stage || !chart) return;
+    const source = await createWeightBalanceChartCanvas(chart, {
+      rotation: chart.displayRotation,
+      includeAnnotations: false,
+    });
+    canvas.width = source.width;
+    canvas.height = source.height;
+    stage.style.aspectRatio = `${source.width} / ${source.height}`;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(source, 0, 0);
   }
 
   function wireWeightBalanceChartAnnotations() {
@@ -4739,6 +4813,7 @@
         render();
       });
     }
+    renderWeightBalanceChartPreviewCanvas();
     wireWeightBalanceChartAnnotations();
     document.querySelectorAll("[data-wb-moment]").forEach((input) => {
       input.addEventListener("input", (event) => {
@@ -4746,10 +4821,10 @@
         const [indexText, field] = String(event.target.dataset.wbMoment || "").split(":");
         const index = Number(indexText);
         if (!Number.isFinite(index) || !wb.momentRows[index] || (field !== "weight" && field !== "arm" && field !== "moment")) return;
-        if (wb.momentRows[index].label === "TAKE OFF WEIGHT" || wb.momentRows[index].label === "LANDING WEIGHT") return;
-        if (field === "moment") return;
+        if (isWeightBalanceMetricsRow(wb.momentRows[index])) return;
         state.meta.hasOpenedWeightBalance = true;
         wb.momentRows[index][field] = event.target.value;
+        event.target.defaultValue = event.target.value;
         applyMomentRowMath(wb.momentRows[index], field);
         syncWeightBalanceComputedDom(event.target);
       });
@@ -11962,20 +12037,20 @@
       ctx.rotate(Math.PI / 2);
     }
     if (image.naturalWidth > 0) ctx.drawImage(image, 0, 0, width, height);
+    ctx.restore();
     const annotations = options.includeAnnotations === false ? [] : getWeightBalanceChartAnnotations(chart);
     if (annotations.length) {
       ctx.strokeStyle = "#d71920";
-      ctx.lineWidth = Math.max(4, Math.min(width, height) * 0.006);
+      ctx.lineWidth = Math.max(8, Math.min(canvas.width, canvas.height) * 0.011);
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       annotations.forEach((line) => {
         ctx.beginPath();
-        ctx.moveTo(clamp(Number(line.x1), 0, 1) * width, clamp(Number(line.y1), 0, 1) * height);
-        ctx.lineTo(clamp(Number(line.x2), 0, 1) * width, clamp(Number(line.y2), 0, 1) * height);
+        ctx.moveTo(clamp(Number(line.x1), 0, 1) * canvas.width, clamp(Number(line.y1), 0, 1) * canvas.height);
+        ctx.lineTo(clamp(Number(line.x2), 0, 1) * canvas.width, clamp(Number(line.y2), 0, 1) * canvas.height);
         ctx.stroke();
       });
     }
-    ctx.restore();
     return canvas;
   }
 
@@ -11993,7 +12068,7 @@
       if (opened && typeof opened.focus === "function") opened.focus();
       return;
     }
-    const canvas = await createWeightBalanceChartCanvas(chart);
+    const canvas = await createWeightBalanceChartCanvas(chart, { rotation: chart.openRotation });
     const width = canvas.width || 780;
     const height = canvas.height || 853;
     const { jsPDF } = window.jspdf;
