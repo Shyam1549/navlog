@@ -558,18 +558,21 @@ body.kiosk-mode .time-head {
 
 .wb-chart-card {
   display: grid;
-  grid-template-columns: 116px minmax(0, 1fr) auto;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
   align-items: center;
   cursor: pointer;
 }
 
-.wb-chart-card img {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  object-fit: contain;
-  border: 1px solid rgba(46, 41, 35, 0.16);
+.wb-chart-card-icon {
+  width: 48px;
+  height: 48px;
+  border: 1.5px solid rgba(46, 41, 35, 0.18);
   border-radius: 6px;
-  background: #fff;
+  background:
+    linear-gradient(90deg, rgba(39, 79, 93, 0.22) 1px, transparent 1px),
+    linear-gradient(rgba(39, 79, 93, 0.22) 1px, transparent 1px),
+    #fff;
+  background-size: 9px 9px;
 }
 
 .wb-chart-card small {
@@ -587,6 +590,13 @@ body.kiosk-mode .time-head {
   background: #fff;
   color: #1f3540;
   box-sizing: border-box;
+}
+
+.wb-pdf-export-root.with-chart {
+  height: 1584px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .wb-pdf-export-root h1 {
@@ -660,14 +670,22 @@ body.kiosk-mode .time-head {
 }
 
 .wb-pdf-chart {
-  margin: 12px auto 0;
-  width: min(360px, 42%);
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  margin: 14px auto 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
 }
 
 .wb-pdf-chart img {
   display: block;
-  width: 100%;
-  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: 100%;
+  object-fit: contain;
   background: #fff;
 }
 

@@ -16,7 +16,26 @@
   const ADDITIONAL_INFO_DEFAULT_COLS = 9;
   const AIRPORT_CHARTS_BUCKET = "airport-charts";
   const GPS_STALE_RESTART_MS = 45000;
-  const WB_PA34_CHART_SRC = "assets/pa34-cg-envelope.png";
+  const WB_CHARTS = {
+    C152: {
+      src: "assets/c152-cg-envelope.webp",
+      label: "C152",
+      title: "Center of Gravity Moment Envelope",
+      alt: "C152 center of gravity moment envelope chart",
+    },
+    C152LR: {
+      src: "assets/c152-cg-envelope.webp",
+      label: "C152LR",
+      title: "Center of Gravity Moment Envelope",
+      alt: "C152LR center of gravity moment envelope chart",
+    },
+    PA34: {
+      src: "assets/pa34-cg-envelope.png",
+      label: "PA-34",
+      title: "Weight vs C.G. Envelope",
+      alt: "PA-34 C.G. envelope chart",
+    },
+  };
   const WEIGHT_BALANCE_PRESETS = {
     C152: {
       taxiFuel: "0.8",
@@ -1999,9 +2018,15 @@
     return ["Taxi", "Trip", "Alternate", "Hold", "Reserve"].includes(String(row && row.label ? row.label : ""));
   }
 
-  function getFuelInputTotal(fuelRows, field) {
+  function getFuelRowByLabel(fuelRows, label) {
     const rows = Array.isArray(fuelRows) ? fuelRows : [];
-    const inputRows = rows.filter((row) => isFuelRequiredInputRow(row));
+    return rows.find((row) => row && row.label === label) || null;
+  }
+
+  function getFuelInputTotal(fuelRows, field) {
+    const inputRows = ["Taxi", "Trip", "Alternate", "Hold", "Reserve"]
+      .map((label) => getFuelRowByLabel(fuelRows, label))
+      .filter(Boolean);
     let hasValue = false;
     const total = inputRows.reduce((sum, row) => {
       const value = num(row && row[field]);
@@ -2017,19 +2042,17 @@
   }
 
   function getExpectedFuelOnLanding(fuelRows) {
-    const rows = Array.isArray(fuelRows) ? fuelRows : [];
-    const fuelOnBoardRow = rows.find((row) => row && row.label === "Fuel On Board");
+    const fuelOnBoardRow = getFuelRowByLabel(fuelRows, "Fuel On Board");
     const fuelOnBoard = num(fuelOnBoardRow && fuelOnBoardRow.gallons);
-    const required = num(getFuelRequiredFuel(rows));
+    const required = num(getFuelRequiredFuel(fuelRows));
     if (fuelOnBoard == null || required == null) return "";
     return formatWeightBalanceComputed(fuelOnBoard - required);
   }
 
   function getExpectedFuelOnLandingNumber(fuelRows) {
-    const rows = Array.isArray(fuelRows) ? fuelRows : [];
-    const fuelOnBoardRow = rows.find((row) => row && row.label === "Fuel On Board");
+    const fuelOnBoardRow = getFuelRowByLabel(fuelRows, "Fuel On Board");
     const fuelOnBoard = num(fuelOnBoardRow && fuelOnBoardRow.gallons);
-    const required = num(getFuelRequiredFuel(rows));
+    const required = num(getFuelRequiredFuel(fuelRows));
     if (fuelOnBoard == null || required == null) return null;
     return fuelOnBoard - required;
   }
@@ -2058,6 +2081,17 @@
     }
     if (row && row.label === "Remarks") classes.push("wb-remarks-cell");
     return classes.join(" ");
+  }
+
+  function readWeightBalanceFuelInputsFromDom(wb) {
+    if (!wb || !Array.isArray(wb.fuelRows)) return;
+    document.querySelectorAll("[data-wb-fuel]").forEach((input) => {
+      const [indexText, field] = String(input.dataset.wbFuel || "").split(":");
+      const index = Number(indexText);
+      const row = Number.isFinite(index) ? wb.fuelRows[index] : null;
+      if (!row || (field !== "gallons" && field !== "minutes") || isFuelCellReadOnly(index, field)) return;
+      row[field] = input.value;
+    });
   }
 
   function getMomentNumericValue(row) {
@@ -2229,12 +2263,30 @@
   }
 
   function getWeightBalancePdfTitle(wb = getWeightBalanceState()) {
-    const aircraftType = getWeightBalanceAircraftType(wb);
-    return aircraftType ? `Weight and Balance - ${aircraftType}` : "Weight and Balance";
+    return "Weight and Balance";
   }
 
-  function isPa34WeightBalanceSelected(wb = getWeightBalanceState()) {
-    return String(wb && wb.preset ? wb.preset : "").toUpperCase() === "PA34";
+  function getWeightBalanceChart(wb = getWeightBalanceState()) {
+    const preset = String(wb && wb.preset ? wb.preset : "").toUpperCase();
+    return WB_CHARTS[preset] || null;
+  }
+
+  function clearWeightBalancePresetValues(wb, presetName) {
+    const preset = WEIGHT_BALANCE_PRESETS[presetName];
+    if (!wb || !preset) return;
+    const rowsByLabel = new Map(wb.momentRows.map((row) => [row.label, row]));
+    ["Standard Empty Mass", "Fuel", "Front Row", "Rear Row", "Front Baggage", "Rear Baggage"].forEach((label) => {
+      const row = rowsByLabel.get(label);
+      if (!row) return;
+      if (label === "Standard Empty Mass") row.weight = "";
+      row.arm = "";
+      row.moment = "";
+    });
+    const taxiRow = wb.fuelRows.find((row) => row && row.label === "Taxi");
+    if (taxiRow && String(taxiRow.gallons || "") === String(preset.taxiFuel || "")) taxiRow.gallons = "";
+    wb.preset = "";
+    applyWeightBalanceTableMath(wb);
+    applyFuelTableMath(wb);
   }
 
   function clearWeightBalanceValues(wb) {
@@ -2377,18 +2429,19 @@
   }
 
   function renderWeightBalanceChartSection(wb) {
-    if (!isPa34WeightBalanceSelected(wb)) return "";
+    const chart = getWeightBalanceChart(wb);
+    if (!chart) return "";
     return `
       <section class="wb-chart-section">
-        <h3>PA-34 C.G. Envelope</h3>
-        <article class="chart-result-card wb-chart-card" id="wb-pa34-chart-preview-card" role="button" tabindex="0">
-          <img src="${escapeAttr(WB_PA34_CHART_SRC)}" alt="PA-34 C.G. envelope chart" />
+        <h3>${escapeHtml(chart.label)} Chart</h3>
+        <article class="chart-result-card wb-chart-card" id="wb-chart-preview-card" role="button" tabindex="0">
+          <div class="wb-chart-card-icon" aria-hidden="true"></div>
           <div>
-            <span>PA-34</span>
-            <strong>Weight vs C.G. Envelope</strong>
+            <span>${escapeHtml(chart.label)}</span>
+            <strong>${escapeHtml(chart.title)}</strong>
             <small>Preview</small>
           </div>
-          <button class="action" id="wb-pa34-chart-open" type="button">Open</button>
+          <button class="action" id="wb-chart-open" type="button">Open</button>
         </article>
       </section>
     `;
@@ -2396,15 +2449,17 @@
 
   function renderWeightBalanceChartPreviewModal() {
     if (!state.meta.weightBalanceChartPreviewOpen) return "";
+    const chart = getWeightBalanceChart();
+    if (!chart) return "";
     return `
       <div class="chart-fullscreen-overlay" id="wb-chart-preview-overlay">
-        <section class="chart-fullscreen-viewer wb-chart-preview-viewer" role="dialog" aria-modal="true" aria-label="PA-34 C.G. envelope preview">
+        <section class="chart-fullscreen-viewer wb-chart-preview-viewer" role="dialog" aria-modal="true" aria-label="${escapeAttr(chart.label)} chart preview">
           <div class="chart-fullscreen-toolbar">
             <button class="action" id="wb-chart-preview-open" type="button">Open PDF</button>
             <button class="action bug-report-close chart-fullscreen-close" id="wb-chart-preview-close" type="button">Close</button>
           </div>
           <div class="wb-chart-preview-scroll">
-            <img src="${escapeAttr(WB_PA34_CHART_SRC)}" alt="PA-34 C.G. envelope chart" />
+            <img src="${escapeAttr(chart.src)}" alt="${escapeAttr(chart.alt)}" />
           </div>
         </section>
       </div>
@@ -4389,6 +4444,7 @@
 
   function syncWeightBalanceComputedDom(activeNode) {
     const wb = getWeightBalanceState();
+    readWeightBalanceFuelInputsFromDom(wb);
     applyWeightBalanceTableMath(wb);
     applyFuelTableMath(wb);
     wb.momentRows.forEach((row, index) => {
@@ -4482,8 +4538,9 @@
         const wb = getWeightBalanceState();
         state.meta.hasOpenedWeightBalance = true;
         const preset = String(event.currentTarget.dataset.wbPreset || "");
-        if (wb.preset === preset) wb.preset = "";
+        if (wb.preset === preset) clearWeightBalancePresetValues(wb, preset);
         else applyWeightBalancePreset(wb, preset);
+        state.meta.weightBalanceChartPreviewOpen = false;
         render();
       });
     });
@@ -4516,28 +4573,28 @@
         }
       });
     });
-    const pa34ChartCard = document.getElementById("wb-pa34-chart-preview-card");
-    if (pa34ChartCard) {
+    const chartCard = document.getElementById("wb-chart-preview-card");
+    if (chartCard) {
       const openPreview = () => {
         state.meta.weightBalanceChartPreviewOpen = true;
         render();
       };
-      pa34ChartCard.addEventListener("click", (event) => {
+      chartCard.addEventListener("click", (event) => {
         if (event.target && event.target.closest && event.target.closest("button")) return;
         openPreview();
       });
-      pa34ChartCard.addEventListener("keydown", (event) => {
+      chartCard.addEventListener("keydown", (event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
         openPreview();
       });
     }
-    const pa34ChartOpenButton = document.getElementById("wb-pa34-chart-open");
-    if (pa34ChartOpenButton) {
-      pa34ChartOpenButton.addEventListener("click", (event) => {
+    const chartOpenButton = document.getElementById("wb-chart-open");
+    if (chartOpenButton) {
+      chartOpenButton.addEventListener("click", (event) => {
         event.stopPropagation();
         const pdfTab = window.jspdf ? window.open("about:blank", "_blank") : null;
-        openWeightBalancePa34ChartPdf(pdfTab);
+        openWeightBalanceChartPdf(getWeightBalanceChart(), pdfTab);
       });
     }
     const chartPreviewClose = document.getElementById("wb-chart-preview-close");
@@ -4559,7 +4616,7 @@
     if (chartPreviewOpen) {
       chartPreviewOpen.addEventListener("click", () => {
         const pdfTab = window.jspdf ? window.open("about:blank", "_blank") : null;
-        openWeightBalancePa34ChartPdf(pdfTab);
+        openWeightBalanceChartPdf(getWeightBalanceChart(), pdfTab);
       });
     }
     document.querySelectorAll("[data-wb-moment]").forEach((input) => {
@@ -4585,6 +4642,7 @@
         if (isFuelCellReadOnly(index, field)) return;
         state.meta.hasOpenedWeightBalance = true;
         wb.fuelRows[index][field] = event.target.value;
+        event.target.defaultValue = event.target.value;
         syncWeightBalanceComputedDom(event.target);
       });
     });
@@ -11749,12 +11807,13 @@
     }));
   }
 
-  async function openWeightBalancePa34ChartPdf(preopenedTab = null) {
+  async function openWeightBalanceChartPdf(chart, preopenedTab = null) {
+    if (!chart) return;
     if (!window.jspdf) {
-      const opened = preopenedTab || window.open(WB_PA34_CHART_SRC, "_blank", "noopener,noreferrer");
+      const opened = preopenedTab || window.open(chart.src, "_blank", "noopener,noreferrer");
       if (opened) {
         try {
-          opened.location.href = WB_PA34_CHART_SRC;
+          opened.location.href = chart.src;
         } catch {
           // ignore popup assignment issues
         }
@@ -11763,7 +11822,7 @@
       return;
     }
     const image = new Image();
-    image.src = WB_PA34_CHART_SRC;
+    image.src = chart.src;
     await new Promise((resolve) => {
       if (image.complete && image.naturalWidth > 0) resolve();
       else {
@@ -11830,7 +11889,8 @@
     if (saveButton) saveButton.textContent = "Saving...";
     const wb = getWeightBalanceState();
     const exportRoot = document.createElement("section");
-    exportRoot.className = "wb-pdf-export-root";
+    const chart = getWeightBalanceChart(wb);
+    exportRoot.className = `wb-pdf-export-root${chart ? " with-chart" : ""}`;
     const title = document.createElement("h1");
     title.textContent = getWeightBalancePdfTitle(wb);
     const meta = document.createElement("div");
@@ -11859,12 +11919,12 @@
     exportRoot.appendChild(title);
     exportRoot.appendChild(meta);
     exportRoot.appendChild(clone);
-    if (isPa34WeightBalanceSelected(wb)) {
+    if (chart) {
       const figure = document.createElement("figure");
       figure.className = "wb-pdf-chart";
       const image = document.createElement("img");
-      image.src = WB_PA34_CHART_SRC;
-      image.alt = "PA-34 C.G. envelope chart";
+      image.src = chart.src;
+      image.alt = chart.alt;
       figure.appendChild(image);
       exportRoot.appendChild(figure);
     }
