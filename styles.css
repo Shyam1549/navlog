@@ -575,11 +575,6 @@ body.kiosk-mode .time-head {
   background-size: 9px 9px;
 }
 
-.wb-chart-card small {
-  color: var(--muted);
-  font-size: 0.76rem;
-}
-
 .wb-pdf-export-root {
   position: fixed;
   left: -10000px;
@@ -600,7 +595,7 @@ body.kiosk-mode .time-head {
 }
 
 .wb-pdf-export-root h1 {
-  margin: 0 0 10px;
+  margin: 0 0 18px;
   font-size: 1.24rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -704,10 +699,45 @@ body.kiosk-mode .time-head {
   background: #fff;
 }
 
-.wb-chart-preview-scroll img {
+.chart-fullscreen-toolbar .action.active {
+  border-color: rgba(215, 25, 32, 0.45);
+  color: #9d1117;
+}
+
+.wb-chart-annotation-stage {
+  position: relative;
+  width: min(900px, 100%);
+  height: fit-content;
+  user-select: none;
+  touch-action: pan-x pan-y;
+}
+
+.wb-chart-annotation-stage.annotating {
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.wb-chart-annotation-stage img {
   display: block;
-  width: min(780px, 100%);
+  width: 100%;
   height: auto;
+  pointer-events: none;
+}
+
+.wb-chart-annotation-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.wb-chart-annotation-layer line {
+  stroke: #d71920;
+  stroke-width: 0.7;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
 }
 .setup-field { display: grid; gap: 8px; }
 .setup-field span { color: var(--muted); text-transform: uppercase; font-size: 0.84rem; }

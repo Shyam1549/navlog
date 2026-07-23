@@ -22,18 +22,30 @@
       label: "C152",
       title: "Center of Gravity Moment Envelope",
       alt: "C152 center of gravity moment envelope chart",
+      annotationKey: "C152",
+      pdfRotation: "left",
     },
     C152LR: {
       src: "assets/c152-cg-envelope.webp",
-      label: "C152LR",
+      label: "C152",
       title: "Center of Gravity Moment Envelope",
       alt: "C152LR center of gravity moment envelope chart",
+      annotationKey: "C152",
+      pdfRotation: "left",
+    },
+    C172: {
+      src: "assets/c172-cg-envelope.png",
+      label: "C172",
+      title: "Center of Gravity Moment Envelope",
+      alt: "C172 center of gravity moment envelope chart",
+      annotationKey: "C172",
     },
     PA34: {
       src: "assets/pa34-cg-envelope.png",
       label: "PA-34",
       title: "Weight vs C.G. Envelope",
       alt: "PA-34 C.G. envelope chart",
+      annotationKey: "PA34",
     },
   };
   const WEIGHT_BALANCE_PRESETS = {
@@ -187,6 +199,8 @@
       activateHeadingMode: "tc",
       chartPreview: createEmptyChartPreviewState(),
       weightBalanceChartPreviewOpen: false,
+      weightBalanceChartAnnotating: false,
+      weightBalanceChartAnnotations: {},
       routeProgressMarkerSnapshot: null,
     },
   };
@@ -2271,6 +2285,32 @@
     return WB_CHARTS[preset] || null;
   }
 
+  function getWeightBalanceChartAnnotationKey(chart) {
+    return String(chart && (chart.annotationKey || chart.label) || "");
+  }
+
+  function getWeightBalanceChartAnnotations(chart = getWeightBalanceChart()) {
+    const key = getWeightBalanceChartAnnotationKey(chart);
+    if (!key) return [];
+    const source = state.meta.weightBalanceChartAnnotations && state.meta.weightBalanceChartAnnotations[key];
+    return Array.isArray(source) ? source : [];
+  }
+
+  function setWeightBalanceChartAnnotations(chart, annotations) {
+    const key = getWeightBalanceChartAnnotationKey(chart);
+    if (!key) return;
+    state.meta.weightBalanceChartAnnotations = {
+      ...(state.meta.weightBalanceChartAnnotations || {}),
+      [key]: Array.isArray(annotations) ? annotations : [],
+    };
+  }
+
+  function renderWeightBalanceChartAnnotationLines(chart) {
+    return getWeightBalanceChartAnnotations(chart).map((line) => `
+      <line x1="${escapeAttr((Number(line.x1) * 100).toFixed(3))}%" y1="${escapeAttr((Number(line.y1) * 100).toFixed(3))}%" x2="${escapeAttr((Number(line.x2) * 100).toFixed(3))}%" y2="${escapeAttr((Number(line.y2) * 100).toFixed(3))}%" />
+    `).join("");
+  }
+
   function clearWeightBalancePresetValues(wb, presetName) {
     const preset = WEIGHT_BALANCE_PRESETS[presetName];
     if (!wb || !preset) return;
@@ -2439,7 +2479,6 @@
           <div>
             <span>${escapeHtml(chart.label)}</span>
             <strong>${escapeHtml(chart.title)}</strong>
-            <small>Preview</small>
           </div>
           <button class="action" id="wb-chart-open" type="button">Open</button>
         </article>
@@ -2455,11 +2494,17 @@
       <div class="chart-fullscreen-overlay" id="wb-chart-preview-overlay">
         <section class="chart-fullscreen-viewer wb-chart-preview-viewer" role="dialog" aria-modal="true" aria-label="${escapeAttr(chart.label)} chart preview">
           <div class="chart-fullscreen-toolbar">
-            <button class="action" id="wb-chart-preview-open" type="button">Open PDF</button>
+            <button class="action${state.meta.weightBalanceChartAnnotating ? " active" : ""}" id="wb-chart-annotate" type="button">Annotate</button>
+            <button class="action" id="wb-chart-clear" type="button">Clear</button>
             <button class="action bug-report-close chart-fullscreen-close" id="wb-chart-preview-close" type="button">Close</button>
           </div>
           <div class="wb-chart-preview-scroll">
-            <img src="${escapeAttr(chart.src)}" alt="${escapeAttr(chart.alt)}" />
+            <div class="wb-chart-annotation-stage${state.meta.weightBalanceChartAnnotating ? " annotating" : ""}" id="wb-chart-annotation-stage">
+              <img src="${escapeAttr(chart.src)}" alt="${escapeAttr(chart.alt)}" draggable="false" />
+              <svg class="wb-chart-annotation-layer" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                ${renderWeightBalanceChartAnnotationLines(chart)}
+              </svg>
+            </div>
           </div>
         </section>
       </div>
@@ -4479,6 +4524,72 @@
     if (cgSummaryNode) cgSummaryNode.textContent = summary.cg || "-";
   }
 
+  function getWeightBalanceChartPointerPoint(stage, event) {
+    const rect = stage.getBoundingClientRect();
+    const width = rect.width || 1;
+    const height = rect.height || 1;
+    return {
+      x: clamp((event.clientX - rect.left) / width, 0, 1),
+      y: clamp((event.clientY - rect.top) / height, 0, 1),
+    };
+  }
+
+  function updateWeightBalanceDraftAnnotation(stage, line) {
+    const svg = stage.querySelector(".wb-chart-annotation-layer");
+    if (!svg) return;
+    let draft = svg.querySelector("[data-wb-draft-line]");
+    if (!draft) {
+      draft = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      draft.setAttribute("data-wb-draft-line", "true");
+      draft.classList.add("draft");
+      svg.appendChild(draft);
+    }
+    draft.setAttribute("x1", `${line.x1 * 100}%`);
+    draft.setAttribute("y1", `${line.y1 * 100}%`);
+    draft.setAttribute("x2", `${line.x2 * 100}%`);
+    draft.setAttribute("y2", `${line.y2 * 100}%`);
+  }
+
+  function wireWeightBalanceChartAnnotations() {
+    const stage = document.getElementById("wb-chart-annotation-stage");
+    const chart = getWeightBalanceChart();
+    if (!stage || !chart || !state.meta.weightBalanceChartAnnotating) return;
+    let draftLine = null;
+    stage.addEventListener("pointerdown", (event) => {
+      if (event.button != null && event.button !== 0) return;
+      event.preventDefault();
+      const point = getWeightBalanceChartPointerPoint(stage, event);
+      draftLine = { x1: point.x, y1: point.y, x2: point.x, y2: point.y };
+      if (stage.setPointerCapture) stage.setPointerCapture(event.pointerId);
+      updateWeightBalanceDraftAnnotation(stage, draftLine);
+    });
+    stage.addEventListener("pointermove", (event) => {
+      if (!draftLine) return;
+      event.preventDefault();
+      const point = getWeightBalanceChartPointerPoint(stage, event);
+      draftLine.x2 = point.x;
+      draftLine.y2 = point.y;
+      updateWeightBalanceDraftAnnotation(stage, draftLine);
+    });
+    const finishLine = (event) => {
+      if (!draftLine) return;
+      event.preventDefault();
+      const point = getWeightBalanceChartPointerPoint(stage, event);
+      draftLine.x2 = point.x;
+      draftLine.y2 = point.y;
+      if (Math.hypot(draftLine.x2 - draftLine.x1, draftLine.y2 - draftLine.y1) > 0.006) {
+        setWeightBalanceChartAnnotations(chart, [...getWeightBalanceChartAnnotations(chart), draftLine]);
+      }
+      draftLine = null;
+      render();
+    };
+    stage.addEventListener("pointerup", finishLine);
+    stage.addEventListener("pointercancel", () => {
+      draftLine = null;
+      render();
+    });
+  }
+
   function wireWeightBalancePanel() {
     const savePdfButton = document.getElementById("wb-save-pdf");
     if (savePdfButton) {
@@ -4601,6 +4712,7 @@
     if (chartPreviewClose) {
       chartPreviewClose.addEventListener("click", () => {
         state.meta.weightBalanceChartPreviewOpen = false;
+        state.meta.weightBalanceChartAnnotating = false;
         render();
       });
     }
@@ -4609,16 +4721,25 @@
       chartPreviewOverlay.addEventListener("click", (event) => {
         if (event.target !== chartPreviewOverlay) return;
         state.meta.weightBalanceChartPreviewOpen = false;
+        state.meta.weightBalanceChartAnnotating = false;
         render();
       });
     }
-    const chartPreviewOpen = document.getElementById("wb-chart-preview-open");
-    if (chartPreviewOpen) {
-      chartPreviewOpen.addEventListener("click", () => {
-        const pdfTab = window.jspdf ? window.open("about:blank", "_blank") : null;
-        openWeightBalanceChartPdf(getWeightBalanceChart(), pdfTab);
+    const chartAnnotateButton = document.getElementById("wb-chart-annotate");
+    if (chartAnnotateButton) {
+      chartAnnotateButton.addEventListener("click", () => {
+        state.meta.weightBalanceChartAnnotating = !state.meta.weightBalanceChartAnnotating;
+        render();
       });
     }
+    const chartClearButton = document.getElementById("wb-chart-clear");
+    if (chartClearButton) {
+      chartClearButton.addEventListener("click", () => {
+        setWeightBalanceChartAnnotations(getWeightBalanceChart(), []);
+        render();
+      });
+    }
+    wireWeightBalanceChartAnnotations();
     document.querySelectorAll("[data-wb-moment]").forEach((input) => {
       input.addEventListener("input", (event) => {
         const wb = getWeightBalanceState();
@@ -11807,6 +11928,57 @@
     }));
   }
 
+  function loadImageElement(src) {
+    const image = new Image();
+    image.src = src;
+    return new Promise((resolve) => {
+      if (image.complete && image.naturalWidth > 0) resolve(image);
+      else {
+        image.addEventListener("load", () => resolve(image), { once: true });
+        image.addEventListener("error", () => resolve(image), { once: true });
+      }
+    });
+  }
+
+  async function createWeightBalanceChartCanvas(chart, options = {}) {
+    const image = await loadImageElement(chart.src);
+    const width = image.naturalWidth || 780;
+    const height = image.naturalHeight || 853;
+    const rotation = String(options.rotation || "");
+    const rotated = rotation === "left" || rotation === "right";
+    const canvas = document.createElement("canvas");
+    canvas.width = rotated ? height : width;
+    canvas.height = rotated ? width : height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return canvas;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    if (rotation === "left") {
+      ctx.translate(0, width);
+      ctx.rotate(-Math.PI / 2);
+    } else if (rotation === "right") {
+      ctx.translate(height, 0);
+      ctx.rotate(Math.PI / 2);
+    }
+    if (image.naturalWidth > 0) ctx.drawImage(image, 0, 0, width, height);
+    const annotations = options.includeAnnotations === false ? [] : getWeightBalanceChartAnnotations(chart);
+    if (annotations.length) {
+      ctx.strokeStyle = "#d71920";
+      ctx.lineWidth = Math.max(4, Math.min(width, height) * 0.006);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      annotations.forEach((line) => {
+        ctx.beginPath();
+        ctx.moveTo(clamp(Number(line.x1), 0, 1) * width, clamp(Number(line.y1), 0, 1) * height);
+        ctx.lineTo(clamp(Number(line.x2), 0, 1) * width, clamp(Number(line.y2), 0, 1) * height);
+        ctx.stroke();
+      });
+    }
+    ctx.restore();
+    return canvas;
+  }
+
   async function openWeightBalanceChartPdf(chart, preopenedTab = null) {
     if (!chart) return;
     if (!window.jspdf) {
@@ -11821,26 +11993,9 @@
       if (opened && typeof opened.focus === "function") opened.focus();
       return;
     }
-    const image = new Image();
-    image.src = chart.src;
-    await new Promise((resolve) => {
-      if (image.complete && image.naturalWidth > 0) resolve();
-      else {
-        image.addEventListener("load", resolve, { once: true });
-        image.addEventListener("error", resolve, { once: true });
-      }
-    });
-    const canvas = document.createElement("canvas");
-    const width = image.naturalWidth || 780;
-    const height = image.naturalHeight || 853;
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, width, height);
-      if (image.naturalWidth > 0) ctx.drawImage(image, 0, 0, width, height);
-    }
+    const canvas = await createWeightBalanceChartCanvas(chart);
+    const width = canvas.width || 780;
+    const height = canvas.height || 853;
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF("p", "mm", "a4");
     const pageWidth = 210;
@@ -11923,7 +12078,8 @@
       const figure = document.createElement("figure");
       figure.className = "wb-pdf-chart";
       const image = document.createElement("img");
-      image.src = chart.src;
+      const chartCanvas = await createWeightBalanceChartCanvas(chart, { rotation: chart.pdfRotation });
+      image.src = chartCanvas.toDataURL("image/png");
       image.alt = chart.alt;
       figure.appendChild(image);
       exportRoot.appendChild(figure);
