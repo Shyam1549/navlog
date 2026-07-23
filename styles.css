@@ -136,7 +136,7 @@ body.kiosk-mode .time-head {
 
 .setup-card { margin-top: 18px; margin-bottom: 16px; padding: 20px; }
 .wb-page .wb-toolbar {
-  margin-top: 8px;
+  margin-top: 2px;
 }
 .additional-info-page {
   margin-top: 18px;
@@ -232,7 +232,7 @@ body.kiosk-mode .time-head {
 }
 
 .entry-page .wb-launch-card {
-  margin-top: 0;
+  margin-top: 14px;
 }
 
 .entry-page .navlog-launch-card {
@@ -537,7 +537,7 @@ body.kiosk-mode .time-head {
   width: 1120px;
   min-height: 760px;
   padding: 28px;
-  background: #f7f2e7;
+  background: #fff;
   color: #1f3540;
   box-sizing: border-box;
 }
@@ -3494,6 +3494,10 @@ body.kiosk-phone-mode .route-progress-dot {
   caret-color: transparent;
 }
 
+.field.error {
+  overflow: hidden;
+}
+
 .field.error::after {
   content: attr(data-error);
   position: absolute;
@@ -3511,6 +3515,16 @@ body.kiosk-phone-mode .route-progress-dot {
   font-size: 0.94rem;
   line-height: 1.15;
   pointer-events: none;
+}
+
+.stack-field.error::after {
+  top: 50%;
+  bottom: 0;
+  padding: 2px 3px;
+  font-size: 0.56rem;
+  line-height: 1.05;
+  word-break: normal;
+  overflow-wrap: anywhere;
 }
 
 .field.first-alt .alt-departure-hint,
@@ -3673,6 +3687,14 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   white-space: normal;
   padding: 0 4px;
   font-weight: 400;
+}
+
+.field input[data-leg-field$=":at"]::placeholder {
+  color: rgba(24, 22, 18, 0.48) !important;
+  -webkit-text-fill-color: rgba(24, 22, 18, 0.48) !important;
+  font-size: clamp(0.78rem, 1.6vw, 0.94rem);
+  font-weight: 400 !important;
+  opacity: 1;
 }
 
 .announcement-overlay {
@@ -4568,6 +4590,12 @@ body.iphone-ui .location-cell input[list]::-webkit-list-button {
   white-space: normal;
   overflow-wrap: anywhere;
   word-break: normal;
+}
+
+.additional-info-table td.additional-info-expired-date,
+.additional-info-table td.additional-info-expired-date input {
+  color: #b71c1c;
+  -webkit-text-fill-color: #b71c1c;
 }
 
 .additional-info-table.editable td {
@@ -5853,6 +5881,12 @@ body.ipad-desktop-scale .field.first-alt.show-alt-hint .alt-departure-hint {
   font-weight: 400 !important;
   line-height: 1.05 !important;
   padding: 0 2px !important;
+}
+
+body.ipad-desktop-scale .field input[data-leg-field$=":at"]::placeholder {
+  font-size: 0.9rem !important;
+  font-weight: 400 !important;
+  line-height: 1.05 !important;
 }
 
 body.ipad-desktop-scale .toc-tod-title,

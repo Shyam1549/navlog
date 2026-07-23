@@ -1634,6 +1634,7 @@
     else if (state.view === "ipad-kiosk") wireIpadKiosk();
     else wireNavlog();
     wireSuggestionInputs();
+    applyAutofillGuard();
     wireChartPreviewControls();
     if (viewChanged) {
       try {
@@ -1848,7 +1849,7 @@
           <div class="wb-launch-content">
             <h2>Weight and Balance</h2>
             <div class="wb-launch-actions">
-              <button class="action primary" id="open-weight-balance" type="button">Open new sheet</button>
+              <button class="action primary" id="open-weight-balance" type="button">Open sheet</button>
               ${showWeightBalanceResume ? `<button class="action" id="resume-weight-balance" type="button">Resume current sheet</button>` : ""}
             </div>
           </div>
@@ -1987,10 +1988,13 @@
     return formatWeightBalanceComputed(weight * arm);
   }
 
+  function isFuelRequiredInputRow(row) {
+    return ["Taxi", "Trip", "Alternate", "Hold", "Reserve"].includes(String(row && row.label ? row.label : ""));
+  }
+
   function getFuelInputTotal(fuelRows, field) {
     const rows = Array.isArray(fuelRows) ? fuelRows : [];
-    const requiredIndex = rows.findIndex((row) => row && row.label === "Fuel Required");
-    const inputRows = requiredIndex >= 0 ? rows.slice(0, requiredIndex) : rows;
+    const inputRows = rows.filter((row) => isFuelRequiredInputRow(row));
     let hasValue = false;
     const total = inputRows.reduce((sum, row) => {
       const value = num(row && row[field]);
@@ -2222,8 +2226,8 @@
             `).join("")}
           </div>
           <div class="wb-head-actions">
-            <button class="action primary" id="wb-save-pdf" type="button">Save</button>
             <button class="action" id="wb-settings-toggle" type="button">Settings</button>
+            <button class="action primary" id="wb-save-pdf" type="button">Save</button>
           </div>
         </div>
         <div class="wb-settings${wb.unitsOpen ? " open" : ""}" id="wb-settings-panel">
@@ -2561,7 +2565,7 @@
             <div class="additional-info-wrap">
               <table class="additional-info-table">
                 <tbody>
-                  ${table.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}
+                  ${table.map((row) => `<tr>${row.map((cell) => `<td class="${getAdditionalInfoCellClass(cell)}">${escapeHtml(cell)}</td>`).join("")}</tr>`).join("")}
                 </tbody>
               </table>
             </div>
@@ -3076,7 +3080,7 @@
                 <tbody>
                   ${additionalInfoRows.map((row, rowIndex) => `
                     <tr>
-                      ${row.map((cell, colIndex) => `<td><input data-admin-additional="${rowIndex}:${colIndex}" value="${escapeAttr(cell)}" /></td>`).join("")}
+                      ${row.map((cell, colIndex) => `<td class="${getAdditionalInfoCellClass(cell)}"><input data-admin-additional="${rowIndex}:${colIndex}" value="${escapeAttr(cell)}" /></td>`).join("")}
                       <td class="additional-info-row-action">
                         <button class="action admin-mini-btn active" data-admin-additional-remove-row="${rowIndex}" type="button" aria-label="Remove row">-</button>
                       </td>
@@ -4872,6 +4876,33 @@
       }
       input.setAttribute("inputmode", "numeric");
       input.setAttribute("pattern", "[0-9]*");
+    });
+  }
+
+  function applyAutofillGuard() {
+    if (state.view === "access" || state.view === "admin-login") return;
+    document.querySelectorAll("input, textarea").forEach((input) => {
+      if (!input) return;
+      const type = String(input.getAttribute("type") || input.type || "").toLowerCase();
+      if (type === "password" || type === "file" || type === "date") return;
+      input.setAttribute("autocomplete", "off");
+      input.setAttribute("autocorrect", "off");
+      input.setAttribute("spellcheck", input.getAttribute("spellcheck") || "false");
+      input.setAttribute("data-lpignore", "true");
+      input.setAttribute("data-form-type", "other");
+      if (!input.hasAttribute("name")) {
+        const key = input.dataset.legField
+          || input.dataset.radioField
+          || input.dataset.footer
+          || input.dataset.header
+          || input.dataset.wbFuel
+          || input.dataset.wbMoment
+          || input.dataset.wbConverter
+          || input.dataset.adminAdditional
+          || input.id
+          || "field";
+        input.setAttribute("name", `navlog-${String(key).replace(/[^a-z0-9_-]+/gi, "-")}`);
+      }
     });
   }
 
@@ -8377,6 +8408,8 @@
     additionalInputs.forEach((input) => {
       input.addEventListener("input", () => {
         readAdditionalInfoFromInputs();
+        const cell = input.closest("td");
+        if (cell) cell.classList.toggle("additional-info-expired-date", isExpiredAdditionalInfoDate(input.value));
         state.admin.additionalInfoSaveStatus = "";
       });
     });
@@ -9889,6 +9922,47 @@
   function parseMaintenanceModeContent(raw) {
     const text = String(raw || "").trim().toLowerCase();
     return text === "1" || text === "true" || text === "yes" || text === "on";
+  }
+
+  function parseAdditionalInfoDateValue(value) {
+    const text = String(value || "").trim();
+    if (!text) return null;
+    const iso = text.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+    if (iso) {
+      const year = Number(iso[1]);
+      const month = Number(iso[2]);
+      const day = Number(iso[3]);
+      return createValidLocalDate(year, month, day);
+    }
+    const slash = text.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{2,4})$/);
+    if (!slash) return null;
+    const first = Number(slash[1]);
+    const second = Number(slash[2]);
+    const third = Number(slash[3]);
+    if (![first, second, third].every(Number.isFinite)) return null;
+    if (String(slash[3]).length === 4) return createValidLocalDate(third, second, first);
+    const appStyleDate = createValidLocalDate(2000 + first, second, third);
+    if (appStyleDate) return appStyleDate;
+    return createValidLocalDate(2000 + third, second, first);
+  }
+
+  function createValidLocalDate(year, month, day) {
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+    if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+    const date = new Date(year, month - 1, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+    return date;
+  }
+
+  function isExpiredAdditionalInfoDate(value, now = new Date()) {
+    const date = parseAdditionalInfoDateValue(value);
+    if (!date) return false;
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    return date.getTime() < today.getTime();
+  }
+
+  function getAdditionalInfoCellClass(value) {
+    return isExpiredAdditionalInfoDate(value) ? "additional-info-expired-date" : "";
   }
 
   function parseAdditionalInfoContent(raw) {
@@ -11535,7 +11609,7 @@
     try {
       const canvas = await window.html2canvas(exportRoot, {
         scale: 2,
-        backgroundColor: "#f7f2e7",
+        backgroundColor: "#fff",
         useCORS: true,
         windowWidth: 1120,
         windowHeight: 760,
