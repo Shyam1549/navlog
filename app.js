@@ -16,6 +16,7 @@
   const ADDITIONAL_INFO_DEFAULT_COLS = 9;
   const AIRPORT_CHARTS_BUCKET = "airport-charts";
   const GPS_STALE_RESTART_MS = 45000;
+  const WB_PA34_CHART_SRC = "assets/pa34-cg-envelope.png";
   const WEIGHT_BALANCE_PRESETS = {
     C152: {
       taxiFuel: "0.8",
@@ -166,6 +167,7 @@
       kioskGps: createEmptyKioskGpsState(),
       activateHeadingMode: "tc",
       chartPreview: createEmptyChartPreviewState(),
+      weightBalanceChartPreviewOpen: false,
       routeProgressMarkerSnapshot: null,
     },
   };
@@ -267,6 +269,8 @@
     return {
       unitsOpen: false,
       preset: "",
+      rpcNo: "",
+      route: "",
       units: {
         weight: "lbs",
         arm: "in",
@@ -374,6 +378,8 @@
         ...(source.converter && typeof source.converter === "object" ? source.converter : {}),
       },
       preset: String(source.preset || ""),
+      rpcNo: String(source.rpcNo ?? source.rpCNo ?? ""),
+      route: String(source.route || ""),
       momentRows: blank.momentRows.map((row, index) => ({
         ...row,
         ...((momentRowsByLabel.get(row.label) || (!sourceMomentRowsHaveLabels ? sourceRows[index] : null)) && typeof (momentRowsByLabel.get(row.label) || (!sourceMomentRowsHaveLabels ? sourceRows[index] : null)) === "object" ? (momentRowsByLabel.get(row.label) || (!sourceMomentRowsHaveLabels ? sourceRows[index] : null)) : {}),
@@ -1892,6 +1898,7 @@
           <div class="top-side right"></div>
         </section>
         ${renderWeightBalancePanel()}
+        ${renderWeightBalanceChartPreviewModal()}
         ${renderFrontFooter()}
         ${renderBugReportModal()}
         ${renderAnnouncementModal()}
@@ -2196,6 +2203,40 @@
     applyFuelTableMath(wb);
   }
 
+  function getWeightBalancePresetLabel(presetName) {
+    const key = String(presetName || "").trim().toUpperCase();
+    if (key === "PA34") return "PA-34";
+    return String(presetName || "").trim();
+  }
+
+  function getWeightBalancePresetForAircraftType(aircraftType) {
+    const normalized = normalizeCode(aircraftType).replace(/[^A-Z0-9]/g, "");
+    if (!normalized) return "";
+    return Object.keys(WEIGHT_BALANCE_PRESETS).find((preset) => normalizeCode(preset).replace(/[^A-Z0-9]/g, "") === normalized) || "";
+  }
+
+  function getWeightBalancePresetForRpc(rpcNo) {
+    const record = getRpcRegistryRecord(rpcNo);
+    return record && record.aircraftType ? getWeightBalancePresetForAircraftType(record.aircraftType) : "";
+  }
+
+  function getWeightBalanceAircraftType(wb = getWeightBalanceState()) {
+    const record = getRpcRegistryRecord(wb && wb.rpcNo);
+    const mapped = record && record.aircraftType ? getWeightBalancePresetForAircraftType(record.aircraftType) : "";
+    if (mapped) return getWeightBalancePresetLabel(mapped);
+    if (wb && wb.preset) return getWeightBalancePresetLabel(wb.preset);
+    return record && record.aircraftType ? String(record.aircraftType || "").trim() : "";
+  }
+
+  function getWeightBalancePdfTitle(wb = getWeightBalanceState()) {
+    const aircraftType = getWeightBalanceAircraftType(wb);
+    return aircraftType ? `Weight and Balance - ${aircraftType}` : "Weight and Balance";
+  }
+
+  function isPa34WeightBalanceSelected(wb = getWeightBalanceState()) {
+    return String(wb && wb.preset ? wb.preset : "").toUpperCase() === "PA34";
+  }
+
   function clearWeightBalanceValues(wb) {
     if (!wb) return;
     const unitsOpen = Boolean(wb.unitsOpen);
@@ -2222,7 +2263,7 @@
           <h2>Weight and Balance</h2>
           <div class="wb-preset-chips" aria-label="Aircraft preset buttons">
             ${Object.keys(WEIGHT_BALANCE_PRESETS).map((preset) => `
-              <button class="wb-preset-chip${wb.preset === preset ? " active" : ""}" type="button" data-wb-preset="${escapeAttr(preset)}">${escapeHtml(preset)}</button>
+              <button class="wb-preset-chip${wb.preset === preset ? " active" : ""}" type="button" data-wb-preset="${escapeAttr(preset)}">${escapeHtml(getWeightBalancePresetLabel(preset))}</button>
             `).join("")}
           </div>
           <div class="wb-head-actions">
@@ -2255,6 +2296,16 @@
         </div>
       </section>
       <section class="setup-card wb-card">
+        <section class="wb-flight-meta">
+          <label class="setup-field">
+            <span>RP-C no.</span>
+            <input data-wb-meta="rpcNo" value="${escapeAttr(wb.rpcNo)}" data-suggest-source="rpc" data-suggest-open-on-focus="true" />
+          </label>
+          <label class="setup-field">
+            <span>Route</span>
+            <input data-wb-meta="route" value="${escapeAttr(wb.route)}" />
+          </label>
+        </section>
         <div class="wb-tables">
           <section class="wb-table-wrap">
             <h3>Fuel Required</h3>
@@ -2296,6 +2347,7 @@
           </section>
         </div>
         <p class="wb-caution">Please use your specific aircraft's empty weight and moment arm from the official W&amp;B record, the values in the presets will NOT accurately reflect your aircrafts weight and balance.</p>
+        ${renderWeightBalanceChartSection(wb)}
         <section class="wb-converter">
           <div class="wb-converter-head">
             <h3>Time to Fuel Converter</h3>
@@ -2321,6 +2373,41 @@
           </div>
         </section>
       </section>
+    `;
+  }
+
+  function renderWeightBalanceChartSection(wb) {
+    if (!isPa34WeightBalanceSelected(wb)) return "";
+    return `
+      <section class="wb-chart-section">
+        <h3>PA-34 C.G. Envelope</h3>
+        <article class="chart-result-card wb-chart-card" id="wb-pa34-chart-preview-card" role="button" tabindex="0">
+          <img src="${escapeAttr(WB_PA34_CHART_SRC)}" alt="PA-34 C.G. envelope chart" />
+          <div>
+            <span>PA-34</span>
+            <strong>Weight vs C.G. Envelope</strong>
+            <small>Preview</small>
+          </div>
+          <button class="action" id="wb-pa34-chart-open" type="button">Open</button>
+        </article>
+      </section>
+    `;
+  }
+
+  function renderWeightBalanceChartPreviewModal() {
+    if (!state.meta.weightBalanceChartPreviewOpen) return "";
+    return `
+      <div class="chart-fullscreen-overlay" id="wb-chart-preview-overlay">
+        <section class="chart-fullscreen-viewer wb-chart-preview-viewer" role="dialog" aria-modal="true" aria-label="PA-34 C.G. envelope preview">
+          <div class="chart-fullscreen-toolbar">
+            <button class="action" id="wb-chart-preview-open" type="button">Open PDF</button>
+            <button class="action bug-report-close chart-fullscreen-close" id="wb-chart-preview-close" type="button">Close</button>
+          </div>
+          <div class="wb-chart-preview-scroll">
+            <img src="${escapeAttr(WB_PA34_CHART_SRC)}" alt="PA-34 C.G. envelope chart" />
+          </div>
+        </section>
+      </div>
     `;
   }
 
@@ -4395,11 +4482,86 @@
         const wb = getWeightBalanceState();
         state.meta.hasOpenedWeightBalance = true;
         const preset = String(event.currentTarget.dataset.wbPreset || "");
-        if (wb.preset === preset) clearWeightBalanceValues(wb);
+        if (wb.preset === preset) wb.preset = "";
         else applyWeightBalancePreset(wb, preset);
         render();
       });
     });
+    document.querySelectorAll("[data-wb-meta]").forEach((input) => {
+      input.addEventListener("input", (event) => {
+        const wb = getWeightBalanceState();
+        const field = String(event.target.dataset.wbMeta || "");
+        if (field !== "rpcNo" && field !== "route") return;
+        state.meta.hasOpenedWeightBalance = true;
+        wb[field] = event.target.value;
+        if (field === "rpcNo") {
+          const preset = getWeightBalancePresetForRpc(event.target.value);
+          if (preset && wb.preset !== preset) {
+            applyWeightBalancePreset(wb, preset);
+            render();
+          }
+        }
+      });
+      input.addEventListener("change", (event) => {
+        const wb = getWeightBalanceState();
+        const field = String(event.target.dataset.wbMeta || "");
+        if (field !== "rpcNo" && field !== "route") return;
+        wb[field] = event.target.value;
+        if (field === "rpcNo") {
+          const preset = getWeightBalancePresetForRpc(event.target.value);
+          if (preset && wb.preset !== preset) {
+            applyWeightBalancePreset(wb, preset);
+            render();
+          }
+        }
+      });
+    });
+    const pa34ChartCard = document.getElementById("wb-pa34-chart-preview-card");
+    if (pa34ChartCard) {
+      const openPreview = () => {
+        state.meta.weightBalanceChartPreviewOpen = true;
+        render();
+      };
+      pa34ChartCard.addEventListener("click", (event) => {
+        if (event.target && event.target.closest && event.target.closest("button")) return;
+        openPreview();
+      });
+      pa34ChartCard.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        openPreview();
+      });
+    }
+    const pa34ChartOpenButton = document.getElementById("wb-pa34-chart-open");
+    if (pa34ChartOpenButton) {
+      pa34ChartOpenButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const pdfTab = window.jspdf ? window.open("about:blank", "_blank") : null;
+        openWeightBalancePa34ChartPdf(pdfTab);
+      });
+    }
+    const chartPreviewClose = document.getElementById("wb-chart-preview-close");
+    if (chartPreviewClose) {
+      chartPreviewClose.addEventListener("click", () => {
+        state.meta.weightBalanceChartPreviewOpen = false;
+        render();
+      });
+    }
+    const chartPreviewOverlay = document.getElementById("wb-chart-preview-overlay");
+    if (chartPreviewOverlay) {
+      chartPreviewOverlay.addEventListener("click", (event) => {
+        if (event.target !== chartPreviewOverlay) return;
+        state.meta.weightBalanceChartPreviewOpen = false;
+        render();
+      });
+    }
+    const chartPreviewOpen = document.getElementById("wb-chart-preview-open");
+    if (chartPreviewOpen) {
+      chartPreviewOpen.addEventListener("click", () => {
+        const pdfTab = window.jspdf ? window.open("about:blank", "_blank") : null;
+        openWeightBalancePa34ChartPdf(pdfTab);
+      });
+    }
     document.querySelectorAll("[data-wb-moment]").forEach((input) => {
       input.addEventListener("input", (event) => {
         const wb = getWeightBalanceState();
@@ -11240,6 +11402,8 @@
       wb.converter.ratePerHour,
       wb.converter.minutes,
       wb.preset,
+      wb.rpcNo,
+      wb.route,
     ];
     return weightBalanceValues.some((value) => String(value || "").trim() !== "");
   }
@@ -11574,6 +11738,78 @@
     syncRouteProgressMarkerDisplay();
   }
 
+  function waitForImages(root) {
+    const images = Array.from(root ? root.querySelectorAll("img") : []);
+    return Promise.all(images.map((image) => {
+      if (image.complete && image.naturalWidth > 0) return Promise.resolve();
+      return new Promise((resolve) => {
+        image.addEventListener("load", resolve, { once: true });
+        image.addEventListener("error", resolve, { once: true });
+      });
+    }));
+  }
+
+  async function openWeightBalancePa34ChartPdf(preopenedTab = null) {
+    if (!window.jspdf) {
+      const opened = preopenedTab || window.open(WB_PA34_CHART_SRC, "_blank", "noopener,noreferrer");
+      if (opened) {
+        try {
+          opened.location.href = WB_PA34_CHART_SRC;
+        } catch {
+          // ignore popup assignment issues
+        }
+      }
+      if (opened && typeof opened.focus === "function") opened.focus();
+      return;
+    }
+    const image = new Image();
+    image.src = WB_PA34_CHART_SRC;
+    await new Promise((resolve) => {
+      if (image.complete && image.naturalWidth > 0) resolve();
+      else {
+        image.addEventListener("load", resolve, { once: true });
+        image.addEventListener("error", resolve, { once: true });
+      }
+    });
+    const canvas = document.createElement("canvas");
+    const width = image.naturalWidth || 780;
+    const height = image.naturalHeight || 853;
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, width, height);
+      if (image.naturalWidth > 0) ctx.drawImage(image, 0, 0, width, height);
+    }
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF("p", "mm", "a4");
+    const pageWidth = 210;
+    const pageHeight = 297;
+    const margin = 8;
+    const maxWidth = pageWidth - (margin * 2);
+    const maxHeight = pageHeight - (margin * 2);
+    const aspect = height / width;
+    let imageWidth = maxWidth;
+    let imageHeight = imageWidth * aspect;
+    if (imageHeight > maxHeight) {
+      imageHeight = maxHeight;
+      imageWidth = imageHeight / aspect;
+    }
+    pdf.addImage(canvas.toDataURL("image/png"), "PNG", margin, margin, imageWidth, imageHeight);
+    const pdfUrl = pdf.output("bloburl");
+    let opened = preopenedTab;
+    if (opened) {
+      try {
+        opened.location.href = pdfUrl;
+      } catch {
+        opened = null;
+      }
+    }
+    if (!opened) opened = window.open(pdfUrl, "_blank", "noopener,noreferrer");
+    if (opened && typeof opened.focus === "function") opened.focus();
+  }
+
   async function downloadWeightBalancePdf(preopenedTab = null) {
     const saveButton = document.getElementById("wb-save-pdf");
     const tables = document.querySelector(".wb-tables");
@@ -11592,10 +11828,27 @@
       return;
     }
     if (saveButton) saveButton.textContent = "Saving...";
+    const wb = getWeightBalanceState();
     const exportRoot = document.createElement("section");
     exportRoot.className = "wb-pdf-export-root";
     const title = document.createElement("h1");
-    title.textContent = "Weight and Balance";
+    title.textContent = getWeightBalancePdfTitle(wb);
+    const meta = document.createElement("div");
+    meta.className = "wb-pdf-meta";
+    [
+      ["Aircraft type", getWeightBalanceAircraftType(wb) || "-"],
+      ["RP-C no.", String(wb.rpcNo || "").trim() || "-"],
+      ["Route", String(wb.route || "").trim() || "-"],
+    ].forEach(([label, value]) => {
+      const item = document.createElement("div");
+      const labelNode = document.createElement("span");
+      const valueNode = document.createElement("strong");
+      labelNode.textContent = label;
+      valueNode.textContent = value;
+      item.appendChild(labelNode);
+      item.appendChild(valueNode);
+      meta.appendChild(item);
+    });
     const clone = tables.cloneNode(true);
     clone.querySelectorAll("input").forEach((input) => {
       const span = document.createElement("span");
@@ -11604,9 +11857,20 @@
       input.replaceWith(span);
     });
     exportRoot.appendChild(title);
+    exportRoot.appendChild(meta);
     exportRoot.appendChild(clone);
+    if (isPa34WeightBalanceSelected(wb)) {
+      const figure = document.createElement("figure");
+      figure.className = "wb-pdf-chart";
+      const image = document.createElement("img");
+      image.src = WB_PA34_CHART_SRC;
+      image.alt = "PA-34 C.G. envelope chart";
+      figure.appendChild(image);
+      exportRoot.appendChild(figure);
+    }
     document.body.appendChild(exportRoot);
     try {
+      await waitForImages(exportRoot);
       const canvas = await window.html2canvas(exportRoot, {
         scale: 2,
         backgroundColor: "#fff",
@@ -11617,13 +11881,20 @@
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF("p", "mm", "a4");
       const pageWidth = 210;
+      const pageHeight = 297;
       const marginLeft = 8;
       const marginTop = 8;
       const marginRight = 8;
+      const marginBottom = 8;
       const maxWidth = pageWidth - marginLeft - marginRight;
+      const maxHeight = pageHeight - marginTop - marginBottom;
       const imageAspect = canvas.height / canvas.width;
-      const imageWidth = maxWidth;
-      const imageHeight = imageWidth * imageAspect;
+      let imageWidth = maxWidth;
+      let imageHeight = imageWidth * imageAspect;
+      if (imageHeight > maxHeight) {
+        imageHeight = maxHeight;
+        imageWidth = imageHeight / imageAspect;
+      }
       pdf.addImage(canvas.toDataURL("image/png"), "PNG", marginLeft, marginTop, imageWidth, imageHeight);
       const pdfUrl = pdf.output("bloburl");
       let opened = preopenedTab;
